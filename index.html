@@ -236,11 +236,21 @@ async function loadOrders(){
     const res = await apiGet('getAll');
     orders = (res.orders||[]).filter(o=>o.id);
     orders.forEach(o=>{
-      if(!o.stages||typeof o.stages==='string'){
+      // Normalizar stages — puede venir como objeto, string JSON, o campos sueltos
+      if(!o.stages || o.stages==='' || o.stages==='{}'){
+        // Construir stages desde campos sueltos si existen
+        const st = initStages();
+        STAGES.forEach(s=>{
+          if(o[s.key] && typeof o[s.key]==='string' && o[s.key]!==''){
+            try{ st[s.key]=JSON.parse(o[s.key]); }catch(e){ st[s.key]={done:true,date:null,by:null}; }
+          }
+        });
+        o.stages = st;
+      } else if(typeof o.stages==='string'){
         try{ o.stages=JSON.parse(o.stages); }catch(e){ o.stages=initStages(); }
       }
-      if(!o.log||typeof o.log==='string'){
-        try{ o.log=JSON.parse(o.log); }catch(e){ o.log=[]; }
+      if(!o.log||o.log===''||typeof o.log==='string'){
+        try{ o.log=o.log?JSON.parse(o.log):[]; }catch(e){ o.log=[]; }
       }
     });
     renderStats(); renderFilters(); renderTable();
