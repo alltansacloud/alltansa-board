@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ALLTANSA - Board de Pedidos</title>
+<title>ALLTANSA — Board de Pedidos</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px}
@@ -216,13 +216,18 @@ function stageBadge(s){ if(!s)return `<span class="badge b-pend">Pendiente</span
 
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
-async function apiGet(action){
-  const r = await fetch(API+'?action='+action);
-  return r.json();
+async function apiCall(params){
+  const qs = Object.entries(params).map(([k,v])=>k+'='+encodeURIComponent(typeof v==='object'?JSON.stringify(v):v)).join('&');
+  const r = await fetch(API+'?'+qs);
+  const text = await r.text();
+  try{ return JSON.parse(text); }catch(e){ return {error: text}; }
 }
+async function apiGet(action){ return apiCall({action}); }
 async function apiPost(body){
-  const r = await fetch(API, {method:'POST', body:JSON.stringify(body)});
-  return r.json();
+  const params = {action: body.action};
+  if(body.order) params.data = body.order;
+  if(body.id) params.id = body.id;
+  return apiCall(params);
 }
 
 async function loadOrders(){
