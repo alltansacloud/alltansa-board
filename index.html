@@ -92,7 +92,7 @@ textarea{resize:vertical;min-height:58px}
 <!-- LOGIN -->
 <div id="loginWrap" class="login-wrap">
   <div class="login-card">
-    <h2>⚙️ ALLTANSA</h2>
+    <div class="login-logo"><img src="logo.png" alt="ALLTANSA"></div>
     <p>Board de seguimiento de pedidos</p>
     <div class="fg" style="margin-bottom:12px">
       <label>Tu nombre</label>
@@ -117,7 +117,14 @@ textarea{resize:vertical;min-height:58px}
 <!-- APP -->
 <div id="appWrap" class="hidden">
   <div class="topbar">
-    <h1>📋 Pedidos ALLTANSA <span id="syncStatus"></span></h1>
+    <div class="topbar-left">
+      <img src="logo.png" alt="ALLTANSA">
+      <div class="topbar-divider"></div>
+      <div>
+        <div class="topbar-title">Board de Pedidos</div>
+        <div class="topbar-sub">Pressure Vessels</div>
+      </div>
+    </div>
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="loadOrders()">↻ Actualizar</button>
       <button class="btn btn-primary" onclick="openNew()">+ Nuevo pedido</button>
@@ -272,7 +279,7 @@ function renderStats(){
     <div class="stat"><div class="stat-label">Activos</div><div class="stat-val">${orders.filter(o=>getStatus(o)!=='closed').length}</div></div>
     <div class="stat"><div class="stat-label">Cerrados</div><div class="stat-val">${cerrados}</div></div>
     <div class="stat"><div class="stat-label">Sin anticipo</div><div class="stat-val">${sinAnticipo}</div></div>
-    <div class="stat"><div class="stat-label">Cartera activa</div><div class="stat-val sm">${cartera>0?fmtMoney(cartera):'—'}</div></div>
+    <div class="stat accent"><div class="stat-label">Cartera activa</div><div class="stat-val sm">${cartera>0?fmtMoney(cartera):'—'}</div></div>
   `;
 }
 
