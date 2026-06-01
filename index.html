@@ -505,13 +505,21 @@ async function loadOrders(){
       else if(typeof o.prod_stages==='string'){try{o.prod_stages=JSON.parse(o.prod_stages);}catch(e){o.prod_stages=initProdStages();}}
     });
     if(isProd){
-      renderProdStats();renderProdFilters();renderProdTable();
-      document.getElementById('prodLoadingBar').classList.add('hidden');
-      document.getElementById('prodContent').classList.remove('hidden');
+      try{
+        renderProdStats();renderProdFilters();renderProdTable();
+        document.getElementById('prodLoadingBar').classList.add('hidden');
+        document.getElementById('prodContent').classList.remove('hidden');
+      }catch(err){
+        document.getElementById('prodLoadingBar').innerHTML='<p style="color:var(--red);font-size:13px">Error: '+err.message+'</p>';
+      }
     }else{
-      renderStats();renderFilters();renderTable();
-      document.getElementById('loadingBar').classList.add('hidden');
-      document.getElementById('boardContent').classList.remove('hidden');
+      try{
+        renderStats();renderFilters();renderTable();
+        document.getElementById('loadingBar').classList.add('hidden');
+        document.getElementById('boardContent').classList.remove('hidden');
+      }catch(err){
+        document.getElementById('loadingBar').innerHTML='<p style="color:var(--red);font-size:13px">Error: '+err.message+'</p>';
+      }
     }
   }catch(e){
     const lb=isProd?'prodLoadingBar':'loadingBar';
@@ -621,8 +629,11 @@ function openEdit(id){
   document.getElementById('fDesc').value=o.desc||'';
   document.getElementById('fQty').value=o.qty||1;
   document.getElementById('fValue').value=o.value||'';
-  document.getElementById('fDate').value=o.received||'';
-  document.getElementById('fDeadline').value=o.deadline||'';
+  // Normalizar fechas antes de asignar al input
+  const recVal=o.received?normalizeDate(o.received):'';
+  const dlVal=o.deadline?normalizeDate(o.deadline):'';
+  document.getElementById('fDate').value=recVal;
+  document.getElementById('fDeadline').value=dlVal;
   document.getElementById('fNotes').value=o.notes||'';
   document.getElementById('totalPreview').textContent=calcTotal(o.qty,o.value)>0?fmtMoney(calcTotal(o.qty,o.value)):'$0';
   buildStagesForm(tempStages);
@@ -632,6 +643,16 @@ function openEdit(id){
     document.getElementById('logList').innerHTML=o.log.slice().reverse().map(e=>'<div class="log-entry"><span class="log-by">'+e.by+'</span> — '+e.msg+'<span class="log-ts">'+e.ts+'</span></div>').join('');
   }else{ls.classList.add('hidden');}
   document.getElementById('orderModal').classList.remove('hidden');
+}
+
+function normalizeDate(d){
+  if(!d||d==='')return '';
+  if(typeof d==='string'&&d.match(/^\d{4}-\d{2}-\d{2}$/))return d;
+  let dt;
+  if(typeof d==='string'&&d.includes('T'))dt=new Date(d);
+  else dt=new Date(d);
+  if(isNaN(dt.getTime()))return '';
+  return dt.toISOString().split('T')[0];
 }
 
 function closeModal(){document.getElementById('orderModal').classList.add('hidden');}
