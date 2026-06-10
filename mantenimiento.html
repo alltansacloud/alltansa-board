@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mantenimiento — ALLTANSA</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  --navy:#1B2A4A;--red:#C0391B;--navy-pale:#EEF1F7;--gray-bg:#F4F5F7;
+  --border:#DDE1EA;--text:#1B2A4A;--muted:#6B7A99;
+  --green:#34A853;--yellow:#E37400;--orange:#F4511E;
+  --sem-g:#34A853;--sem-y:#E37400;--sem-r:#C0391B;--sem-k:#9E9E9E;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--gray-bg);color:var(--text);font-size:14px}
+/* ── Topbar ── */
+.topbar{background:var(--navy);padding:10px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;box-shadow:0 2px 8px rgba(27,42,74,.18)}
+.topbar-logo{height:32px;width:auto}
+.topbar-title{color:#fff;font-size:15px;font-weight:700;letter-spacing:.3px}
+.topbar-sub{color:rgba(255,255,255,.55);font-size:11px;margin-left:2px}
+.topbar-badge{background:var(--yellow);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;letter-spacing:.5px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.topbar-user{color:rgba(255,255,255,.8);font-size:12px}
+.tbtn-back{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:7px;padding:5px 12px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+.tbtn-back:hover{background:rgba(255,255,255,.2)}
+/* ── Layout ── */
+.main{padding:16px;max-width:1280px;margin:0 auto}
+/* ── Buttons ── */
+.tbtn{background:var(--navy);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.tbtn:hover{background:#243560}
+.tbtn-red{background:var(--red);border-color:var(--red);color:#fff}
+.tbtn-white{background:#fff;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+.tbtn-white:hover{background:var(--navy-pale)}
+.tbtn-green{background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+.ibtn{background:none;border:none;cursor:pointer;padding:5px;border-radius:6px;color:var(--muted);font-size:15px}
+.ibtn:hover{background:#F0F2F7;color:var(--navy)}
+/* ── Stats ── */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 16px;border-top:3px solid var(--navy)}
+.stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.stat-val{font-size:22px;font-weight:700;color:var(--navy)}
+.s-green{border-top-color:var(--green)}.s-green .stat-val{color:var(--green)}
+.s-yellow{border-top-color:var(--yellow)}.s-yellow .stat-val{color:var(--yellow)}
+.s-red{border-top-color:var(--red)}.s-red .stat-val{color:var(--red)}
+.s-gray{border-top-color:var(--sem-k)}.s-gray .stat-val{color:var(--sem-k)}
+/* ── Chips ── */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{background:#fff;border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer;color:var(--muted)}
+.chip.active{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:500}
+/* ── Search ── */
+.search-wrap{position:relative;display:inline-block}
+.search-inp{border:1px solid var(--border);border-radius:8px;padding:6px 12px 6px 32px;font-size:13px;width:260px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%236B7A99' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.099zm-5.242 1.156a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z'/%3E%3C/svg%3E") no-repeat 10px center;outline:none}
+.search-inp:focus{border-color:var(--navy)}
+/* ── Tabla equipos ── */
+.card{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+.card-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.card-title{font-size:13px;font-weight:700;color:var(--navy)}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:separate;border-spacing:0}
+th{padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:9px 12px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#FAFBFC}
+.equipo-nombre{font-weight:600;color:var(--navy)}
+.equipo-id{font-size:11px;color:var(--muted)}
+/* ── Semáforos ── */
+.sem{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0}
+.sem-g{background:var(--sem-g)}.sem-y{background:var(--sem-y)}.sem-r{background:var(--sem-r)}.sem-k{background:var(--sem-k)}
+.sem-wrap{display:flex;align-items:center;gap:6px}
+.sem-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.sem-badge.g{background:#E6F4EA;color:var(--sem-g)}
+.sem-badge.y{background:#FEF3CD;color:var(--sem-y)}
+.sem-badge.r{background:#FCE8E6;color:var(--sem-r)}
+.sem-badge.k{background:#F1F3F4;color:var(--sem-k)}
+/* ── Badges ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-prev{background:#E8F0FE;color:#1a73e8}
+.badge-corr{background:#FCE8E6;color:var(--red)}
+/* ── Panel bitácora ── */
+.bitacora-panel{background:#F8F9FC;border-top:1px solid var(--border);padding:16px}
+.bitacora-empty{color:var(--muted);font-size:12px;font-style:italic;padding:8px 0}
+.mant-item{background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px}
+.mant-item:last-child{margin-bottom:0}
+.mant-item-header{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.mant-item-fecha{font-size:12px;font-weight:700;color:var(--navy)}
+.mant-item-body{font-size:12px;color:var(--text);line-height:1.5}
+.mant-meta{display:flex;gap:12px;margin-top:6px;flex-wrap:wrap}
+.mant-meta-item{font-size:11px;color:var(--muted)}
+.mant-meta-item span{color:var(--text);font-weight:500}
+/* ── Modales ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.overlay.hidden{display:none}
+/* Modal de mantenimiento encima de la bitácora */
+#modalMant{z-index:200;}
+#modalEquipo{z-index:200;}
+.modal{background:#fff;border-radius:12px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.18)}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-size:15px;font-weight:700;color:var(--navy)}
+.modal-body{padding:20px}
+.modal-footer{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+input,select,textarea{width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--text);background:#fff}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--navy)}
+textarea{resize:vertical;min-height:60px}
+.fg-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input:disabled,select:disabled,textarea:disabled{background:#F8F9FC;color:var(--muted)}
+/* ── Login ── */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1B2A4A 0%,#243560 100%)}
+.login-card{background:#fff;border-radius:16px;padding:36px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.login-logo{text-align:center;margin-bottom:20px}
+.login-logo img{height:80px;width:auto}
+.login-sub{font-size:13px;color:var(--muted);text-align:center;margin-bottom:24px}
+/* ── Toast ── */
+.toast-wrap{position:fixed;bottom:20px;right:20px;z-index:999;display:flex;flex-direction:column;gap:6px}
+.toast{background:#1B2A4A;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.2);animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* ── Alerta banner ── */
+.alert-banner{background:#FEF3CD;border:1px solid #F9AB00;border-radius:8px;padding:10px 14px;font-size:12px;color:#854F0B;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.alert-banner.red{background:#FCE8E6;border-color:var(--red);color:var(--red)}
+/* ── Empty ── */
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+/* ── Sección tipo-filtro ── */
+.tipo-toggle{display:flex;gap:0}
+.tipo-toggle button{padding:6px 16px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--muted)}
+.tipo-toggle button:first-child{border-radius:8px 0 0 8px}
+.tipo-toggle button:last-child{border-radius:0 8px 8px 0;border-left:none}
+.tipo-toggle button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+/* ── Mobile ── */
+@media(max-width:640px){
+  .fg-row{grid-template-columns:1fr}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .search-inp{width:100%}
+  .desktop-only{display:none}
+  .card-header{flex-direction:column;align-items:flex-start}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="lw" class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo"><img src="logo.png" alt="ALLTANSA"></div>
+    <p class="login-sub">Módulo de Mantenimiento</p>
+    <div class="fg" style="margin-bottom:12px"><label>Tu nombre</label><input id="lName" type="text" placeholder="Ej. Carlos Mendoza"></div>
+    <div class="fg" style="margin-bottom:12px">
+      <label>Área</label>
+      <select id="lArea">
+        <option value="">Seleccionar...</option>
+        <option>Dirección</option>
+        <option>Mantenimiento</option>
+      </select>
+    </div>
+    <div class="fg" style="margin-bottom:20px"><label>Contraseña</label><input id="lPass" type="password" placeholder="••••••••"></div>
+    <button id="lBtn" onclick="doLogin()" style="width:100%;padding:11px;background:var(--red);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Entrar</button>
+    <div id="lErr" style="color:red;font-size:12px;margin-top:8px;text-align:center"></div>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app" class="hidden" style="display:none">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <img src="logo.png" alt="ALLTANSA" class="topbar-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="topbar-title">Mantenimiento</div>
+      <div class="topbar-sub">ALLTANSA Pressure Vessels</div>
+    </div>
+    <span class="topbar-badge">MANT</span>
+    <div class="topbar-right">
+      <span class="topbar-user" id="topbarUser"></span>
+      <a href="index.html" class="tbtn-back">← Board</a>
+      <button onclick="doLogout()" class="tbtn-back">Salir</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Alertas activas -->
+    <div id="alertasBanner"></div>
+
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow"></div>
+
+    <!-- Toolbar equipos -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🏭 Equipos</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="search-wrap">
+            <input class="search-inp" id="searchEq" placeholder="Buscar equipo..." oninput="renderEquipos()">
+          </div>
+          <div class="chips" id="filtroArea" style="margin:0"></div>
+          <button class="tbtn" onclick="openModalEquipo()" id="btnNuevoEquipo">+ Nuevo equipo</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Equipo</th>
+              <th>Marca / Modelo</th>
+              <th>No. serie</th>
+              <th>Área</th>
+              <th>Adquisición</th>
+              <th>Estatus</th>
+              <th>Último mant.</th>
+              <th>Próximo mant.</th>
+              <th>Semáforo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tBodyEq"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ===== MODAL EQUIPO ===== -->
+<div id="modalEquipo" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modalEquipoTitle">Nuevo equipo</span>
+      <button class="ibtn" onclick="closeModalEquipo()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg-row">
+        <div class="fg"><label>ID interno</label><input id="eqId" placeholder="Ej. EQ-001" readonly style="background:#F8F9FC"></div>
+        <div class="fg"><label>Estatus</label>
+          <select id="eqEstatus">
+            <option>Activo</option>
+            <option>Baja</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg"><label>Nombre / descripción</label><input id="eqNombre" placeholder="Ej. Soldadora MIG #3"></div>
+      <div class="fg-row">
+        <div class="fg"><label>Marca</label><input id="eqMarca" placeholder="Ej. Lincoln Electric"></div>
+        <div class="fg"><label>Modelo</label><input id="eqModelo" placeholder="Ej. Power MIG 350MP"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>No. de serie</label><input id="eqSerie" placeholder="S/N"></div>
+        <div class="fg"><label>Área</label>
+          <select id="eqArea">
+            <option value="">Seleccionar...</option>
+            <option>Corte</option>
+            <option>Rolado</option>
+            <option>Ensamble</option>
+            <option>Soldadura</option>
+            <option>Sandblast</option>
+            <option>Transporte</option>
+            <option>Climas de Oficina</option>
+            <option>General</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Fecha adquisición</label><input id="eqFechaAdq" type="date"></div>
+      </div>
+      <div class="fg"><label>Notas</label><textarea id="eqNotas" placeholder="Observaciones generales del equipo..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="tbtn-white" onclick="closeModalEquipo()">Cancelar</button>
+      <button class="tbtn tbtn-red" onclick="saveEquipo()" id="btnSaveEquipo">Guardar equipo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL MANTENIMIENTO ===== -->
+<div id="modalMant" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modalMantTitle">Registrar mantenimiento</span>
+      <button class="ibtn" onclick="closeModalMant()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg">
+        <label>Equipo</label>
+        <select id="mEquipo" onchange="onChangeEquipoMant()">
+          <option value="">Seleccionar equipo...</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Tipo</label>
+        <div class="tipo-toggle">
+          <button id="btnPrev" class="active" onclick="setTipoMant('Preventivo')">🔧 Preventivo</button>
+          <button id="btnCorr" onclick="setTipoMant('Correctivo')">⚠ Correctivo</button>
+        </div>
+      </div>
+      <input type="hidden" id="mTipo" value="Preventivo">
+      <div class="fg-row">
+        <div class="fg"><label>Fecha de ejecución</label><input id="mFecha" type="date"></div>
+        <div class="fg"><label>Costo (MXN)</label><input id="mCosto" type="number" min="0" placeholder="0.00"></div>
+      </div>
+      <div class="fg"><label>Descripción / alcance del trabajo</label><textarea id="mDesc" placeholder="Describe detalladamente el trabajo realizado..."></textarea></div>
+      <div class="fg-row">
+        <div class="fg"><label>Proveedor / empresa</label><input id="mProveedor" placeholder="Nombre del proveedor"></div>
+        <div class="fg"><label>Técnico responsable</label><input id="mTecnico" placeholder="Nombre del técnico"></div>
+      </div>
+      <!-- Solo Preventivo -->
+      <div id="secPreventivo">
+        <div class="fg-row">
+          <div class="fg">
+            <label>Periodicidad</label>
+            <select id="mPeriodicidad" onchange="calcProximaFecha()">
+              <option value="">Seleccionar...</option>
+              <option value="1">Cada 1 mes</option>
+              <option value="2">Cada 2 meses</option>
+              <option value="3">Cada 3 meses</option>
+              <option value="6">Cada 6 meses</option>
+              <option value="12">Cada 12 meses</option>
+            </select>
+          </div>
+          <div class="fg"><label>Fecha próximo mantenimiento</label><input id="mProximaFecha" type="date"></div>
+        </div>
+      </div>
+      <!-- Solo Correctivo -->
+      <div id="secCorrectivo" style="display:none">
+        <div class="fg"><label>Causa de la falla</label><textarea id="mCausa" placeholder="Describe la falla que originó el mantenimiento..."></textarea></div>
+        <div class="fg" style="display:flex;align-items:center;gap:10px">
+          <input type="checkbox" id="mGeneraPrev" style="width:auto" onchange="toggleGeneraPrev()">
+          <label for="mGeneraPrev" style="font-size:13px;color:var(--text);text-transform:none;letter-spacing:0;margin:0">Generar preventivo derivado</label>
+        </div>
+        <div id="secGeneraPrev" style="display:none;margin-top:10px;background:#EEF1F7;padding:12px;border-radius:8px">
+          <div class="fg-row">
+            <div class="fg">
+              <label>Periodicidad preventivo</label>
+              <select id="mPeriodicidadCorr" onchange="calcProximaFechaCorr()">
+                <option value="">Seleccionar...</option>
+                <option value="1">Cada 1 mes</option>
+                <option value="2">Cada 2 meses</option>
+                <option value="3">Cada 3 meses</option>
+                <option value="6">Cada 6 meses</option>
+                <option value="12">Cada 12 meses</option>
+              </select>
+            </div>
+            <div class="fg"><label>Próxima fecha preventivo</label><input id="mProximaFechaCorr" type="date"></div>
+          </div>
+        </div>
+      </div>
+      <div class="fg"><label>Observaciones adicionales</label><textarea id="mObs" placeholder="Notas, recomendaciones, refacciones usadas..."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="tbtn-white" onclick="closeModalMant()">Cancelar</button>
+      <button class="tbtn tbtn-red" onclick="saveMant()" id="btnSaveMant">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL BITÁCORA ===== -->
+<div id="modalBitacora" class="overlay hidden">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="bitacoraTitle">Bitácora</div>
+        <div id="bitacoraSubtitle" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="tbtn-white" onclick="descargaCSV()" style="font-size:11px">⬇ CSV</button>
+        <button class="tbtn" onclick="descargaPDF()" style="font-size:11px">📄 PDF</button>
+        <button class="ibtn" onclick="closeModalBitacora()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" id="bitacoraBody" style="padding:16px"></div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ===================================================
+// CONFIG
+// ===================================================
+const API = 'https://script.google.com/macros/s/AKfycbxFGplnK4-63imhYKIjfDsrlblmp1d-FU1BPzdA0LtImKaRjdEqYal32CBrVmJ4GGE3uw/exec';
+const AREAS_EQUIPO = ['Corte','Rolado','Ensamble','Soldadura','Sandblast','Transporte','Climas de Oficina','General'];
+
+// ===================================================
+// ESTADO
+// ===================================================
+let CU = null;
+let PASSWORDS = {};
+let equipos = [];
+let mantenimientos = [];
+let filtroAreaActual = 'Todos';
+let eqEditId = null;
+let mantEditId = null;
+let bitacoraEquipoId = null;
+
+// ===================================================
+// API HELPERS
+// ===================================================
+async function apiCall(params){
+  const qs = Object.entries(params)
+    .map(([k,v])=>k+'='+encodeURIComponent(typeof v==='object'?JSON.stringify(v):v))
+    .join('&');
+  const r = await fetch(API+'?'+qs);
+  const tx = await r.text();
+  try{return JSON.parse(tx);}catch(e){return{error:tx};}
+}
+
+async function apiPost(params){
+  const body = new URLSearchParams();
+  Object.entries(params).forEach(([k,v])=>body.append(k, typeof v==='object'?JSON.stringify(v):String(v)));
+  const r = await fetch(API, {method:'POST', body});
+  const tx = await r.text();
+  try{return JSON.parse(tx);}catch(e){return{error:tx};}
+}
+
+// ===================================================
+// HELPERS
+// ===================================================
+function today(){
+  const n=new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
+
+function fd(str){
+  if(!str)return'—';
+  const [y,m,d]=String(str).substring(0,10).split('-');
+  if(!y||!m||!d)return str;
+  const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return d+' '+meses[parseInt(m)-1]+' '+y;
+}
+
+function diasHasta(str){
+  if(!str)return null;
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const f=new Date(str+'T12:00:00');
+  return Math.round((f-hoy)/(1000*60*60*24));
+}
+
+function semaforo(equipo){
+  // Buscar el último preventivo con proxima_fecha para este equipo
+  const prevs = mantenimientos
+    .filter(m=>m.equipo_id===equipo.id && m.tipo==='Preventivo' && m.proxima_fecha)
+    .sort((a,b)=>(b.proxima_fecha||'').localeCompare(a.proxima_fecha||''));
+  if(!prevs.length) return {cls:'k', lbl:'Sin programar', dias:null};
+  const dias = diasHasta(prevs[0].proxima_fecha);
+  if(dias===null) return {cls:'k', lbl:'Sin programar', dias:null};
+  if(dias<0)  return {cls:'r', lbl:'Vencido '+Math.abs(dias)+'d', dias};
+  if(dias<=15) return {cls:'y', lbl:'En '+dias+'d', dias};
+  return {cls:'g', lbl:'Al corriente', dias};
+}
+
+function ultimoMant(equipoId){
+  const ms = mantenimientos
+    .filter(m=>m.equipo_id===equipoId)
+    .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  return ms[0] || null;
+}
+
+function proximoMant(equipoId){
+  const prevs = mantenimientos
+    .filter(m=>m.equipo_id===equipoId && m.tipo==='Preventivo' && m.proxima_fecha)
+    .sort((a,b)=>(b.proxima_fecha||'').localeCompare(a.proxima_fecha||''));
+  return prevs[0] || null;
+}
+
+function toast(msg, dur=2800){
+  const w=document.getElementById('toastWrap');
+  const t=document.createElement('div');
+  t.className='toast'; t.textContent=msg; w.appendChild(t);
+  setTimeout(()=>t.remove(), dur);
+}
+
+function ini(name){
+  if(!name)return'?';
+  return name.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();
+}
+
+function fmCosto(val){
+  if(!val||val==='')return'—';
+  return '$'+parseFloat(val).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+
+function canEditEquipos(){ return CU && ['Dirección','Mantenimiento'].includes(CU.area); }
+function canRegistrarMant(){ return CU && ['Dirección','Mantenimiento'].includes(CU.area); }
+function canDeleteMant(){ return CU && CU.area==='Dirección'; }
+
+function nextEqId(){
+  if(!equipos.length)return'EQ-001';
+  const nums = equipos.map(e=>{
+    const m = String(e.id||'').match(/EQ-(\d+)/);
+    return m?parseInt(m[1]):0;
+  });
+  return 'EQ-'+String(Math.max(...nums)+1).padStart(3,'0');
+}
+
+function nextMantId(){
+  return 'MANT-'+Date.now();
+}
+
+// ===================================================
+// LOGIN
+// ===================================================
+async function loadPasswords(){
+  try{
+    const r = await apiCall({action:'getPasswords'});
+    if(r && r.passwords) PASSWORDS = r.passwords;
+  }catch(e){}
+}
+
+async function doLogin(){
+  const name = document.getElementById('lName').value.trim();
+  const area = document.getElementById('lArea').value;
+  const pass = document.getElementById('lPass').value;
+  const err  = document.getElementById('lErr');
+  err.textContent='';
+  if(!name){err.textContent='Escribe tu nombre.';return;}
+  if(!area){err.textContent='Selecciona un área.';return;}
+  if(!pass){err.textContent='Escribe la contraseña.';return;}
+  if(Object.keys(PASSWORDS).length===0) await loadPasswords();
+  if(PASSWORDS[area] && pass !== PASSWORDS[area]){err.textContent='Contraseña incorrecta.';return;}
+  CU = {name, area};
+  try{localStorage.setItem('alltansa_mant_user', JSON.stringify(CU));}catch(e){}
+  document.getElementById('lw').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('topbarUser').textContent=name+' · '+area;
+  document.getElementById('btnNuevoEquipo').style.display=canEditEquipos()?'inline-flex':'none';
+  await loadAll();
+}
+
+function doLogout(){
+  CU=null; equipos=[]; mantenimientos=[];
+  try{localStorage.removeItem('alltansa_mant_user');}catch(e){}
+  document.getElementById('app').style.display='none';
+  document.getElementById('lw').style.display='flex';
+}
+
+// ===================================================
+// CARGA DE DATOS
+// ===================================================
+async function loadAll(){
+  try{
+    const [rEq, rMant] = await Promise.all([
+      apiCall({action:'getMaquinaria'}),
+      apiCall({action:'getMantenimientos'})
+    ]);
+    equipos      = (rEq.items   || []).filter(e=>e.id);
+    mantenimientos = (rMant.items || []).filter(m=>m.id);
+    renderAll();
+  }catch(e){
+    toast('Error cargando datos: '+e.message);
+  }
+}
+
+function renderAll(){
+  renderStats();
+  renderAlertas();
+  renderFiltrosArea();
+  renderEquipos();
+}
+
+// ===================================================
+// STATS
+// ===================================================
+function renderStats(){
+  const activos = equipos.filter(e=>e.estatus!=='Baja');
+  const vencidos = activos.filter(e=>semaforo(e).cls==='r').length;
+  const proximos = activos.filter(e=>semaforo(e).cls==='y').length;
+  const sinProg  = activos.filter(e=>semaforo(e).cls==='k').length;
+  const esteMes  = mantenimientos.filter(m=>{
+    if(!m.fecha)return false;
+    const hoy=new Date();
+    const f=new Date(m.fecha+'T12:00:00');
+    return f.getMonth()===hoy.getMonth()&&f.getFullYear()===hoy.getFullYear();
+  }).length;
+  document.getElementById('statsRow').innerHTML=
+    `<div class="stat"><div class="stat-label">Equipos activos</div><div class="stat-val">${activos.length}</div></div>`+
+    `<div class="stat s-green"><div class="stat-label">Mantenimientos este mes</div><div class="stat-val">${esteMes}</div></div>`+
+    `<div class="stat ${proximos>0?'s-yellow':'s-green'}"><div class="stat-label">Próximos ≤15 días</div><div class="stat-val">${proximos}</div></div>`+
+    `<div class="stat ${vencidos>0?'s-red':'s-green'}"><div class="stat-label">Vencidos</div><div class="stat-val">${vencidos}</div></div>`+
+    `<div class="stat s-gray"><div class="stat-label">Sin preventivo</div><div class="stat-val">${sinProg}</div></div>`;
+}
+
+// ===================================================
+// ALERTAS BANNER
+// ===================================================
+function renderAlertas(){
+  const activos = equipos.filter(e=>e.estatus!=='Baja');
+  const vencidos = activos.filter(e=>semaforo(e).cls==='r');
+  const proximos = activos.filter(e=>semaforo(e).cls==='y');
+  let html='';
+  if(vencidos.length){
+    html+=`<div class="alert-banner red">🔴 <strong>${vencidos.length} equipo${vencidos.length>1?'s':''} con mantenimiento vencido:</strong> ${vencidos.map(e=>e.nombre).join(', ')}</div>`;
+  }
+  if(proximos.length){
+    html+=`<div class="alert-banner">🟡 <strong>${proximos.length} equipo${proximos.length>1?'s':''} con mantenimiento próximo (≤15 días):</strong> ${proximos.map(e=>{const p=proximoMant(e.id);return e.nombre+(p?' — '+fd(p.proxima_fecha):'');}).join(', ')}</div>`;
+  }
+  document.getElementById('alertasBanner').innerHTML=html;
+}
+
+// ===================================================
+// FILTROS DE ÁREA
+// ===================================================
+function renderFiltrosArea(){
+  const areas = ['Todos',...new Set(equipos.map(e=>e.area).filter(Boolean))].sort((a,b)=>a==='Todos'?-1:1);
+  document.getElementById('filtroArea').innerHTML = areas.map(a=>
+    `<button class="chip${filtroAreaActual===a?' active':''}" onclick="setFiltroArea('${a}')">${a}</button>`
+  ).join('');
+}
+
+function setFiltroArea(area){
+  filtroAreaActual=area;
+  renderFiltrosArea();
+  renderEquipos();
+}
+
+// ===================================================
+// TABLA EQUIPOS
+// ===================================================
+function renderEquipos(){
+  let fl = equipos;
+  if(filtroAreaActual!=='Todos') fl=fl.filter(e=>e.area===filtroAreaActual);
+  const q=(document.getElementById('searchEq').value||'').toLowerCase();
+  if(q) fl=fl.filter(e=>(e.nombre+e.marca+e.modelo+e.num_serie+e.area).toLowerCase().includes(q));
+
+  const b=document.getElementById('tBodyEq');
+  if(!fl.length){b.innerHTML='<tr><td colspan="11"><div class="empty">No hay equipos registrados</div></td></tr>';return;}
+
+  b.innerHTML=fl.map(eq=>{
+    const sem=semaforo(eq);
+    const ult=ultimoMant(eq.id);
+    const prox=proximoMant(eq.id);
+    const esBaja=eq.estatus==='Baja';
+    const cantMant=mantenimientos.filter(m=>m.equipo_id===eq.id).length;
+
+    return `<tr style="${esBaja?'opacity:.55':''}">
+      <td><span style="font-size:11px;font-weight:700;color:var(--muted)">${eq.id||'—'}</span></td>
+      <td>
+        <div class="equipo-nombre">${eq.nombre||'—'}</div>
+        ${cantMant?`<div class="equipo-id">${cantMant} registro${cantMant!==1?'s':''}</div>`:''}
+      </td>
+      <td><div style="font-size:12px">${eq.marca||'—'}</div><div style="font-size:11px;color:var(--muted)">${eq.modelo||''}</div></td>
+      <td><span style="font-size:11px">${eq.num_serie||'—'}</span></td>
+      <td><span style="font-size:12px">${eq.area||'—'}</span></td>
+      <td><span style="font-size:12px">${fd(eq.fecha_adquisicion)}</span></td>
+      <td><span class="badge" style="background:${esBaja?'#F1F3F4':'#E6F4EA'};color:${esBaja?'#5F6368':'var(--green)'}">${eq.estatus||'Activo'}</span></td>
+      <td><span style="font-size:12px">${ult?fd(ult.fecha)+'<br><span style="font-size:10px;color:var(--muted)">'+ult.tipo+'</span>':'<span style="color:var(--muted);font-size:11px">Sin registros</span>'}</span></td>
+      <td><span style="font-size:12px;color:${sem.cls==='r'?'var(--red)':sem.cls==='y'?'var(--yellow)':'var(--muted)'}">${prox?fd(prox.proxima_fecha):'—'}</span></td>
+      <td>
+        <span class="sem-badge ${sem.cls}">
+          <span class="sem sem-${sem.cls}"></span>${sem.lbl}
+        </span>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="ibtn" title="Ver bitácora" onclick="openBitacora('${eq.id}')">📋</button>
+        ${canRegistrarMant()?`<button class="ibtn" title="Registrar mantenimiento" onclick="openModalMant('${eq.id}')" style="color:var(--green)">+🔧</button>`:''}
+        ${canEditEquipos()?`<button class="ibtn" title="Editar equipo" onclick="openModalEquipo('${eq.id}')">✏️</button>`:''}
+        ${canDeleteMant()?`<button class="ibtn" title="Eliminar equipo" onclick="deleteEquipo('${eq.id}')" style="color:var(--red)">🗑️</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ===================================================
+// MODAL EQUIPO
+// ===================================================
+function openModalEquipo(id){
+  eqEditId = id||null;
+  const eq = id ? equipos.find(e=>e.id===id) : null;
+  document.getElementById('modalEquipoTitle').textContent = eq ? 'Editar equipo' : 'Nuevo equipo';
+  document.getElementById('eqId').value      = eq ? (eq.id||'') : nextEqId();
+  document.getElementById('eqNombre').value  = eq ? (eq.nombre||'') : '';
+  document.getElementById('eqMarca').value   = eq ? (eq.marca||'') : '';
+  document.getElementById('eqModelo').value  = eq ? (eq.modelo||'') : '';
+  document.getElementById('eqSerie').value   = eq ? (eq.num_serie||'') : '';
+  document.getElementById('eqArea').value    = eq ? (eq.area||'') : '';
+  document.getElementById('eqFechaAdq').value= eq ? (eq.fecha_adquisicion||'').substring(0,10) : '';
+  document.getElementById('eqEstatus').value = eq ? (eq.estatus||'Activo') : 'Activo';
+  document.getElementById('eqNotas').value   = eq ? (eq.notas||'') : '';
+  document.getElementById('modalEquipo').classList.remove('hidden');
+}
+
+function closeModalEquipo(){
+  document.getElementById('modalEquipo').classList.add('hidden');
+  eqEditId=null;
+}
+
+async function saveEquipo(){
+  const nombre = document.getElementById('eqNombre').value.trim();
+  if(!nombre){alert('Escribe el nombre del equipo.');return;}
+  const btn=document.getElementById('btnSaveEquipo');
+  btn.disabled=true; btn.textContent='Guardando...';
+  const data={
+    id: eqEditId || document.getElementById('eqId').value,
+    nombre,
+    marca:             document.getElementById('eqMarca').value.trim(),
+    modelo:            document.getElementById('eqModelo').value.trim(),
+    num_serie:         document.getElementById('eqSerie').value.trim(),
+    area:              document.getElementById('eqArea').value,
+    fecha_adquisicion: document.getElementById('eqFechaAdq').value,
+    estatus:           document.getElementById('eqEstatus').value,
+    notas:             document.getElementById('eqNotas').value.trim()
+  };
+  try{
+    await apiPost({action:'saveMaquinaria', data});
+    toast('Equipo guardado ✓');
+    closeModalEquipo();
+    await loadAll();
+  }catch(e){alert('Error: '+e.message);}
+  btn.disabled=false; btn.textContent='Guardar equipo';
+}
+
+async function deleteEquipo(id){
+  if(!confirm('¿Eliminar este equipo? También se eliminarán sus registros de mantenimiento.'))return;
+  try{
+    await apiPost({action:'deleteMaquinaria', id});
+    toast('Equipo eliminado');
+    await loadAll();
+  }catch(e){alert('Error: '+e.message);}
+}
+
+// ===================================================
+// MODAL MANTENIMIENTO
+// ===================================================
+function openModalMant(equipoId, mantId){
+  mantEditId = mantId||null;
+  const mant = mantId ? mantenimientos.find(m=>m.id===mantId) : null;
+
+  // Poblar select de equipos
+  const sel=document.getElementById('mEquipo');
+  sel.innerHTML='<option value="">Seleccionar equipo...</option>'+
+    equipos.filter(e=>e.estatus!=='Baja').map(e=>
+      `<option value="${e.id}">${e.id} — ${e.nombre}</option>`
+    ).join('');
+
+  if(equipoId) sel.value=equipoId;
+  if(mant) sel.value=mant.equipo_id;
+  sel.disabled=!!equipoId||!!mantEditId;
+
+  // Tipo
+  const tipo=mant?mant.tipo:'Preventivo';
+  document.getElementById('mTipo').value=tipo;
+  document.getElementById('btnPrev').classList.toggle('active',tipo==='Preventivo');
+  document.getElementById('btnCorr').classList.toggle('active',tipo==='Correctivo');
+  document.getElementById('secPreventivo').style.display=tipo==='Preventivo'?'':'none';
+  document.getElementById('secCorrectivo').style.display=tipo==='Correctivo'?'':'none';
+
+  // Campos
+  document.getElementById('mFecha').value        = mant?(mant.fecha||'').substring(0,10) : today();
+  document.getElementById('mCosto').value         = mant?mant.costo:'';
+  document.getElementById('mDesc').value          = mant?(mant.descripcion||''):'';
+  document.getElementById('mProveedor').value     = mant?(mant.proveedor||''):'';
+  document.getElementById('mTecnico').value       = mant?(mant.tecnico||''):'';
+  document.getElementById('mPeriodicidad').value  = mant?(mant.periodicidad||''):'';
+  document.getElementById('mProximaFecha').value  = mant?(mant.proxima_fecha||'').substring(0,10):'';
+  document.getElementById('mCausa').value         = mant?(mant.causa_falla||''):'';
+  document.getElementById('mObs').value           = mant?(mant.observaciones||''):'';
+  document.getElementById('mGeneraPrev').checked  = false;
+  document.getElementById('secGeneraPrev').style.display='none';
+
+  document.getElementById('modalMantTitle').textContent = mant?'Editar mantenimiento':'Registrar mantenimiento';
+  document.getElementById('modalMant').classList.remove('hidden');
+}
+
+function closeModalMant(){
+  document.getElementById('modalMant').classList.add('hidden');
+  mantEditId=null;
+}
+
+function setTipoMant(tipo){
+  document.getElementById('mTipo').value=tipo;
+  document.getElementById('btnPrev').classList.toggle('active',tipo==='Preventivo');
+  document.getElementById('btnCorr').classList.toggle('active',tipo==='Correctivo');
+  document.getElementById('secPreventivo').style.display=tipo==='Preventivo'?'':'none';
+  document.getElementById('secCorrectivo').style.display=tipo==='Correctivo'?'':'none';
+}
+
+function calcProximaFecha(){
+  const meses=parseInt(document.getElementById('mPeriodicidad').value)||0;
+  const fecha=document.getElementById('mFecha').value;
+  if(!meses||!fecha)return;
+  const f=new Date(fecha+'T12:00:00');
+  f.setMonth(f.getMonth()+meses);
+  const y=f.getFullYear(), m=String(f.getMonth()+1).padStart(2,'0'), d=String(f.getDate()).padStart(2,'0');
+  document.getElementById('mProximaFecha').value=y+'-'+m+'-'+d;
+}
+
+function calcProximaFechaCorr(){
+  const meses=parseInt(document.getElementById('mPeriodicidadCorr').value)||0;
+  const fecha=document.getElementById('mFecha').value;
+  if(!meses||!fecha)return;
+  const f=new Date(fecha+'T12:00:00');
+  f.setMonth(f.getMonth()+meses);
+  const y=f.getFullYear(), m=String(f.getMonth()+1).padStart(2,'0'), d=String(f.getDate()).padStart(2,'0');
+  document.getElementById('mProximaFechaCorr').value=y+'-'+m+'-'+d;
+}
+
+function toggleGeneraPrev(){
+  const checked=document.getElementById('mGeneraPrev').checked;
+  document.getElementById('secGeneraPrev').style.display=checked?'block':'none';
+}
+
+function onChangeEquipoMant(){}
+
+async function saveMant(){
+  const equipoId=document.getElementById('mEquipo').value;
+  const desc=document.getElementById('mDesc').value.trim();
+  if(!equipoId){alert('Selecciona un equipo.');return;}
+  if(!desc){alert('Describe el trabajo realizado.');return;}
+  const tipo=document.getElementById('mTipo').value;
+  const eq=equipos.find(e=>e.id===equipoId);
+
+  const btn=document.getElementById('btnSaveMant');
+  btn.disabled=true; btn.textContent='Guardando...';
+
+  const generaPrev=tipo==='Correctivo'&&document.getElementById('mGeneraPrev').checked;
+  const by=CU.name+' ('+CU.area+')';
+
+  const data={
+    id:            mantEditId||nextMantId(),
+    equipo_id:     equipoId,
+    equipo_nombre: eq?eq.nombre:'',
+    tipo,
+    fecha:         document.getElementById('mFecha').value,
+    descripcion:   desc,
+    proveedor:     document.getElementById('mProveedor').value.trim(),
+    tecnico:       document.getElementById('mTecnico').value.trim(),
+    costo:         document.getElementById('mCosto').value||'',
+    observaciones: document.getElementById('mObs').value.trim(),
+    proxima_fecha: tipo==='Preventivo'?document.getElementById('mProximaFecha').value:'',
+    periodicidad:  tipo==='Preventivo'?document.getElementById('mPeriodicidad').value:'',
+    causa_falla:   tipo==='Correctivo'?document.getElementById('mCausa').value.trim():'',
+    genera_preventivo: generaPrev?'true':'false',
+    createdAt:     mantEditId?'':today(),
+    createdBy:     mantEditId?'':by
+  };
+
+  try{
+    await apiPost({action:'saveMantenimiento', data});
+
+    // Si correctivo genera preventivo derivado, crear segundo registro
+    if(generaPrev){
+      const proxFechaCorr=document.getElementById('mProximaFechaCorr').value;
+      const perCorr=document.getElementById('mPeriodicidadCorr').value;
+      if(proxFechaCorr){
+        const dataPreventivo={
+          id:            'MANT-'+Date.now()+'-prev',
+          equipo_id:     equipoId,
+          equipo_nombre: eq?eq.nombre:'',
+          tipo:          'Preventivo',
+          fecha:         '',
+          descripcion:   'Preventivo derivado de correctivo registrado el '+fd(data.fecha),
+          proveedor:     '',tecnico:'',costo:'',observaciones:'',
+          proxima_fecha: proxFechaCorr,
+          periodicidad:  perCorr,
+          causa_falla:   '',genera_preventivo:'false',
+          createdAt:     today(),createdBy:by
+        };
+        await apiPost({action:'saveMantenimiento', data:dataPreventivo});
+      }
+    }
+
+    toast('Mantenimiento guardado ✓');
+    closeModalMant();
+    await loadAll();
+  }catch(e){alert('Error: '+e.message);}
+  btn.disabled=false; btn.textContent='Guardar';
+}
+
+async function deleteMant(id){
+  if(!confirm('¿Eliminar este registro de mantenimiento?'))return;
+  try{
+    await apiPost({action:'deleteMantenimiento', id});
+    toast('Registro eliminado');
+    await loadAll();
+    // Refrescar bitácora si está abierta
+    if(bitacoraEquipoId) openBitacora(bitacoraEquipoId);
+  }catch(e){alert('Error: '+e.message);}
+}
+
+// ===================================================
+// BITÁCORA
+// ===================================================
+function openBitacora(equipoId){
+  bitacoraEquipoId=equipoId;
+  const eq=equipos.find(e=>e.id===equipoId);
+  if(!eq)return;
+  document.getElementById('bitacoraTitle').textContent='Bitácora — '+eq.nombre;
+  document.getElementById('bitacoraSubtitle').textContent=
+    (eq.marca?eq.marca+' ':'')+
+    (eq.modelo?eq.modelo+' | ':'')+'Área: '+(eq.area||'—')+
+    (eq.num_serie?' | S/N: '+eq.num_serie:'');
+
+  const mants=mantenimientos
+    .filter(m=>m.equipo_id===equipoId)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+
+  const body=document.getElementById('bitacoraBody');
+  if(!mants.length){
+    body.innerHTML='<div class="bitacora-empty">No hay registros de mantenimiento para este equipo.</div>';
+  } else {
+    body.innerHTML=mants.map(m=>`
+      <div class="mant-item">
+        <div class="mant-item-header">
+          <span class="mant-item-fecha">${fd(m.fecha)||'Sin fecha'}</span>
+          <span class="badge ${m.tipo==='Preventivo'?'badge-prev':'badge-corr'}">${m.tipo}</span>
+          ${m.genera_preventivo==='true'?'<span class="badge" style="background:#FEF3CD;color:#854F0B">→ Preventivo generado</span>':''}
+          <div style="margin-left:auto;display:flex;gap:4px">
+            ${canRegistrarMant()?`<button class="ibtn" style="font-size:12px" title="Editar" onclick="openModalMant('${m.equipo_id}','${m.id}')">✏️</button>`:''}
+            ${canDeleteMant()?`<button class="ibtn" style="font-size:12px;color:var(--red)" title="Eliminar" onclick="deleteMant('${m.id}')">🗑️</button>`:''}
+          </div>
+        </div>
+        <div class="mant-item-body">${m.descripcion||'—'}</div>
+        ${m.causa_falla?`<div class="mant-item-body" style="color:var(--red);margin-top:4px">⚠ Causa: ${m.causa_falla}</div>`:''}
+        <div class="mant-meta">
+          ${m.proveedor?`<div class="mant-meta-item">Proveedor: <span>${m.proveedor}</span></div>`:''}
+          ${m.tecnico?`<div class="mant-meta-item">Técnico: <span>${m.tecnico}</span></div>`:''}
+          ${m.costo?`<div class="mant-meta-item">Costo: <span>${fmCosto(m.costo)}</span></div>`:''}
+          ${m.periodicidad?`<div class="mant-meta-item">Periodicidad: <span>Cada ${m.periodicidad} mes(es)</span></div>`:''}
+          ${m.proxima_fecha?`<div class="mant-meta-item">Próximo: <span style="color:${diasHasta(m.proxima_fecha)<0?'var(--red)':diasHasta(m.proxima_fecha)<=15?'var(--yellow)':'inherit'}">${fd(m.proxima_fecha)}</span></div>`:''}
+          ${m.observaciones?`<div class="mant-meta-item">Obs: <span>${m.observaciones}</span></div>`:''}
+        </div>
+      </div>`).join('');
+  }
+  document.getElementById('modalBitacora').classList.remove('hidden');
+}
+
+function closeModalBitacora(){
+  document.getElementById('modalBitacora').classList.add('hidden');
+  bitacoraEquipoId=null;
+}
+
+// ===================================================
+// DESCARGA CSV
+// ===================================================
+function descargaCSV(){
+  const eq=equipos.find(e=>e.id===bitacoraEquipoId);
+  const mants=mantenimientos
+    .filter(m=>m.equipo_id===bitacoraEquipoId)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const cols=['Fecha','Tipo','Descripción','Proveedor','Técnico','Costo','Periodicidad','Próxima fecha','Causa falla','Observaciones'];
+  const rows=mants.map(m=>[
+    m.fecha||'',m.tipo||'',m.descripcion||'',m.proveedor||'',m.tecnico||'',
+    m.costo||'',m.periodicidad?'Cada '+m.periodicidad+' mes(es)':'',
+    m.proxima_fecha||'',m.causa_falla||'',m.observaciones||''
+  ]);
+  let csv=cols.join(',')+'\n';
+  rows.forEach(r=>{csv+=r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')+'\n';});
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='Bitacora_'+(eq?eq.nombre.replace(/\s+/g,'_'):'equipo')+'_'+today()+'.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ===================================================
+// PDF BITÁCORA
+// ===================================================
+function descargaPDF(){
+  if(!window.jspdf){alert('Librería PDF no disponible. Recarga la página.');return;}
+  const {jsPDF}=window.jspdf;
+  const eq=equipos.find(e=>e.id===bitacoraEquipoId);
+  if(!eq)return;
+  const mants=mantenimientos
+    .filter(m=>m.equipo_id===bitacoraEquipoId)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'letter'});
+  const W=215.9, M=14;
+
+  // Header navy
+  doc.setFillColor(27,42,74);
+  doc.rect(0,0,W,22,'F');
+
+  // Logo — intentar cargar desde el DOM o la URL
+  try{
+    const logoEl=document.querySelector('img[src="logo.png"]');
+    if(logoEl&&logoEl.complete&&logoEl.naturalWidth>0){
+      const canvas=document.createElement('canvas');
+      canvas.width=logoEl.naturalWidth; canvas.height=logoEl.naturalHeight;
+      canvas.getContext('2d').drawImage(logoEl,0,0);
+      const imgData=canvas.toDataURL('image/png');
+      // Calcular tamaño proporcional para caber en 14px de alto
+      const ratio=logoEl.naturalWidth/logoEl.naturalHeight;
+      const h=14, w=h*ratio;
+      doc.addImage(imgData,'PNG',M,4,w,h);
+    } else {
+      // Fallback: texto si no carga la imagen
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(13);doc.setFont('helvetica','bold');
+      doc.text('ALLTANSA',M,10);
+      doc.setFontSize(8);doc.setFont('helvetica','normal');
+      doc.text('Pressure Vessels',M,15);
+    }
+  }catch(e){
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(13);doc.setFont('helvetica','bold');
+    doc.text('ALLTANSA',M,10);
+  }
+
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(11);doc.setFont('helvetica','bold');
+  doc.text('BITÁCORA DE MANTENIMIENTO',W/2,12,{align:'center'});
+
+  // Datos del equipo
+  let y=30;
+  doc.setFillColor(238,241,247);
+  doc.rect(M,y-5,W-M*2,24,'F');
+  doc.setTextColor(27,42,74);
+  doc.setFontSize(12);doc.setFont('helvetica','bold');
+  doc.text(eq.nombre||'—',M+4,y+2);
+  doc.setFontSize(9);doc.setFont('helvetica','normal');
+  doc.setTextColor(107,122,153);
+  doc.text('ID: '+(eq.id||'—')+'   |   Área: '+(eq.area||'—')+'   |   No. Serie: '+(eq.num_serie||'—'),M+4,y+8);
+  doc.text('Marca: '+(eq.marca||'—')+'   Modelo: '+(eq.modelo||'—')+'   |   Adquisición: '+fd(eq.fecha_adquisicion),M+4,y+14);
+  y+=28;
+
+  // Tabla mantenimientos
+  if(!mants.length){
+    doc.setTextColor(107,122,153);doc.setFontSize(10);
+    doc.text('Sin registros de mantenimiento.',M,y+6);
+  } else {
+    doc.autoTable({
+      startY:y,
+      margin:{left:M,right:M},
+      head:[['Fecha','Tipo','Descripción / Trabajo realizado','Proveedor','Técnico','Costo']],
+      body:mants.map(m=>[
+        fd(m.fecha)||'—',
+        m.tipo||'—',
+        (m.descripcion||'—')+(m.causa_falla?'\nCausa: '+m.causa_falla:'')+(m.observaciones?'\nObs: '+m.observaciones:''),
+        m.proveedor||'—',
+        m.tecnico||'—',
+        fmCosto(m.costo)
+      ]),
+      styles:{fontSize:8,cellPadding:3,valign:'top'},
+      headStyles:{fillColor:[27,42,74],textColor:255,fontStyle:'bold',fontSize:8},
+      alternateRowStyles:{fillColor:[248,249,252]},
+      columnStyles:{
+        0:{cellWidth:22},1:{cellWidth:20},2:{cellWidth:70},
+        3:{cellWidth:32},4:{cellWidth:28},5:{cellWidth:22}
+      }
+    });
+  }
+
+  // Footer
+  const pageH=doc.internal.pageSize.height;
+  doc.setFillColor(248,249,252);
+  doc.rect(0,pageH-12,W,12,'F');
+  doc.setTextColor(107,122,153);doc.setFontSize(8);
+  doc.text('Generado: '+fd(today())+'   |   Total registros: '+mants.length+'   |   ALLTANSA Pressure Vessels',W/2,pageH-4,{align:'center'});
+
+  doc.save('Bitacora_'+(eq.nombre||'equipo').replace(/\s+/g,'_')+'_'+today()+'.pdf');
+  toast('PDF descargado ✓');
+}
+
+// ===================================================
+// BOTÓN GLOBAL + NUEVO MANTENIMIENTO
+// ===================================================
+// Agregar botón flotante de nuevo mantenimiento
+function renderBtnNuevoMant(){
+  if(!canRegistrarMant())return;
+  // El botón va en el card-header de equipos
+  const header=document.querySelector('.card-header');
+  if(!header||document.getElementById('btnNuevoMant'))return;
+  const btn=document.createElement('button');
+  btn.className='tbtn tbtn-green'; btn.id='btnNuevoMant';
+  btn.textContent='+ Registrar mantenimiento';
+  btn.onclick=()=>openModalMant('');
+  header.appendChild(btn);
+}
+
+// ===================================================
+// INIT
+// ===================================================
+loadPasswords();
+
+// Restaurar sesión
+try{
+  const sv=localStorage.getItem('alltansa_mant_user');
+  if(sv){
+    const u=JSON.parse(sv);
+    if(u&&u.name&&u.area&&['Dirección','Mantenimiento'].includes(u.area)){
+      CU=u;
+      document.getElementById('lw').style.display='none';
+      document.getElementById('app').style.display='block';
+      document.getElementById('topbarUser').textContent=u.name+' · '+u.area;
+      document.getElementById('btnNuevoEquipo').style.display=canEditEquipos()?'inline-flex':'none';
+      loadAll().then(()=>renderBtnNuevoMant());
+    }
+  }
+}catch(e){}
+
+// Cerrar modales al click fuera
+// Modales solo se cierran con botones Guardar / Cancelar — no al click fuera
+</script>
+</body>
+</html>
