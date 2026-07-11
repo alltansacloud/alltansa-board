@@ -1486,12 +1486,18 @@ function daysSince(d){
 
 function fm(v){if(!v&&v!==0)return '—';return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:0}).format(v);}
 function ct(q,u){return(parseFloat(q)||0)*(parseFloat(u)||0);}
-function intentarCierreAutomatico(nSt,fin,by){
-  // Cierra el pedido si el finiquito ya está pagado — única fuente de esta regla,
+function intentarCierreAutomatico(nSt,fin,by,prodStages){
+  // Cierra el pedido si el finiquito ya está pagado Y Calidad ya lo liberó —
   // usada por updFiniq, confirmarEmbarqueNormal, confirmarEmbarqueStock y saveProd.
+  // Antes solo revisaba el pago; un pedido podía quedar Cerrado/Embarcado sin
+  // que Calidad lo hubiera liberado. "prodStages" es el prod_stages vigente
+  // en ese momento (puede ser el ya guardado o uno recién actualizado en el
+  // mismo flujo) — de ahí se checa lib_calidad, que vive en prod_stages, no
+  // en "stages" (nSt).
   // Devuelve true si cerró (para que el llamador agregue su propio mensaje de log).
   nSt.cerrado=nSt.cerrado||{done:false,date:null,by:null};
-  if(fin==='Pagado'&&!nSt.cerrado.done){
+  const calidadOk=!!(prodStages&&prodStages.lib_calidad&&prodStages.lib_calidad.done);
+  if(fin==='Pagado'&&calidadOk&&!nSt.cerrado.done){
     nSt.cerrado={done:true,date:today(),by};
     return true;
   }
@@ -1783,6 +1789,12 @@ function gEtapa(o){
 
 function gDias(o){
   if(!o.prod_stages)return null;
+  // Un pedido cerrado, cancelado, ya en almacén (STK) o con producción Terminada
+  // ya no se va a volver a tocar — no tiene caso seguir marcándolo como
+  // "atrasado" con un contador de días que solo crece para siempre.
+  const estado=gSt(o);
+  if(estado==='closed'||estado==='cancelado'||estado==='stk_done')return null;
+  if(gEtapa(o).lbl==='Terminado')return null;
   let mx=null;
   PROD_STAGES.forEach(st=>{
     const s=o.prod_stages[st.key];
@@ -2115,7 +2127,7 @@ async function updFiniq(oid,val){
   const nSt=JSON.parse(JSON.stringify(o.stages));
   nSt.cerrado=nSt.cerrado||{done:false,date:null,by:null};
   let extraLog='';
-  if(embDone&&intentarCierreAutomatico(nSt,val,by))extraLog=' — Pedido cerrado automáticamente';
+  if(embDone&&intentarCierreAutomatico(nSt,val,by,o.prod_stages))extraLog=' — Pedido cerrado automáticamente';
   // Registrar fecha solo cuando se confirma el pago — no al cambiar a otros estados
   const finiqFecha=val==='Pagado'?(o.finiquito_date||today()):o.finiquito_date||'';
   const upd={...o,stages:nSt,finiquito:val,finiquito_date:finiqFecha,finiquito_by:by,
@@ -2161,7 +2173,7 @@ async function confirmarEmbarqueNormal(oid){
   let logMsg='Embarque confirmado';
   // Cierre automático SOLO si el finiquito está efectivamente pagado
   // Crédito autorizado y Cartera vencida NO cierran — siguen pendientes de cobro
-  if(intentarCierreAutomatico(nSt,fin,by)){
+  if(intentarCierreAutomatico(nSt,fin,by,nPS)){
     logMsg+=' — Pedido cerrado automáticamente';
   }
   const upd={...o,prod_stages:nPS,stages:nSt,lastProdUpdate:today(),
@@ -2185,7 +2197,7 @@ async function confirmarEmbarqueStock(oid){
   const fin=o.finiquito||'Pendiente';
   let logMsg='Embarque confirmado (Stock)';
   // Cierre automático si ya está pagado
-  if(intentarCierreAutomatico(nSt,fin,by)){
+  if(intentarCierreAutomatico(nSt,fin,by,nPS)){
     logMsg+=' — Pedido cerrado automáticamente';
   }
   const upd={...o,prod_stages:nPS,stages:nSt,lastProdUpdate:today(),
@@ -2293,8 +2305,16 @@ function computeOpsStats(list){
     (o.finiquito||'Pendiente')!=='Pagado'&&
     o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done
   ).length;
+  // Pagado 100% (finiquito Pagado) pero todavía sin confirmar embarque —
+  // antes solo se veían "perdidos" en el filtro Todos, sin una vista propia.
+  const porEmbarcar=list.filter(o=>
+    o.tipo!=='stk'&&
+    !['closed','cancelado'].includes(gSt(o))&&
+    (o.finiquito||'Pendiente')==='Pagado'&&
+    !(o.prod_stages&&o.prod_stages.embarque&&o.prod_stages.embarque.done)
+  ).length;
   const total=list.filter(o=>o.tipo!=='stk'&&gSt(o)!=='cancelado').length;
-  return{total,act,stks,cer,canc,rie,pfiniq};
+  return{total,act,stks,cer,canc,rie,pfiniq,porEmbarcar};
 }
 
 function calcDepositadoMes(yymm){
@@ -2346,7 +2366,7 @@ function calcDepositadoMes(yymm){
 
 function renderAS(){
   const s=computeOpsStats(orders); // stats globales — misma fuente de verdad que los botones
-  const act=s.act,stks=s.stks,cer=s.cer,canc=s.canc,rie=s.rie,pfiniq=s.pfiniq;
+  const act=s.act,stks=s.stks,cer=s.cer,canc=s.canc,rie=s.rie,pfiniq=s.pfiniq,porEmbarcar=s.porEmbarcar;
   const car=act.reduce((a,o)=>a+saldoPendiente(o),0);
 
   // ── KPIs financieros del mes ──────────────────────────────
@@ -2410,7 +2430,7 @@ function renderAS(){
   if(hayFiltroMA){
     const sub=filtrarPorMesAnio(orders,mesSelOps,anioSelOps);
     const sSub=computeOpsStats(sub);
-    fStats={total:sSub.total,act:sSub.act.length,stks:sSub.stks.length,cer:sSub.cer.length,rie:sSub.rie,pfiniq:sSub.pfiniq,canc:sSub.canc.length};
+    fStats={total:sSub.total,act:sSub.act.length,stks:sSub.stks.length,cer:sSub.cer.length,rie:sSub.rie,pfiniq:sSub.pfiniq,canc:sSub.canc.length,porEmbarcar:sSub.porEmbarcar};
     const mesesNombres={'01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun','07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic'};
     if(mesSelOps&&anioSelOps)filtroLbl='en '+mesesNombres[mesSelOps]+' \''+anioSelOps;
     else if(mesSelOps)filtroLbl='en '+mesesNombres[mesSelOps];
@@ -2430,6 +2450,7 @@ function renderAS(){
       '<div class="stat-mini"><div><div class="stat-mini-label">Cerrados</div><div class="stat-mini-val">'+cer.length+'</div>'+(fStats?subLine(fStats.cer):'')+'</div></div>'+
       '<div class="stat-mini" style="border-top-color:#C0391B"><div><div class="stat-mini-label">En riesgo</div><div class="stat-mini-val" style="color:#C0391B">'+rie+'</div>'+(fStats?subLine(fStats.rie):'')+'</div></div>'+
       '<div class="stat-mini" style="border-top-color:#E37400"><div><div class="stat-mini-label">Pend. finiquito</div><div class="stat-mini-val" style="color:#E37400">'+pfiniq+'</div>'+(fStats?subLine(fStats.pfiniq):'')+'</div></div>'+
+      (porEmbarcar>0?'<div class="stat-mini" style="border-top-color:#1a73e8"><div><div class="stat-mini-label">🚚 Por embarcar</div><div class="stat-mini-val" style="color:#1a73e8">'+porEmbarcar+'</div>'+(fStats?subLine(fStats.porEmbarcar):'')+'</div></div>':'')+
       (canc.length?'<div class="stat-mini" style="border-top-color:#9E9E9E"><div><div class="stat-mini-label" style="color:#9E9E9E">Cancelados</div><div class="stat-mini-val" style="color:#9E9E9E">'+canc.length+'</div>'+(fStats?subLine(fStats.canc):'')+'</div></div>':'');
   }
 }
@@ -2439,6 +2460,7 @@ function renderAF(){
     {k:'nuevo',l:'🆕 Nuevos'},
     {k:'proceso',l:'⚙️ En proceso'},
     {k:'finiq',l:'💰 Pend. finiquito'},
+    {k:'embarcar',l:'🚚 Por embarcar'},
     {k:'stk',l:'🏗️ STK'},
     {k:'cerrado',l:'✅ Cerrados'},
     {k:'cancelado',l:'🚫 Cancelados'},
@@ -2470,6 +2492,12 @@ function renderAT(){
         !['closed','cancelado'].includes(gSt(o))&&
         (o.finiquito||'Pendiente')!=='Pagado'&&
         o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done;
+    }
+    if(aFilter==='embarcar'){
+      return o.tipo!=='stk'&&
+        !['closed','cancelado'].includes(gSt(o))&&
+        (o.finiquito||'Pendiente')==='Pagado'&&
+        !(o.prod_stages&&o.prod_stages.embarque&&o.prod_stages.embarque.done);
     }
     return true;
   });
@@ -2940,12 +2968,16 @@ async function saveOrder(){
       order.log[0].msg+=' — '+delAlmacen+' uds del almacén'+(aProd>0?', '+aProd+' uds a producir':'');
 
       if(aProd===0){
-        // 100% cubierto por almacén: marcar etapas de producción como done EXCEPTO embarque y lib_calidad
+        // 100% cubierto por almacén: la unidad ya viene terminada de fábrica
+        // (fue producida como STK) — se marcan TODAS las etapas de producción
+        // como completadas, incluyendo Sandblast y Lib. Calidad. Antes se
+        // dejaban sin marcar, lo que hacía que el pedido nunca pudiera cerrarse
+        // solo (con el candado de Calidad del cierre automático) ni reflejara
+        // el trabajo físico que ya se hizo.
         PROD_STAGES.forEach(st=>{
-          if(st.key!=='sandblast'){
-            order.prod_stages[st.key]={done:true,date:today(),by:'Sistema (stock)'};
-          }
+          order.prod_stages[st.key]={done:true,date:today(),by:'Sistema (stock)'};
         });
+        order.prod_stages.lib_calidad={done:true,date:today(),by:'Sistema (stock)'};
         // Marcar stages administrativas como N/A — no requieren gestión
         order.stages.ingenieria={done:true,date:today(),by:'N/A (Stock)'};
         order.stages.requisicion={done:true,date:today(),by:'N/A (Stock)'};
@@ -4937,7 +4969,7 @@ async function saveProd(){
       ch.push('Entrada al almacén registrada');
     }else{
       const finVal=o.finiquito||'Pendiente';
-      if(intentarCierreAutomatico(nSt,finVal,by)){
+      if(intentarCierreAutomatico(nSt,finVal,by,tPSt)){
         ch.push('Pedido cerrado automáticamente ('+(cond==='Crédito'?'crédito cobrado':'contado')+')');
       }else if(cond==='Crédito'){
         ch.push('Embarque registrado — pendiente cobro');
