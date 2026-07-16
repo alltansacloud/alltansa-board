@@ -1,0 +1,3300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ALLTANSA – Cotizaciones</title>
+<style>
+  :root {
+    --navy:   #1B2A4A;
+    --red:    #C0391B;
+    --light:  #F4F6FA;
+    --white:  #FFFFFF;
+    --border: #D0D7E3;
+    --text:   #1a1a2e;
+    --muted:  #6c757d;
+    --green:  #198754;
+    --yellow: #ffc107;
+    --orange: #fd7e14;
+    --blue:   #0d6efd;
+    --shadow: 0 2px 8px rgba(0,0,0,.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--light); color: var(--text); font-size: 14px; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    background: var(--navy); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px; height: 54px; position: sticky; top: 0; z-index: 100;
+    box-shadow: var(--shadow);
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar-logo { height: 34px; }
+  .topbar-title { font-size: 15px; font-weight: 700; letter-spacing: .4px; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .btn-topbar {
+    background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.25);
+    color: #fff; padding: 5px 13px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: background .2s;
+  }
+  .btn-topbar:hover { background: rgba(255,255,255,.22); }
+  .btn-topbar.danger { background: rgba(192,57,27,.35); border-color: rgba(192,57,27,.5); }
+  .topbar-user { font-size: 12px; opacity: .75; }
+
+  /* ── LOGIN ── */
+  #loginScreen {
+    position: fixed; inset: 0; background: var(--navy);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+  }
+  .login-box {
+    background: #fff; border-radius: 14px; padding: 38px 44px;
+    width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,.25); text-align: center;
+  }
+  .login-box img { height: 48px; margin-bottom: 18px; }
+  .login-box h2 { font-size: 17px; color: var(--navy); margin-bottom: 6px; }
+  .login-box p { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
+  .login-box select, .login-box input {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+    border-radius: 7px; font-size: 14px; margin-bottom: 12px; outline: none;
+  }
+  .login-box select:focus, .login-box input:focus { border-color: var(--navy); }
+  .btn-login {
+    width: 100%; background: var(--navy); color: #fff; border: none;
+    padding: 10px; border-radius: 7px; font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: background .2s;
+  }
+  .btn-login:hover { background: #243a63; }
+  .login-err { color: var(--red); font-size: 12px; margin-top: 6px; display: none; }
+
+  /* ── MAIN LAYOUT ── */
+  #appScreen { display: none; }
+  .main-wrap { max-width: 1400px; margin: 0 auto; padding: 18px 16px 40px; }
+  /* La pestaña de Cotizaciones aprovecha todo el ancho de pantalla — las otras
+     dos (Clientes, Lista de Precios) mantienen el tope de 1400px. */
+  #paneCotizaciones > .main-wrap { max-width: 100%; }
+
+  /* ── KPI PANEL ── */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px;
+    margin-bottom: 22px;
+  }
+  @media(max-width:1100px){ .kpi-grid { grid-template-columns: repeat(3,1fr); } }
+  @media(max-width:700px){ .kpi-grid { grid-template-columns: repeat(2,1fr); } }
+  @media(max-width:500px){ .kpi-grid { grid-template-columns: 1fr; } }
+  .kpi-card {
+    background: var(--white); border-radius: 10px; padding: 16px 18px;
+    box-shadow: var(--shadow); border-top: 4px solid var(--navy);
+  }
+  .kpi-card.green  { border-top-color: #27ae60; }
+  .kpi-card.orange { border-top-color: #e67e22; }
+  .kpi-card.blue   { border-top-color: #2980b9; }
+  .kpi-card.red    { border-top-color: var(--red); }
+  .kpi-card.teal   { border-top-color: #17A398; }
+  .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
+  .kpi-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── CHARTS ROW ── */
+  .charts-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px;
+  }
+  @media(max-width:750px){ .charts-row { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--white); border-radius: 10px; padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .chart-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 12px; }
+  .bar-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .bar-label { width: 90px; text-align: right; color: var(--muted); flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; background: #eaecf0; border-radius: 4px; height: 14px; position: relative; }
+  .bar-fill  { height: 100%; border-radius: 4px; background: var(--navy); transition: width .4s; }
+  .bar-fill.green  { background: var(--green); }
+  .bar-fill.orange { background: var(--orange); }
+  .bar-fill.red    { background: var(--red); }
+  .bar-val   { width: 70px; font-weight: 700; color: var(--text); font-size: 11px; }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+  }
+  .toolbar-left  { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+  .toolbar-right { display: flex; gap: 8px; }
+  .search-input {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13px; width: 220px; outline: none;
+  }
+  .search-input:focus { border-color: var(--navy); }
+  select.filter-sel {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13px; background: #fff; outline: none; cursor: pointer;
+  }
+  .btn {
+    padding: 7px 16px; border-radius: 7px; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: opacity .2s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-success { background: var(--green); color: #fff; }
+  .btn-outline { background: #fff; color: var(--navy); border: 1px solid var(--navy); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    overflow-x: auto; border-radius: 10px; box-shadow: var(--shadow);
+    /* Scroll vertical propio de la tabla en vez de crecer indefinidamente —
+       el header queda fijo (sticky) mientras se recorren las filas. */
+    max-height: calc(100vh - 340px); overflow-y: auto;
+  }
+  .tab-pane .table-wrap { border-radius: 8px; margin-top: 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--white); font-size: 13px; }
+  thead th {
+    background: var(--navy); color: #fff; padding: 10px 12px;
+    text-align: left; font-weight: 600; white-space: nowrap;
+    position: sticky; top: 0; z-index: 2;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+  tbody tr:hover { background: #f0f4ff; }
+  tbody td { padding: 9px 12px; vertical-align: middle; white-space: nowrap; }
+  .folio-link { color: var(--navy); font-weight: 700; cursor: pointer; }
+  .folio-link:hover { text-decoration: underline; }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .badge-nueva       { background: #e3f2fd; color: #1565c0; }
+  .badge-estimacion  { background: #fff3e0; color: #e65100; }
+  .badge-estimacionok { background: #e0f7fa; color: #00695c; }
+  .badge-enviada     { background: #e8eaf6; color: #283593; }
+  .badge-negociacion { background: #f3e5f5; color: #6a1b9a; }
+  .badge-ganada      { background: #e8f5e9; color: #2e7d32; }
+  .badge-perdida     { background: #ffebee; color: #b71c1c; }
+  .badge-cancelada   { background: #f5f5f5; color: #616161; }
+  .badge-expirada    { background: #fff8e1; color: #f57f17; }
+  .monto-mxn { color: var(--text); }
+  .monto-usd { color: var(--blue); font-weight: 600; }
+  .btn-icon { background: none; border: none; cursor: pointer; font-size: 16px; padding: 2px 5px; border-radius: 4px; }
+  .btn-icon:hover { background: #e9ecef; }
+  .empty-row td { text-align: center; color: var(--muted); padding: 32px; font-style: italic; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 14px; width: 100%; max-width: 780px;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 48px rgba(0,0,0,.25);
+  }
+  .modal-header {
+    background: var(--navy); color: #fff; padding: 16px 22px;
+    display: flex; justify-content: space-between; align-items: center;
+    border-radius: 14px 14px 0 0; position: sticky; top: 0; z-index: 10;
+  }
+  .modal-header h3 { font-size: 15px; font-weight: 700; }
+  .modal-close { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; line-height: 1; }
+  .modal-body  { padding: 22px; }
+  .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #fafafa; border-radius: 0 0 14px 14px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media(max-width:600px){ .form-grid { grid-template-columns: 1fr; } }
+  .form-grid.cols3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media(max-width:700px){ .form-grid.cols3 { grid-template-columns: 1fr 1fr; } }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-group label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+  .form-group input, .form-group select, .form-group textarea {
+    padding: 8px 11px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13px; font-family: inherit; outline: none; background: #fff;
+    transition: border-color .2s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--navy); }
+  .form-group input:disabled, .form-group select:disabled, .form-group textarea:disabled { background: #f4f6fa; color: #888; }
+  .form-group textarea { resize: vertical; min-height: 70px; }
+
+  .section-title {
+    font-size: 11px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .7px; color: var(--navy); margin: 18px 0 10px;
+    padding-bottom: 6px; border-bottom: 2px solid var(--border);
+  }
+
+  /* Moneda toggle */
+  .moneda-toggle { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+  .moneda-toggle label { font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+  /* Bitácora de comentarios */
+  .bitacora-wrap { margin-top: 6px; }
+  .bitacora-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; background: #fafafa; }
+  .bitacora-item { padding: 8px 10px; border-radius: 6px; margin-bottom: 8px; background: #fff; border-left: 3px solid var(--navy); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .bitacora-item:last-child { margin-bottom: 0; }
+  .bitacora-meta { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+  .bitacora-text { font-size: 13px; color: var(--text); }
+  .bitacora-empty { text-align: center; color: var(--muted); font-style: italic; font-size: 12px; padding: 16px 0; }
+  .nuevo-comentario { display: flex; gap: 8px; align-items: flex-start; }
+  .nuevo-comentario textarea { flex: 1; min-height: 60px; }
+  .nuevo-comentario .btn { align-self: flex-end; white-space: nowrap; }
+
+  /* Semaforo ganada/perdida */
+  .ganada-banner { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: #2e7d32; font-weight: 600; }
+  .perdida-banner { background: #ffebee; border: 1px solid #ef9a9a; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: #b71c1c; font-weight: 600; }
+
+  /* Loading */
+  .loading-overlay {
+    position: fixed; inset: 0; background: rgba(255,255,255,.7);
+    display: flex; align-items: center; justify-content: center; z-index: 9000;
+  }
+  .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--navy); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--navy); color: #fff; padding: 10px 22px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; z-index: 9999; opacity: 0;
+    transition: opacity .3s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #toast.error { background: var(--red); }
+  #toast.success { background: var(--green); }
+
+  @media(max-width:600px){
+    .topbar-title { font-size: 13px; }
+    tbody td, thead th { padding: 7px 8px; font-size: 12px; }
+  }
+
+  /* ── TABS ── */
+  .tab-nav { background: var(--white); border-bottom: 2px solid var(--border); display: flex; gap: 0; position: sticky; top: 54px; z-index: 90; height: 42px; }
+  .tab-btn {
+    padding: 10px 20px; font-size: 13px; font-weight: 600; border: none; background: none;
+    cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px;
+    color: var(--muted); transition: color .2s, border-color .2s; display: flex; align-items: center; gap: 6px;
+  }
+  .tab-btn:hover { color: var(--navy); }
+  .tab-btn.active { color: var(--navy); border-bottom-color: var(--navy); }
+  .tab-badge {
+    background: var(--navy); color: #fff; font-size: 10px; font-weight: 700;
+    border-radius: 10px; padding: 1px 6px; min-width: 18px; text-align: center;
+  }
+  .tab-btn.active .tab-badge { background: var(--navy); }
+  .tab-btn:not(.active) .tab-badge { background: #e0e4ef; color: var(--navy); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── CLIENTES ── */
+  .estatus-badge-prospecto    { background:#e3f2fd;color:#1565c0; }
+  .estatus-badge-activo       { background:#e8f5e9;color:#2e7d32; }
+  .estatus-badge-inactivo     { background:#f5f5f5;color:#616161; }
+  .estatus-badge-suspendido   { background:#ffebee;color:#b71c1c; }
+
+  /* ── SKUs ── */
+  .tipo-badge-aire    { background:#e3f2fd;color:#1565c0; }
+  .tipo-badge-diesel  { background:#fff3e0;color:#e65100; }
+  .tipo-badge-proceso { background:#f3e5f5;color:#6a1b9a; }
+  .tipo-badge-paileria{ background:#e0f2f1;color:#00695c; }
+  .tipo-badge-gas     { background:#fff8e1;color:#f57f17; }
+  .tipo-badge-otro    { background:#f5f5f5;color:#616161; }
+
+  /* resumen cards fila */
+  .summary-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; min-height:0; }
+  .summary-card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:10px 16px; text-align:center; min-width:90px; }
+  .summary-card .sv { font-size:22px; font-weight:800; color:var(--navy); line-height:1; }
+  .summary-card .sl { font-size:11px; color:var(--muted); margin-top:2px; }
+
+
+  /* ── Stepper de etapas ────────────────────────────────── */
+  .stepper { display:flex; align-items:center; gap:0; padding:18px 24px 14px; border-bottom:1px solid var(--border); background:#fafafa; border-radius:14px 14px 0 0; }
+  .step { display:flex; align-items:center; gap:8px; flex:1; }
+  .step-circle { width:30px; height:30px; border-radius:50%; border:2px solid var(--border); background:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; color:#aaa; flex-shrink:0; transition:all .2s; }
+  .step-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#aaa; white-space:nowrap; transition:all .2s; }
+  .step-line { flex:1; height:2px; background:var(--border); margin:0 6px; min-width:16px; transition:background .2s; }
+  .step.active .step-circle { border-color:var(--navy); background:var(--navy); color:#fff; }
+  .step.active .step-label { color:var(--navy); }
+  .step.done .step-circle { border-color:var(--green,#2e7d32); background:var(--green,#2e7d32); color:#fff; }
+  .step.done .step-label { color:var(--green,#2e7d32); }
+  .step.done + .step-line { background:var(--green,#2e7d32); }
+  .step-line.done { background:var(--green,#2e7d32); }
+
+  /* ── Paneles de etapa ──────────────────────────────────── */
+  .etapa-panel { display:none; padding:18px 22px 6px; }
+  .etapa-panel.active { display:block; }
+
+  /* ── Tabla de conexiones ───────────────────────────────── */
+  .conn-table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+  .conn-table th { background:var(--navy); color:#fff; padding:6px 9px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; text-align:left; }
+  .conn-table td { padding:5px 7px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .conn-table tr:last-child td { border-bottom:none; }
+  .conn-table input, .conn-table select { width:100%; padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:12px; font-family:inherit; background:#fff; box-sizing:border-box; }
+  .conn-table input:disabled, .conn-table select:disabled { background:#f4f6fa; color:#888; border-color:#e0e0e0; }
+  .btn-del-conn { background:none; border:none; cursor:pointer; font-size:14px; color:#c0392b; padding:2px 5px; border-radius:4px; }
+  .btn-del-conn:hover { background:#ffebee; }
+  .btn-add-conn { margin-top:8px; padding:5px 13px; background:var(--navy); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+  .btn-add-conn:disabled { background:#aaa; cursor:not-allowed; }
+
+  /* ── Badge etapa en tabla principal ───────────────────── */
+  .etapa-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; }
+  .etapa-badge.req    { background:#e3f2fd; color:#1565c0; }
+  .etapa-badge.est    { background:#fff3e0; color:#e65100; }
+  .etapa-badge.cot    { background:#e8eaf6; color:#283593; }
+  .etapa-badge.seg    { background:#e8f5e9; color:#2e7d32; }
+
+  /* ── Nav footer del modal ─────────────────────────────── */
+  .modal-nav { display:flex; justify-content:space-between; align-items:center; padding:12px 22px; border-top:1px solid var(--border); background:#fafafa; border-radius:0 0 14px 14px; }
+  .modal-nav .nav-right { display:flex; gap:8px; }
+
+  /* ── Partidas (tabla de productos) ───────────────────── */
+  .partidas-table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+  .partidas-table th { background:var(--navy); color:#fff; padding:7px 9px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; text-align:left; }
+  .partidas-table td { padding:6px 7px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .partidas-table tr:last-child td { border-bottom:none; }
+  .partidas-table input, .partidas-table select { width:100%; padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:12px; font-family:inherit; background:#fff; box-sizing:border-box; }
+  .partidas-table input:disabled, .partidas-table select:disabled { background:#f4f6fa; color:#888; border-color:#e0e0e0; }
+  .partidas-table td.subtotal-cell { text-align:right; font-weight:700; color:var(--navy); white-space:nowrap; min-width:90px; }
+  .partidas-total-row td { padding:8px 9px; border-top:2px solid var(--border); font-weight:700; background:#f4f6fa; }
+  .btn-del-partida { background:none; border:none; cursor:pointer; font-size:15px; color:#c0392b; padding:2px 5px; border-radius:4px; }
+  .btn-del-partida:hover { background:#ffebee; }
+  .btn-add-partida { margin-top:8px; padding:6px 14px; background:var(--navy); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .btn-add-partida:disabled { background:#aaa; cursor:not-allowed; }
+
+  /* ── Radio group ──────────────────────────────────────── */
+  .radio-group { display:flex; gap:16px; flex-wrap:wrap; margin-top:4px; }
+  .radio-group label { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; color:var(--text); }
+  .radio-group input[type=radio] { accent-color:var(--navy); width:15px; height:15px; }
+
+  /* ── Tag de ingeniería ────────────────────────────────── */
+  .ing-tag { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; font-size:12px; font-weight:700; cursor:pointer; border:2px solid transparent; transition:all .15s; }
+  .ing-tag.sel   { border-color:var(--navy); background:var(--navy); color:#fff; }
+  .ing-tag.nosel { border-color:var(--border); background:#fff; color:#888; }
+
+.cliente-combo-list {
+  position: absolute; z-index: 40; top: 100%; left: 0; right: 0;
+  background: #fff; border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.12); max-height: 220px; overflow-y: auto;
+  margin-top: 2px;
+}
+.cliente-combo-item { padding: 8px 10px; font-size: 13px; cursor: pointer; }
+.cliente-combo-item:hover { background: #F0F3F9; }
+.cliente-combo-empty { padding: 8px 10px; font-size: 13px; color: var(--muted); font-style: italic; }
+</style>
+</head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<body>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <img id="loginLogo" src="logo.png" alt="ALLTANSA" onerror="this.style.display='none'"/>
+    <h2>Seguimiento de Cotizaciones</h2>
+    <p>Ingresa con tu área y contraseña</p>
+    <select id="loginArea">
+      <option value="">-- Selecciona tu área --</option>
+      <option value="Ventas/Embarques">Ventas / Embarques</option>
+      <option value="Ingeniería de ventas">Ingeniería de ventas</option>
+      <option value="Dirección">Dirección</option>
+      <option value="Contabilidad">Contabilidad</option>
+    </select>
+    <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password"/>
+    <button class="btn-login" id="btnLogin">Entrar</button>
+    <div class="login-err" id="loginErr">Área o contraseña incorrectos.</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <img class="topbar-logo" src="logo.png" alt="ALLTANSA" onerror="this.style.display='none'"/>
+      <span class="topbar-title">CRM · Cotizaciones</span>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-user" id="topbarUser"></span>
+      <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/','_self')">Board Principal</button>
+      <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/mantenimiento.html','_blank')">Mantenimiento</button>
+      <button class="btn-topbar danger" onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  
+  <!-- TAB NAV -->
+  <div class="tab-nav" id="tabNav">
+    <button class="tab-btn active" onclick="switchTab('cotizaciones')">
+      Cotizaciones <span class="tab-badge" id="tabBadgeCot">0</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('clientes')">
+      Clientes <span class="tab-badge" id="tabBadgeCli">0</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('precios')">
+      Lista de Precios <span class="tab-badge" id="tabBadgePrecios">0</span>
+    </button>
+  </div>
+
+  <div id="paneCotizaciones" class="tab-pane active"><div class="main-wrap">
+
+    <!-- KPI PANEL -->
+    <div class="kpi-grid" id="kpiGrid">
+      <div class="kpi-card green">
+        <div class="kpi-label">Cotizaciones este mes</div>
+        <div class="kpi-value" id="kpiMes">–</div>
+        <div class="kpi-sub" id="kpiMesMonto">–</div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-label">Pipeline activo</div>
+        <div class="kpi-value" id="kpiActivo">–</div>
+        <div class="kpi-sub" id="kpiActivoMonto">–</div>
+      </div>
+      <div class="kpi-card blue">
+        <div class="kpi-label">Tasa de conversion</div>
+        <div class="kpi-value" id="kpiConversion">–</div>
+        <div class="kpi-sub" id="kpiConversionSub">–</div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-label">Cotizado en el año</div>
+        <div class="kpi-value" id="kpiAnio">–</div>
+        <div class="kpi-sub" id="kpiAnioSub">–</div>
+      </div>
+      <div class="kpi-card teal">
+        <div class="kpi-label">Monto colocado (MXN)</div>
+        <div class="kpi-value" id="kpiColocado" style="font-size:21px">–</div>
+        <div class="kpi-sub" id="kpiColocadoSub">–</div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <h4>Monto cotizado por mes (MXN)</h4>
+        <div class="bar-wrap" id="chartMeses"></div>
+      </div>
+      <div class="chart-card">
+        <h4>Estado del pipeline</h4>
+        <div class="bar-wrap" id="chartEstados"></div>
+      </div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input type="text" class="search-input" id="searchInput" placeholder="Buscar cliente, folio, descripcion..." oninput="renderTable()"/>
+        <select class="filter-sel" id="filtroEstado" onchange="renderTable()">
+          <option value="">Todos los estados</option>
+          <option value="Nueva">Nueva</option>
+          <option value="En estimación">En estimación</option>
+          <option value="Estimación OK">Estimación OK</option>
+          <option value="Enviada">Enviada</option>
+          <option value="En negociación">En negociación</option>
+          <option value="Colocada">Colocada</option>
+          <option value="Cancelada">Cancelada</option>
+          <option value="Perdida">Perdida</option>
+          <option value="Sin respuesta">Sin respuesta</option>
+        </select>
+        <select class="filter-sel" id="filtroEtapa" onchange="renderTable()">
+          <option value="">Todas las etapas</option>
+          <option value="requisicion">Requisición</option>
+          <option value="estimacion">Estimación</option>
+          <option value="cotizacion">Cotización</option>
+          <option value="seguimiento">Seguimiento</option>
+        </select>
+        <select class="filter-sel" id="filtroMes" onchange="renderTable()">
+          <option value="">Todo el tiempo</option>
+        </select>
+        <select class="filter-sel" id="filtroResponsable" onchange="renderTable()">
+          <option value="">Todos los responsables</option>
+        </select>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-outline" onclick="loadData()">Actualizar</button>
+        <button class="btn" id="btnNuevaCotExpress" onclick="abrirExpressModal()" style="background:var(--red);color:#fff;font-weight:700;border:none;box-shadow:0 2px 6px rgba(192,57,27,.4)">⚡ Nueva cotización Express</button>
+        <button class="btn btn-primary" id="btnNuevaCot" onclick="openModal(null)">+ Nueva cotizacion</button>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="table-wrap">
+      <table id="mainTable">
+        <thead>
+          <tr>
+            <th>Folio</th>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>Etapa</th>
+            <th>Descripcion</th>
+            <th>Monto</th>
+            <th>Estado</th>
+            <th>Ultimo contacto</th>
+            <th>Proxima accion</th>
+            <th>Responsable</th>
+            <th>OC vinculada</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="mainTbody"></tbody>
+      </table>
+    </div>
+
+  </div><!-- /main-wrap --></div><!-- /paneCotizaciones -->
+
+  <!-- PANE CLIENTES -->
+  <div id="paneClientes" class="tab-pane">
+    <div class="main-wrap">
+      <!-- Toolbar clientes -->
+      <div class="toolbar" style="margin-bottom:14px">
+        <div class="toolbar-left">
+          <input type="text" class="search-input" id="searchCliente" placeholder="Buscar empresa, contacto, ciudad..." oninput="renderClientes()"/>
+          <select class="filter-sel" id="filtroEstatus" onchange="renderClientes()" value="">
+            <option value="" selected>Todos los estatus</option>
+            <option value="Prospecto">Prospecto</option>
+            <option value="Cliente activo">Cliente activo</option>
+            <option value="Cliente inactivo">Cliente inactivo</option>
+            <option value="Suspendido">Suspendido</option>
+          </select>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-outline" onclick="loadClientes()">Actualizar</button>
+          <button class="btn btn-primary" id="btnNuevoCliente" onclick="openClienteModal(null)">+ Nuevo cliente</button>
+        </div>
+      </div>
+      <!-- Resumen -->
+      <div class="summary-row" id="clienteSummary"></div>
+      <!-- Tabla -->
+      <div class="table-wrap" style="border-radius:8px;box-shadow:none;border:1px solid var(--border)">
+        <table style="width:100%;border-collapse:collapse;background:#fff;font-size:13px;">
+          <thead>
+            <tr>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;white-space:nowrap;border-radius:8px 0 0 0">Empresa</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;white-space:nowrap">Contacto</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;white-space:nowrap">Ciudad</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;white-space:nowrap">Estatus</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;white-space:nowrap">Origen</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:center;font-weight:600;font-size:12px;white-space:nowrap">Cotizaciones</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:center;font-weight:600;font-size:12px;white-space:nowrap">Colocadas</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:right;font-weight:600;font-size:12px;white-space:nowrap">Ventas acumuladas</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;font-weight:600;font-size:12px;max-width:180px">Notas</th>
+              <th style="background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-weight:600;font-size:12px;border-radius:0 8px 0 0">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="clientesTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANE SKUs -->
+  <div id="panePrecios" class="tab-pane">
+    <div class="main-wrap">
+      <!-- Toolbar Lista de Precios -->
+      <div class="toolbar" style="margin-bottom:14px">
+        <div class="toolbar-left" id="preciosCatTabsCot" style="display:flex;gap:8px"></div>
+        <div class="toolbar-right" style="display:flex;gap:8px;align-items:center">
+          <div id="preciosVistaWrapCot" style="display:none;gap:6px">
+            <button type="button" class="btn" id="btnVistaDistCot" onclick="setPrecioVistaCot('distribuidor')">Distribuidor</button>
+            <button type="button" class="btn" id="btnVistaCliCot" onclick="setPrecioVistaCot('cliente')">Cliente final</button>
+          </div>
+          <button class="btn btn-outline" onclick="loadPrecios()">Actualizar</button>
+        </div>
+      </div>
+      <div style="background:#FFF4E5;border:1px solid #E8B84B;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#7A5A00">
+        Esta lista es de solo consulta — los precios de referencia se agregan y editan directamente en el Sheet (pestañas <strong>ListaPrecios_Aire</strong> / <strong>ListaPrecios_Diesel</strong>). Para cotizar a un precio distinto, ajústalo al capturar la partida.
+      </div>
+      <div class="table-wrap" style="border-radius:8px;box-shadow:none;border:1px solid var(--border);overflow-x:auto">
+        <div id="preciosBodyCot"><div style="padding:24px;text-align:center;color:var(--muted);font-style:italic">Cargando...</div></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /appScreen -->
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay" style="display:none">
+  <div class="spinner"></div>
+</div>
+
+<!-- MODAL COTIZACION -->
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal" id="modalCot">
+    <div class="modal-header">
+      <h3 id="modalTitle">Nueva Cotizacion</h3>
+      <button class="modal-close" id="btnCloseModal">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <!-- contenido dinámico -->
+    </div>
+    <div class="modal-nav" id="modalFooter">
+      <div>
+        <button class="btn btn-outline" id="btnNavPrev">← Anterior</button>
+        <button class="btn btn-outline" id="btnNavNext">Siguiente →</button>
+      </div>
+      <div class="nav-right">
+        <!-- botones dinámicos -->
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL CLIENTE -->
+<div class="modal-overlay" id="clienteModalOverlay" style="display:none; z-index:1100">
+  <div class="modal" id="modalCliente">
+    <div class="modal-header">
+      <h3 id="clienteModalTitle">Nuevo Cliente</h3>
+      <button class="modal-close" id="btnCloseClienteModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="section-title">Datos de la empresa</div>
+      <div class="form-grid">
+        <div class="form-group full"><label>Empresa *</label><input type="text" id="cEmpresa" placeholder="Nombre de la empresa"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Contacto</label><input type="text" id="cContacto"/></div>
+        <div class="form-group"><label>Ciudad</label><input type="text" id="cCiudad" placeholder="Monterrey, NL"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Correo</label><input type="email" id="cEmail"/></div>
+        <div class="form-group"><label>Telefono</label><input type="text" id="cTelefono"/></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Estatus</label>
+          <select id="cEstatus">
+            <option value="Prospecto">Prospecto</option>
+            <option value="Cliente activo">Cliente activo</option>
+            <option value="Cliente inactivo">Cliente inactivo</option>
+            <option value="Suspendido">Suspendido</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Origen del lead</label>
+          <select id="cOrigen">
+            <option value="Llamada entrante">Llamada entrante</option>
+            <option value="Referido">Referido</option>
+            <option value="Visita directa">Visita directa</option>
+            <option value="Redes sociales">Redes sociales</option>
+            <option value="Google">Google</option>
+            <option value="Licitacion">Licitacion</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group full" style="margin-top:8px"><label>Notas</label><textarea id="cNotas" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btnCancelClienteModal">Cancelar</button>
+      <button class="btn btn-primary" id="btnGuardarCliente">Guardar cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SKU -->
+<div class="modal-overlay" id="expressModalOverlay" style="display:none">
+  <div class="modal" id="modalExpress" style="max-width:900px">
+    <div class="modal-header">
+      <h3>⚡ Cotización Express</h3>
+      <button class="modal-close" id="btnCloseExpressModal">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- ESTADO: FORMULARIO -->
+      <div id="expressFormWrap">
+        <div class="section-title">Cliente</div>
+        <div class="form-grid">
+          <div class="form-group" style="position:relative">
+            <label>Cliente</label>
+            <div style="display:flex;gap:6px;align-items:stretch">
+              <input type="text" id="exClienteBuscar" placeholder="Buscar o seleccionar cliente…" autocomplete="off"
+                style="flex:1;height:38px;padding:0 8px;border:1px solid var(--border);border-radius:6px;font-size:14px;box-sizing:border-box"/>
+              <button type="button" class="btn btn-primary" style="padding:0 14px;white-space:nowrap" onclick="openClienteModal(null, 'express')">+ Nuevo</button>
+            </div>
+            <div id="exClienteDropdown" class="cliente-combo-list" style="display:none"></div>
+            <input type="hidden" id="exClienteId" value=""/>
+          </div>
+          <div class="form-group">
+            <label>Contacto</label>
+            <input type="text" id="exContacto" placeholder="Nombre del contacto"/>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Correo / Tel contacto</label>
+            <input type="text" id="exContactoInfo" placeholder="correo@empresa.com / tel"/>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top:14px">Modelos</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px" id="exCatTabs"></div>
+        <div class="table-wrap" style="border-radius:8px;border:1px solid var(--border);max-height:240px;overflow:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--navy);color:#fff">
+              <th style="padding:8px 10px;text-align:left;position:sticky;top:0;background:var(--navy)">Modelo</th>
+              <th style="padding:8px 10px;text-align:right;position:sticky;top:0;background:var(--navy)">Precio (Cliente final)</th>
+              <th style="padding:8px 10px;text-align:right;position:sticky;top:0;background:var(--navy)">Capacidad</th>
+              <th style="padding:8px 10px;text-align:center;width:70px;position:sticky;top:0;background:var(--navy)">Cant.</th>
+              <th style="padding:8px 10px;width:100px;position:sticky;top:0;background:var(--navy)"></th>
+            </tr></thead>
+            <tbody id="exModelosTbody"></tbody>
+          </table>
+        </div>
+
+        <div class="section-title" style="margin-top:14px">Partidas de esta cotización</div>
+        <div class="table-wrap" style="border-radius:8px;border:1px solid var(--border)">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:#F0F2F7">
+              <th style="padding:6px 10px;text-align:left">Modelo</th>
+              <th style="padding:6px 10px;text-align:center;width:60px">Cant.</th>
+              <th style="padding:6px 10px;text-align:right;width:100px">Precio</th>
+              <th style="padding:6px 10px;text-align:right;width:100px">Subtotal</th>
+              <th style="padding:6px 10px;width:36px"></th>
+            </tr></thead>
+            <tbody id="exPartidasTbody"></tbody>
+            <tfoot><tr>
+              <td colspan="3" style="text-align:right;padding:6px 10px;color:var(--muted);font-size:12px">TOTAL</td>
+              <td style="text-align:right;padding:6px 10px;font-weight:700;color:var(--navy)" id="exTotal">$0.00</td>
+              <td></td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- ESTADO: CONFIRMACIÓN -->
+      <div id="expressConfirmWrap" style="display:none;text-align:center;padding:24px 0">
+        <div style="font-size:40px;margin-bottom:10px">✅</div>
+        <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px">Cotización generada</div>
+        <div style="color:var(--muted);margin-bottom:20px">Folio: <strong id="exFolioResultado" style="color:#C0391B"></strong></div>
+        <button type="button" class="btn btn-primary" style="padding:10px 24px" id="btnDescargarExpressPDF" onclick="descargarExpressPDF()">📄 Descargar PDF</button>
+      </div>
+
+    </div>
+    <div class="modal-footer" id="expressFooter">
+      <button class="btn btn-outline" id="btnCancelExpressModal">Cancelar</button>
+      <button class="btn btn-primary" id="btnGenerarExpress" onclick="generarCotizacionExpress()">Generar cotización</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="notasPdfModalOverlay" style="display:none">
+  <div class="modal" id="modalNotasPdf" style="max-width:640px">
+    <div class="modal-header">
+      <h3>Notas del PDF</h3>
+      <button class="modal-close" id="btnCloseNotasPdfModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Incluye</label>
+          <input type="text" id="notasPdfIncluye" placeholder="MATERIALES, MANO DE OBRA Y FLETE"/>
+        </div>
+        <div class="form-group">
+          <label>No incluye</label>
+          <input type="text" id="notasPdfNoIncluye" placeholder="INSTALACIÓN EN SITIO"/>
+        </div>
+      </div>
+
+      <label style="display:block;margin-top:12px;font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Notas comerciales</label>
+      <p style="color:var(--muted);font-size:12px;margin:4px 0 8px">Una nota por línea. Se numeran automáticamente con letras (A, B, C…) al generar el PDF — puedes editar, agregar o quitar líneas libremente.</p>
+      <textarea id="notasPdfEditor" style="width:100%;min-height:160px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+
+      <label style="display:block;margin-top:14px;font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Especificaciones técnicas</label>
+      <p style="color:var(--muted);font-size:12px;margin:4px 0 8px">Una línea por especificación — sin numerar, tal cual se imprime.</p>
+      <textarea id="notasPdfTecnicas" style="width:100%;min-height:180px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+
+      <label style="display:block;margin-top:14px;font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Notas especiales</label>
+      <textarea id="notasPdfEspeciales" style="width:100%;min-height:100px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;margin-top:4px" placeholder="Opcional"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btnCancelNotasPdfModal">Cancelar</button>
+      <button class="btn btn-primary" id="btnGenerarPdfConNotas" onclick="confirmarGenerarPdfConNotas()">Generar PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ¿Nueva revisión o ajuste menor? -->
+<div class="modal-overlay" id="revisionPromptOverlay" style="display:none">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3>Cambios detectados en el PDF</h3>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+        Desde la última vez que se generó un PDF de esta cotización cambió algo (partidas, precio, incluye/no incluye, notas comerciales, especificaciones técnicas o notas especiales).
+        ¿Cómo quieres registrar esto?
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-primary" style="width:100%" onclick="resolverRevisionPrompt('revision')">📈 Nueva revisión</button>
+        <button class="btn btn-outline" style="width:100%" onclick="resolverRevisionPrompt('ajuste')">✏️ Solo un ajuste menor (mismo número)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   CONFIGURACION
+═══════════════════════════════════════════ */
+const API = 'https://script.google.com/macros/s/AKfycbxFGplnK4-63imhYKIjfDsrlblmp1d-FU1BPzdA0LtImKaRjdEqYal32CBrVmJ4GGE3uw/exec';
+const API_TOKEN = 'segurid@d-ALLTANSA';
+
+const ROLES_PERMITIDOS = ['Ventas/Embarques','Ingeniería de ventas','Dirección','Contabilidad'];
+const ROLES_EDICION    = ['Ventas/Embarques','Ingeniería de ventas','Dirección'];
+const ROLES_SOLO_VER   = ['Contabilidad'];
+
+const ESTADOS = ['Nueva','En estimación','Estimación OK','Enviada','En negociación','Colocada','Cancelada','Perdida','Sin respuesta'];
+const TIPOS   = ['Aire','Diesel','Proceso','Paileria','Gas','Otro'];
+const MOTIVOS_PERDIDA = ['Precio','Tiempo de entrega','Sin respuesta','Competencia','Requerimietos no cubiertos','Cliente cancelo','Otro'];
+
+let currentUser = null;
+let allCots = [];
+let editingId = null;
+
+/* ═══════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════ */
+function today() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function fmtDate(s) {
+  if (!s) return '–';
+  const p = s.split('-');
+  if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+  return s;
+}
+
+function fmtMonto(v, moneda) {
+  if (!v && v !== 0) return '–';
+  const n = parseFloat(v);
+  if (isNaN(n)) return '–';
+  const fmt = new Intl.NumberFormat('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}).format(n);
+  return moneda === 'USD' ? `USD $${fmt}` : `MXN $${fmt}`;
+}
+
+// Igual que fmtMonto pero sin el prefijo de divisa — para los montos por fila
+// en el PDF de cotización, donde la divisa ya se indica una sola vez en el TOTAL.
+function fmtSinDivisa(v) {
+  if (!v && v !== 0) return '–';
+  const n = parseFloat(v);
+  if (isNaN(n)) return '–';
+  return '$' + new Intl.NumberFormat('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}).format(n);
+}
+
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' '+type : '');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.className = '', 3000);
+}
+
+function setLoading(v) {
+  document.getElementById('loadingOverlay').style.display = v ? 'flex' : 'none';
+}
+
+function canEdit() {
+  return ROLES_EDICION.includes(currentUser?.area);
+}
+
+function badgeEstado(e) {
+  const map = {
+    'Nueva':'nueva','En estimación':'estimacion','Estimación OK':'estimacionok','Enviada':'enviada','En negociación':'negociacion',
+    'Colocada':'ganada','Cancelada':'cancelada','Perdida':'perdida','Sin respuesta':'expirada'
+  };
+  const cls = map[e] || 'nueva';
+  return `<span class="badge badge-${cls}">${e}</span>`;
+}
+
+function getMonthLabel(yyyymm) {
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const [y,m] = yyyymm.split('-');
+  return `${meses[parseInt(m)-1]} ${y}`;
+}
+
+/* ═══════════════════════════════════════════
+   AUTH
+═══════════════════════════════════════════ */
+async function initLogin() {
+  document.getElementById('loginPass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') attemptLogin();
+  });
+  document.getElementById('btnLogin').addEventListener('click', attemptLogin);
+}
+
+async function attemptLogin() {
+  const area = document.getElementById('loginArea').value;
+  const pass = document.getElementById('loginPass').value.trim();
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+
+  if (!area) { errEl.textContent = 'Selecciona tu área.'; errEl.style.display = 'block'; return; }
+  if (!ROLES_PERMITIDOS.includes(area)) { errEl.textContent = 'Área sin acceso a este módulo.'; errEl.style.display = 'block'; return; }
+
+  setLoading(true);
+  try {
+    const r = await fetch(`${API}?action=getPasswords&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    setLoading(false);
+    if (!d.passwords) { errEl.textContent = 'Error al conectar. Intenta de nuevo.'; errEl.style.display = 'block'; return; }
+    // Tolerante a espacios/mayúsculas accidentales en la hoja "Usuarios":
+    // busca el área comparando de forma normalizada, no exacta.
+    const norm = s => String(s || '').trim().toLowerCase();
+    const areaKey = Object.keys(d.passwords).find(k => norm(k) === norm(area));
+    const pwd = areaKey ? String(d.passwords[areaKey]).trim() : undefined;
+    if (!pwd || pwd !== pass) { errEl.textContent = 'Área o contraseña incorrectos.'; errEl.style.display = 'block'; return; }
+    currentUser = { area, name: area };
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    document.getElementById('topbarUser').textContent = area;
+    applyRoleUI();
+    loadData();
+    loadClientes();
+    loadPrecios();
+  } catch(e) {
+    setLoading(false);
+    errEl.textContent = 'Error de conexión. Verifica tu red.';
+    errEl.style.display = 'block';
+  }
+}
+
+function logout() {
+  currentUser = null;
+  allCots = [];
+  allClientes = [];
+  listaPrecios = [];
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginArea').value = '';
+}
+
+function applyRoleUI() {
+  if (!canEdit()) {
+    document.getElementById('btnNuevaCot').style.display = 'none';
+    document.getElementById('btnNuevaCotExpress').style.display = 'none';
+  }
+}
+
+/* ═══════════════════════════════════════════
+   DATA
+═══════════════════════════════════════════ */
+async function loadData() {
+  setLoading(true);
+  try {
+    const r = await fetch(`${API}?action=getCotizaciones&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    allCots = d.cotizaciones || [];
+    setLoading(false);
+    populateMesFilter();
+    populateResponsableFilter();
+    renderKPIs();
+    renderCharts();
+    renderTable();
+    updateTabBadges();
+  } catch(e) {
+    setLoading(false);
+    showToast('Error al cargar datos', 'error');
+  }
+}
+
+async function apiCotSave(cotizacion) {
+  const body = new URLSearchParams();
+  body.append('action', 'saveCotizacion');
+  body.append('data', JSON.stringify(cotizacion));
+  body.append('_tk', API_TOKEN);
+  const r = await fetch(API, { method: 'POST', body });
+  const tx = await r.text();
+  try { return JSON.parse(tx); } catch(e) { return { error: tx }; }
+}
+
+/* ═══════════════════════════════════════════
+   FILTROS / SELECTS AUX
+═══════════════════════════════════════════ */
+function populateMesFilter() {
+  const sel = document.getElementById('filtroMes');
+  const meses = [...new Set(allCots.map(c => c.fecha ? c.fecha.slice(0,7) : '').filter(Boolean))].sort().reverse();
+  sel.innerHTML = '<option value="">Todo el tiempo</option>' +
+    meses.map(m => `<option value="${m}">${getMonthLabel(m)}</option>`).join('');
+}
+
+function populateResponsableFilter() {
+  const sel = document.getElementById('filtroResponsable');
+  if (!sel) return;
+  const actual = sel.value;
+  const responsables = [...new Set(allCots.map(c => c.responsable).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  sel.innerHTML = '<option value="">Todos los responsables</option>' +
+    responsables.map(r => `<option value="${r}" ${r===actual?'selected':''}>${r}</option>`).join('');
+}
+
+/* ═══════════════════════════════════════════
+   KPIs
+═══════════════════════════════════════════ */
+function renderKPIs() {
+  const now = new Date();
+  const mesActual = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const anioActual = String(now.getFullYear());
+
+  const mesCots   = allCots.filter(c => c.fecha && c.fecha.startsWith(mesActual));
+  const activoCots = allCots.filter(c => ['Nueva','En estimación','Estimación OK','Enviada','En negociación'].includes(c.estado));
+  const cerradas   = allCots.filter(c => ['Colocada','Cancelada','Perdida','Sin respuesta'].includes(c.estado));
+  const ganadas    = allCots.filter(c => c.estado === 'Colocada');
+  const anioCots   = allCots.filter(c => c.fecha && c.fecha.startsWith(anioActual));
+
+  const tasa = cerradas.length > 0 ? Math.round((ganadas.length / cerradas.length) * 100) : 0;
+
+  const sumMes    = sumMonto(mesCots, 'MXN');
+  const sumActivo = sumMonto(activoCots, 'MXN');
+  const sumAnio   = sumMonto(anioCots, 'MXN');
+  // Monto colocado vs. monto total cotizado (todas las cotizaciones, cualquier
+  // estado) — % de lo cotizado que realmente se convirtió en dinero.
+  const sumColocado = sumMonto(ganadas, 'MXN');
+  const sumCotizadoTotal = sumMonto(allCots, 'MXN');
+  const pctColocado = sumCotizadoTotal > 0 ? Math.round((sumColocado / sumCotizadoTotal) * 100) : 0;
+
+  document.getElementById('kpiMes').textContent          = mesCots.length;
+  document.getElementById('kpiMesMonto').textContent     = fmtMonto(sumMes,'MXN') + ' cotizados';
+  document.getElementById('kpiActivo').textContent       = activoCots.length;
+  document.getElementById('kpiActivoMonto').textContent  = fmtMonto(sumActivo,'MXN') + ' en juego';
+  document.getElementById('kpiConversion').textContent   = tasa + '%';
+  document.getElementById('kpiConversionSub').textContent= `${ganadas.length} ganadas de ${cerradas.length} resueltas`;
+  document.getElementById('kpiAnio').textContent         = anioCots.length;
+  document.getElementById('kpiAnioSub').textContent      = fmtMonto(sumAnio,'MXN');
+  document.getElementById('kpiColocado').textContent     = fmtSinDivisa(sumColocado);
+  document.getElementById('kpiColocadoSub').textContent  = `${pctColocado}% de lo cotizado`;
+}
+
+function sumMonto(cots, moneda) {
+  // Para KPIs sumamos solo MXN (USD se muestran separados en tabla)
+  return cots.reduce((acc, c) => {
+    const v = parseFloat(c.monto) || 0;
+    if (c.moneda === 'MXN') return acc + v;
+    if (c.moneda === 'USD') return acc + v * (parseFloat(c.tipo_cambio) || 17);
+    return acc + v;
+  }, 0);
+}
+
+/* ═══════════════════════════════════════════
+   CHARTS
+═══════════════════════════════════════════ */
+function renderCharts() {
+  renderChartMeses();
+  renderChartEstados();
+}
+
+function renderChartMeses() {
+  const now = new Date();
+  const meses = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    meses.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const data = meses.map(m => ({
+    label: getMonthLabel(m),
+    val: sumMonto(allCots.filter(c => c.fecha && c.fecha.startsWith(m)), 'MXN')
+  }));
+  const max = Math.max(...data.map(d => d.val), 1);
+
+  document.getElementById('chartMeses').innerHTML = data.map(d => `
+    <div class="bar-row">
+      <span class="bar-label">${d.label}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(d.val/max*100)}%"></div></div>
+      <span class="bar-val">${d.val > 0 ? fmtMonto(d.val,'MXN') : '–'}</span>
+    </div>`).join('');
+}
+
+function renderChartEstados() {
+  const counts = {};
+  ESTADOS.forEach(e => counts[e] = allCots.filter(c => c.estado === e).length);
+  const max = Math.max(...Object.values(counts), 1);
+  const colores = {
+    'Nueva':'','En estimación':'orange','Enviada':'','En negociación':'orange',
+    'Colocada':'green','Cancelada':'','Perdida':'red','Sin respuesta':''
+  };
+
+  document.getElementById('chartEstados').innerHTML = ESTADOS
+    .filter(e => counts[e] > 0)
+    .map(e => `
+      <div class="bar-row">
+        <span class="bar-label">${e}</span>
+        <div class="bar-track"><div class="bar-fill ${colores[e]||''}" style="width:${Math.round(counts[e]/max*100)}%"></div></div>
+        <span class="bar-val">${counts[e]}</span>
+      </div>`).join('') || '<div style="color:var(--muted);font-size:12px;padding:12px 0">Sin datos</div>';
+}
+
+/* ═══════════════════════════════════════════
+   TABLE
+═══════════════════════════════════════════ */
+function renderTable() {
+  const search  = document.getElementById('searchInput').value.toLowerCase();
+  const fEstado = document.getElementById('filtroEstado')?.value || '';
+  const fEtapa  = document.getElementById('filtroEtapa')?.value  || '';
+  const fMes    = document.getElementById('filtroMes')?.value    || '';
+  const fResp   = document.getElementById('filtroResponsable')?.value || '';
+
+  let cots = allCots.slice();
+
+  if (search) cots = cots.filter(c =>
+    (c.cliente||'').toLowerCase().includes(search) ||
+    (c.folio||'').toLowerCase().includes(search) ||
+    (c.descripcion||'').toLowerCase().includes(search) ||
+    (c.contacto||'').toLowerCase().includes(search)
+  );
+  if (fEstado) cots = cots.filter(c => c.estado === fEstado);
+  if (fEtapa)  cots = cots.filter(c => (c.etapa_actual||'requisicion') === fEtapa);
+  if (fMes)    cots = cots.filter(c => c.fecha && c.fecha.startsWith(fMes));
+  if (fResp)   cots = cots.filter(c => c.responsable === fResp);
+
+  // Ordenar por folio desc (orden real de creación); si falta folio, usar fecha como respaldo
+  cots.sort((a,b) => {
+    const fa = a.folio || '', fb = b.folio || '';
+    if (fa && fb) return fb.localeCompare(fa);
+    return (b.fecha||'').localeCompare(a.fecha||'');
+  });
+
+  const tbody = document.getElementById('mainTbody');
+  if (cots.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">No hay cotizaciones que coincidan con los filtros.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = cots.map(c => `
+    <tr>
+      <td><span class="folio-link" data-id="${c.id}">${c.folio||'–'}${parseInt(c.revision)>1 ? ' <span style="color:var(--muted);font-weight:600">· Rev. '+c.revision+'</span>' : ''}</span></td>
+      <td>${fmtDate(c.fecha)}</td>
+      <td>${c.cliente||'–'}</td>
+      <td>${badgeEtapa(c.etapa_actual)}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${getResumenRequisicion(c)}">${getResumenRequisicion(c)}</td>
+      <td class="${c.moneda==='USD'?'monto-usd':'monto-mxn'}">${fmtMonto(c.monto,c.moneda)}</td>
+      <td>${badgeEstado(c.estado)}</td>
+      <td>${fmtDate(c.ultimo_contacto)}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${c.proxima_accion||''}">${c.proxima_accion||'–'}</td>
+      <td>${c.responsable||'–'}</td>
+      <td>${c.oc_vinculada ? `<span style="color:var(--green);font-weight:700">${c.oc_vinculada}</span>` : '–'}</td>
+      <td>
+        <button class="btn-icon" title="Ver / Editar" data-id="${c.id}">✏️</button>
+        <button class="btn-icon" title="Descargar resumen (Requisición + historial)" onclick="descargarResumenPDF('${c.id}')">📋</button>
+      </td>
+    </tr>`).join('');
+
+  // Bind click events
+  tbody.querySelectorAll('[data-id]').forEach(el => {
+    el.addEventListener('click', () => openModal(el.dataset.id));
+  });
+}
+
+
+/* ═══════════════════════════════════════════
+   MODAL — 4 etapas
+═══════════════════════════════════════════ */
+
+let currentPartidas  = [];
+let currentConexiones = [];
+// Notas del PDF (Incluye/No incluye/comerciales A-G/especiales) de la
+// cotización que se está editando — se cargan al abrir, se actualizan al
+// confirmar el editor de notas del PDF, y se guardan como parte del registro.
+let currentPdfNotas = {};
+// Lo que se le mostró en pantalla al usuario al abrir el editor de notas del
+// PDF (ya sea lo guardado antes, o el default calculado) — el diff se compara
+// contra ESTO, no contra la columna del Sheet, porque solo así se sabe qué
+// cambió realmente desde el punto de vista del usuario, incluso la primera
+// vez que se usa el editor para una cotización (cuando el Sheet está vacío).
+let pdfNotasBaseline = {};
+let _pendingDiffPdfNotas = '';
+let modalReadOnly    = false;
+let currentEtapa     = 1;  // 1=requisicion 2=cotizacion (partidas+comercial) 3=seguimiento
+
+const ETAPA_KEYS = ['requisicion','cotizacion','seguimiento'];
+
+function badgeEtapa(e) {
+  const map = { requisicion:'req', estimacion:'est', cotizacion:'cot', seguimiento:'seg' };
+  const labels = { requisicion:'Requisición', estimacion:'Estimación', cotizacion:'Cotización', seguimiento:'Seguimiento' };
+  const cls = map[e||'requisicion'] || 'req';
+  return `<span class="etapa-badge ${cls}">${labels[e||'requisicion']||'Requisición'}</span>`;
+}
+
+function getDescResumen(cot) {
+  if (!cot) return '–';
+  if (cot.partidas) {
+    try {
+      const parts = typeof cot.partidas === 'string' ? JSON.parse(cot.partidas) : cot.partidas;
+      if (Array.isArray(parts) && parts.length > 0)
+        return parts.map(p => `${p.cantidad||1}x ${p.tipo||''}${p.capacidad?' '+p.capacidad:''}`).join(' | ');
+    } catch(e) {}
+  }
+  return cot.descripcion || cot.tipo || '–';
+}
+
+// Resumen para la columna "Descripcion" de la tabla: capacidad + fluido + presion
+// (lo capturado en la Requisición, etapa 1). No modifica el campo `descripcion`
+// guardado — es solo para esta vista. Si la cotización no tiene estos datos
+// (legacy o aún sin requisición completa), cae de vuelta al resumen anterior.
+function getResumenRequisicion(cot) {
+  if (!cot) return '–';
+  const partes = [];
+  if (cot.capacidad_l) partes.push(`${cot.capacidad_l} L`);
+  if (cot.fluido) partes.push(cot.fluido);
+  if (cot.presion) partes.push(`${cot.presion} PSI`);
+  if (partes.length) return partes.join(' · ');
+  return getDescResumen(cot);
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').style.display = 'none';
+  editingId = null;
+  currentEtapa = 1;
+  currentPartidas = [];
+  currentConexiones = [];
+  currentPdfNotas = {};
+}
+
+function openModal(id) {
+  editingId = id;
+  const cot     = id ? allCots.find(c => String(c.id) === String(id)) : null;
+  const isNew   = !cot;
+  const readOnly = !canEdit();
+  modalReadOnly  = readOnly;
+
+  // Determinar etapa inicial
+  currentEtapa = etapaNumero(cot?.etapa_actual || 'requisicion');
+
+  document.getElementById('modalTitle').textContent = isNew ? 'Nueva Cotizacion' : `Cotizacion ${cot.folio||''}${parseInt(cot.revision)>1 ? ' · Rev. '+cot.revision : ''}`;
+  document.getElementById('modalOverlay').style.display = 'flex';
+
+  const dis = readOnly ? 'disabled' : '';
+
+  // ── Migración datos legacy ──────────────────────────────────
+  let partidas = [];
+  if (cot?.partidas) {
+    try { partidas = typeof cot.partidas === 'string' ? JSON.parse(cot.partidas) : cot.partidas; } catch(e) {}
+  } else if (cot?.tipo) {
+    partidas = [{ tipo: cot.tipo||'Aire', cantidad: Number(cot.cantidad)||1,
+                  capacidad: cot.capacidad||'', descripcion: cot.descripcion||'', precio_unit: Number(cot.monto)||0 }];
+  }
+  if (!partidas.length) partidas = [{ tipo:'Aire', cantidad:1, capacidad:'', descripcion:'', precio_unit:0 }];
+  currentPartidas = partidas;
+
+  let conexiones = [];
+  if (cot?.conexiones) {
+    try { conexiones = typeof cot.conexiones === 'string' ? JSON.parse(cot.conexiones) : cot.conexiones; } catch(e) {}
+  }
+  if (!conexiones.length) conexiones = [];
+  currentConexiones = conexiones;
+
+  // ── Notas del PDF guardadas (si ya existían) ────────────────
+  if (cot) {
+    let notasComercialesGuardadas = [];
+    if (cot.notas_comerciales_pdf) {
+      try { notasComercialesGuardadas = JSON.parse(cot.notas_comerciales_pdf); } catch(e) {}
+    }
+    let notasTecnicasGuardadas = [];
+    if (cot.notas_tecnicas_pdf) {
+      try { notasTecnicasGuardadas = JSON.parse(cot.notas_tecnicas_pdf); } catch(e) {}
+    }
+    currentPdfNotas = {
+      notasComerciales: Array.isArray(notasComercialesGuardadas) && notasComercialesGuardadas.length ? notasComercialesGuardadas : null,
+      notasTecnicas: Array.isArray(notasTecnicasGuardadas) && notasTecnicasGuardadas.length ? notasTecnicasGuardadas : null,
+      incluye:  cot.pdf_incluye || '',
+      noIncluye: cot.pdf_no_incluye || '',
+      notasEsp: cot.notas_especiales_pdf || '',
+      revision: parseInt(cot.revision) || 0
+    };
+  } else {
+    currentPdfNotas = {};
+  }
+
+  // ── Template HTML del modal ─────────────────────────────────
+  const monedaMXN = cot?.moneda !== 'USD';
+
+  document.getElementById('modalBody').innerHTML = `
+
+  <!-- STEPPER -->
+  <div class="stepper" id="modalStepper">
+    <div class="step ${currentEtapa>=1?'active':''} ${currentEtapa>1?'done':''}" id="step1">
+      <div class="step-circle">1</div>
+      <div class="step-label">Requisición</div>
+    </div>
+    <div class="step-line ${currentEtapa>1?'done':''}"></div>
+    <div class="step ${currentEtapa>=2?'active':''} ${currentEtapa>2?'done':''}" id="step2">
+      <div class="step-circle">2</div>
+      <div class="step-label">Cotización</div>
+    </div>
+    <div class="step-line ${currentEtapa>2?'done':''}"></div>
+    <div class="step ${currentEtapa>=3?'active':''}" id="step3">
+      <div class="step-circle">3</div>
+      <div class="step-label">Seguimiento</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       ETAPA 1 — REQUISICION TECNICA
+  ══════════════════════════════════════════ -->
+  <div class="etapa-panel ${currentEtapa===1?'active':''}" id="etapa1">
+
+    <div class="section-title">Identificacion</div>
+    <div class="form-grid cols3">
+      <div class="form-group">
+        <label>Folio</label>
+        <input type="text" id="mFolio" value="${cot?.folio||''}" placeholder="Auto" ${dis} style="background:#f4f6fa"/>
+      </div>
+      <div class="form-group">
+        <label>Fecha de recepcion</label>
+        <input type="date" id="mFecha" value="${cot?.fecha||today()}" ${dis}/>
+      </div>
+      <div class="form-group">
+        <label>Responsable</label>
+        <input type="text" id="mResponsable" value="${cot?.responsable||currentUser?.area||''}" ${dis}/>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group" style="position:relative">
+        <label>Cliente</label>
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <input type="text" id="mClienteBuscar" placeholder="Buscar o seleccionar cliente…" autocomplete="off" ${dis}
+            style="flex:1;height:38px;padding:0 8px;border:1px solid var(--border);border-radius:6px;font-size:14px;box-sizing:border-box"/>
+          ${!readOnly ? `<button type="button" class="btn btn-primary" id="btnNuevoClienteDesdeCot" style="padding:0 14px;white-space:nowrap" onclick="openClienteModal(null, 'cot')">+ Nuevo</button>` : ''}
+        </div>
+        <div id="mClienteDropdown" class="cliente-combo-list" style="display:none"></div>
+        <input type="hidden" id="mClienteId" value="${cot?.cliente_id||''}"/>
+        <input type="hidden" id="mCliente" value="${cot?.cliente||''}"/>
+      </div>
+      <div class="form-group">
+        <label>Contacto</label>
+        <input type="text" id="mContacto" value="${cot?.contacto||''}" placeholder="Nombre del contacto" ${dis}/>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Correo / Tel contacto</label>
+        <input type="text" id="mContactoInfo" value="${cot?.contacto_info||''}" placeholder="correo@empresa.com / tel" ${dis}/>
+      </div>
+      <div class="form-group">
+        <label>Origen del lead</label>
+        <select id="mOrigen" ${dis}>
+          ${['Llamada entrante','Visita directa','Referido','Cotizador web','Redes sociales','Google','Licitacion','Otro'].map(o =>
+            `<option value="${o}" ${cot?.origen===o?'selected':''}>${o}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="section-title">Requerimientos tecnicos</div>
+
+    <div class="form-grid cols3">
+      <div class="form-group">
+        <label>Capacidad (litros)</label>
+        <input type="number" id="mCapacidadL" value="${cot?.capacidad_l||''}" min="1" placeholder="ej. 1000" ${dis}/>
+      </div>
+      <div class="form-group">
+        <label>Fluido del tanque</label>
+        <input type="text" id="mFluido" value="${cot?.fluido||''}" placeholder="Aire, Agua, Gas, Diesel…" list="listFluidos" ${dis}/>
+        <datalist id="listFluidos">
+          <option value="Aire"/><option value="Agua"/><option value="Gas LP"/><option value="Gas Natural"/>
+          <option value="Diesel"/><option value="Nitrogeno"/><option value="Vapor"/><option value="Otro"/>
+        </datalist>
+      </div>
+      <div class="form-group">
+        <label>Presion de trabajo (PSI)</label>
+        <input type="number" id="mPresion" value="${cot?.presion||''}" min="0" step="5" placeholder="ej. 150" ${dis}/>
+      </div>
+    </div>
+
+    <div class="form-grid cols3">
+      <div class="form-group">
+        <label>Material del tanque</label>
+        <select id="mMaterial" ${dis}>
+          ${['A-516 Gr.70','SA-36','A-36','Inox 304','Inox 316','Aluminio','Otro'].map(m =>
+            `<option value="${m}" ${cot?.material===m?'selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Orientacion</label>
+        <div class="radio-group" style="margin-top:8px">
+          <label><input type="radio" name="mOrientacion" value="Horizontal" ${(cot?.orientacion||'Horizontal')==='Horizontal'?'checked':''} ${dis}/> Horizontal</label>
+          <label><input type="radio" name="mOrientacion" value="Vertical" ${cot?.orientacion==='Vertical'?'checked':''} ${dis}/> Vertical</label>
+          <label><input type="radio" name="mOrientacion" value="Indefinido" ${cot?.orientacion==='Indefinido'?'checked':''} ${dis}/> Indefinido</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Norma aplicable</label>
+        <select id="mNorma" ${dis}>
+          ${['ASME VIII-1','UL-142','Sin norma','Por definir'].map(n =>
+            `<option value="${n}" ${cot?.norma===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="section-title">Conexiones requeridas</div>
+    <table class="conn-table" id="connTable">
+      <thead><tr>
+        <th style="width:130px">Tipo</th>
+        <th style="width:100px">Tamaño</th>
+        <th style="width:60px">Cant.</th>
+        <th>Descripcion / Ubicacion</th>
+        ${!readOnly ? '<th style="width:32px"></th>' : ''}
+      </tr></thead>
+      <tbody id="connTbody"></tbody>
+    </table>
+    ${!readOnly ? `<button type="button" class="btn-add-conn" id="btnAddConn">＋ Agregar conexion</button>` : ''}
+
+    <div class="section-title" style="margin-top:18px">Ingenieria del cliente</div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>¿El cliente cuenta con planos o ingenieria?</label>
+      <div class="radio-group" style="margin-top:8px">
+        <label><input type="radio" name="mTieneIng" value="Si" ${cot?.tiene_ing==='Si'?'checked':''} ${dis}/> Sí, cuenta con planos</label>
+        <label><input type="radio" name="mTieneIng" value="Parcial" ${cot?.tiene_ing==='Parcial'?'checked':''} ${dis}/> Parcial</label>
+        <label><input type="radio" name="mTieneIng" value="No" ${(!cot||cot?.tiene_ing==='No'||!cot?.tiene_ing)?'checked':''} ${dis}/> No, ALLTANSA diseña</label>
+      </div>
+    </div>
+    <div class="form-group full">
+      <label>Notas generales del proyecto</label>
+      <textarea id="mNotasReq" ${dis} placeholder="No. de plano, revision, condiciones especiales, restricciones, urgencia…">${[cot?.ref_ing,cot?.notas_req].filter(v=>v&&String(v).trim()).join('\n\n')}</textarea>
+    </div>
+
+  </div><!-- /etapa1 -->
+
+  <!-- ══════════════════════════════════════════
+       ETAPA 2 — COTIZACION (partidas + comercial)
+  ══════════════════════════════════════════ -->
+  <div class="etapa-panel ${currentEtapa===2?'active':''}" id="etapa2">
+
+    <div class="section-title">Partidas a cotizar</div>
+    <table class="partidas-table" id="partidasTable">
+      <thead><tr>
+        <th style="width:55px">Cant.</th>
+        <th>Descripcion</th>
+        <th style="width:105px">Precio unit.</th>
+        <th style="width:90px;text-align:right">Subtotal</th>
+        ${!readOnly ? '<th style="width:32px"></th>' : ''}
+      </tr></thead>
+      <tbody id="partidasTbody"></tbody>
+      <tfoot>
+        <tr class="partidas-total-row">
+          <td colspan="2" style="text-align:right;color:var(--muted);font-size:12px">TOTAL</td>
+          <td colspan="${!readOnly?3:2}" style="text-align:right;font-size:15px;color:var(--navy)" id="partidasTotal">$0.00</td>
+        </tr>
+      </tfoot>
+    </table>
+    ${!readOnly ? `<button type="button" class="btn-add-partida" id="btnAddPartida">＋ Agregar partida</button>` : ''}
+    <input type="hidden" id="mPartidasJson" value=""/>
+
+    <div class="section-title" style="margin-top:18px">Datos comerciales</div>
+    <div class="form-grid cols3">
+      <div class="form-group">
+        <label>Moneda</label>
+        <select id="mMoneda" ${dis} onchange="recalcTotal()">
+          <option value="MXN" ${monedaMXN?'selected':''}>MXN</option>
+          <option value="USD" ${!monedaMXN?'selected':''}>USD</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Monto total (antes de IVA)</label>
+        <input type="number" id="mMonto" value="${cot?.monto||''}" min="0" step="100" placeholder="Auto (suma partidas)" style="background:#f4f6fa" readonly/>
+      </div>
+      <div class="form-group" id="tipoCambioWrap" style="${monedaMXN?'opacity:.4;pointer-events:none':''}">
+        <label>Tipo de cambio (MXN/USD)</label>
+        <input type="number" id="mTipoCambio" value="${cot?.tipo_cambio||17}" min="1" step=".1" ${dis}/>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:18px">Documento</div>
+    ${!isNew ? `<button type="button" class="btn btn-primary" id="btnDescargarCotPDF" onclick="descargarCotizacionPDF()">📄 Descargar PDF de cotización</button>`
+             : `<div style="color:var(--muted);font-size:12px;font-style:italic">Guarda la cotización primero para poder descargar el PDF.</div>`}
+
+  </div><!-- /etapa2 -->
+
+  <!-- ══════════════════════════════════════════
+       ETAPA 3 — SEGUIMIENTO CRM
+  ══════════════════════════════════════════ -->
+  <div class="etapa-panel ${currentEtapa===3?'active':''}" id="etapa3">
+
+    <div class="section-title">Estado del pipeline</div>
+    <div class="form-grid cols3">
+      <div class="form-group">
+        <label>Estado</label>
+        <select id="mEstado" ${dis} onchange="onEstadoChange()">
+          ${ESTADOS.map(e => `<option value="${e}" ${(cot?.estado||'Nueva')===e?'selected':''}>${e}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ultimo contacto</label>
+        <input type="date" id="mUltimoContacto" value="${cot?.ultimo_contacto||''}" ${dis}/>
+      </div>
+      <div class="form-group">
+        <label>Proxima accion</label>
+        <input type="text" id="mProximaAccion" value="${cot?.proxima_accion||''}" placeholder="ej. Llamar el lunes" ${dis}/>
+      </div>
+    </div>
+
+    <div id="camposColocada" style="${(cot?.estado==='Colocada')?'':'display:none'}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>OC vinculada</label>
+          <input type="text" id="mOcVinculada" value="${cot?.oc_vinculada||''}" ${dis}/>
+        </div>
+        <div class="form-group">
+          <label>Fecha de cierre</label>
+          <input type="date" id="mFechaCierre" value="${cot?.fecha_cierre||''}" ${dis}/>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Folio de pedido (si ya se generó)</label>
+          <input type="text" id="mFolioPedido" value="${cot?.folio_pedido||''}" placeholder="ej. A-2607-05" ${dis}/>
+        </div>
+      </div>
+    </div>
+
+    <div id="camposPerdida" style="${(['Perdida','Cancelada','Sin respuesta'].includes(cot?.estado))?'':'display:none'}">
+      <div class="form-group" style="margin-top:8px">
+        <label>Motivo</label>
+        <select id="mMotivoPerdida" ${dis}>
+          ${MOTIVOS_PERDIDA.map(m => `<option value="${m}" ${cot?.motivo_perdida===m?'selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:18px">Bitacora de comentarios</div>
+    <div id="bitacoraWrap"></div>
+
+  </div><!-- /etapa3 -->
+  `;
+
+  // Inicializar componentes tras renderizar
+  setTimeout(() => {
+    populateClienteSelect(cot?.cliente_id || '', cot?.cliente || '');
+    initConexiones(readOnly);
+    initPartidas(readOnly);
+    renderStepper();
+    document.getElementById('btnCloseModal').onclick = closeModal;
+    bindNavButtons();
+
+    // Footer botones
+    const footerRight = document.querySelector('#modalFooter .nav-right');
+    if (footerRight) {
+      if (readOnly) {
+        footerRight.innerHTML = `<button class="btn btn-outline" onclick="closeModal()">Cerrar</button>`;
+      } else {
+        footerRight.innerHTML = `<button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="btnGuardar" onclick="saveCotizacion()">${!cot ? 'Crear cotizacion' : 'Guardar cambios'}</button>`;
+      }
+    }
+
+    const selMoneda = document.getElementById('mMoneda');
+    if (selMoneda) selMoneda.addEventListener('change', () => { toggleTipoCambio(); recalcTotal(); });
+
+    // Bitácora en etapa 4
+    const bwrap = document.getElementById('bitacoraWrap');
+    if (bwrap) bwrap.innerHTML = renderBitacoraHTML(cot?.comentarios||'', readOnly);
+  }, 0);
+}
+
+function etapaNumero(key) {
+  // 'estimacion' es una etapa vieja que ya no existe como pestaña propia —
+  // las cotizaciones que se quedaron ahí abren directo en la nueva etapa
+  // fusionada de Cotización (2).
+  const map = { requisicion:1, estimacion:2, cotizacion:2, seguimiento:3 };
+  return map[key] || 1;
+}
+
+function etapaClave(num) {
+  return ETAPA_KEYS[num-1] || 'requisicion';
+}
+
+function renderStepper() {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('step' + i);
+    if (!el) continue;
+    el.classList.remove('active','done');
+    if (i < currentEtapa)      el.classList.add('done');
+    else if (i === currentEtapa) el.classList.add('active');
+  }
+  // Actualizar líneas
+  document.querySelectorAll('.step-line').forEach((line, idx) => {
+    line.classList.toggle('done', idx + 1 < currentEtapa);
+  });
+  // Mostrar panel activo
+  for (let i = 1; i <= 3; i++) {
+    const panel = document.getElementById('etapa' + i);
+    if (panel) panel.classList.toggle('active', i === currentEtapa);
+  }
+  // Actualizar botones nav
+  updateNavButtons();
+}
+
+function bindNavButtons() {
+  const btnPrev = document.getElementById('btnNavPrev');
+  const btnNext = document.getElementById('btnNavNext');
+  if (btnPrev) btnPrev.onclick = () => { if (currentEtapa > 1) { currentEtapa--; renderStepper(); } };
+  if (btnNext) btnNext.onclick = () => { if (currentEtapa < 3) { currentEtapa++; renderStepper(); } };
+}
+
+function updateNavButtons() {
+  const btnPrev = document.getElementById('btnNavPrev');
+  const btnNext = document.getElementById('btnNavNext');
+  if (btnPrev) btnPrev.disabled = currentEtapa === 1;
+  if (btnNext) btnNext.disabled = currentEtapa === 3;
+}
+
+function onEstadoChange() {
+  const v = document.getElementById('mEstado')?.value;
+  if (!v) return;
+  const colocada = document.getElementById('camposColocada');
+  const perdida  = document.getElementById('camposPerdida');
+  if (colocada) colocada.style.display = v === 'Colocada' ? '' : 'none';
+  if (perdida)  perdida.style.display  = ['Perdida','Cancelada','Sin respuesta'].includes(v) ? '' : 'none';
+}
+
+function toggleTipoCambio() {
+  const moneda = document.getElementById('mMoneda')?.value;
+  const wrap = document.getElementById('tipoCambioWrap');
+  if (wrap) { wrap.style.opacity = moneda === 'USD' ? '1' : '.4'; wrap.style.pointerEvents = moneda === 'USD' ? '' : 'none'; }
+}
+
+/* ── Conexiones ───────────────────────────────────────────── */
+function initConexiones(readOnly) {
+  renderConexiones(readOnly);
+  const btn = document.getElementById('btnAddConn');
+  if (btn) btn.onclick = () => {
+    currentConexiones.push({ tipo:'Cople', tamanio:'', cantidad:1, descripcion:'' });
+    renderConexiones(readOnly);
+  };
+}
+
+function renderConexiones(readOnly) {
+  const tbody = document.getElementById('connTbody');
+  if (!tbody) return;
+  if (!currentConexiones.length) {
+    tbody.innerHTML = `<tr><td colspan="${readOnly?4:5}" style="text-align:center;padding:12px;color:var(--muted);font-style:italic;font-size:12px">Sin conexiones especificadas</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = currentConexiones.map((cn, i) => `
+    <tr data-idx="${i}">
+      <td>
+        <select ${readOnly?'disabled':''} onchange="updateConn(${i},'tipo',this.value)">
+          ${['Cople','Niple','Boquilla','EPH','Brida','Manometro','Valvula','Otro'].map(t =>
+            `<option value="${t}" ${cn.tipo===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="text" value="${escHtml(cn.tamanio||'')}" placeholder='1"' ${readOnly?'disabled':''}
+        oninput="updateConn(${i},'tamanio',this.value)" style="width:80px"/></td>
+      <td><input type="number" value="${cn.cantidad||1}" min="1" ${readOnly?'disabled':''}
+        onchange="updateConn(${i},'cantidad',this.value)" style="width:50px"/></td>
+      <td><input type="text" value="${escHtml(cn.descripcion||'')}" placeholder="Entrada superior, drene…" ${readOnly?'disabled':''}
+        oninput="updateConn(${i},'descripcion',this.value)"/></td>
+      ${!readOnly ? `<td><button class="btn-del-conn" onclick="deleteConn(${i})">✕</button></td>` : ''}
+    </tr>`).join('');
+}
+
+function updateConn(idx, field, value) {
+  if (!currentConexiones[idx]) return;
+  if (field === 'cantidad') value = Number(value) || 1;
+  currentConexiones[idx][field] = value;
+}
+
+function deleteConn(idx) {
+  currentConexiones.splice(idx, 1);
+  renderConexiones(modalReadOnly);
+}
+
+/* ── Partidas ─────────────────────────────────────────────── */
+function initPartidas(readOnly) {
+  renderPartidas(readOnly);
+  const btn = document.getElementById('btnAddPartida');
+  if (btn) btn.onclick = () => {
+    currentPartidas.push({ tipo:'', cantidad:1, capacidad:'', descripcion:'', precio_unit:0 });
+    renderPartidas(readOnly);
+  };
+}
+
+function renderPartidas(readOnly) {
+  const tbody = document.getElementById('partidasTbody');
+  if (!tbody) return;
+  tbody.innerHTML = currentPartidas.map((p, i) => `
+    <tr data-idx="${i}">
+      <td><input type="number" min="1" value="${p.cantidad||1}" ${readOnly?'disabled':''}
+        onchange="updatePartida(${i},'cantidad',this.value)" style="width:48px"/></td>
+      <td><textarea placeholder="Descripcion" ${readOnly?'disabled':''}
+        oninput="updatePartida(${i},'descripcion',this.value)"
+        style="width:100%;min-height:100px;resize:vertical;font-family:inherit;font-size:13px;padding:6px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box">${escHtml(p.descripcion||'')}</textarea></td>
+      <td><input type="number" min="0" step="100" value="${p.precio_unit||0}" ${readOnly?'disabled':''}
+        onchange="updatePartida(${i},'precio_unit',this.value)" style="width:95px"/></td>
+      <td class="subtotal-cell">${fmtMonto((p.cantidad||1)*(p.precio_unit||0), currentMoneda())}</td>
+      ${!readOnly ? `<td><button class="btn-del-partida" onclick="deletePartida(${i})">✕</button></td>` : ''}
+    </tr>`).join('');
+  recalcTotal();
+}
+
+function updatePartida(idx, field, value) {
+  if (!currentPartidas[idx]) return;
+  if (field === 'cantidad' || field === 'precio_unit') value = Number(value) || 0;
+  currentPartidas[idx][field] = value;
+  const row = document.querySelector(`#partidasTbody tr[data-idx="${idx}"]`);
+  if (row) {
+    const p = currentPartidas[idx];
+    const cell = row.querySelector('.subtotal-cell');
+    if (cell) cell.textContent = fmtMonto((p.cantidad||1)*(p.precio_unit||0), currentMoneda());
+  }
+  recalcTotal();
+}
+
+function deletePartida(idx) {
+  if (currentPartidas.length <= 1) { showToast('Debe haber al menos una partida','error'); return; }
+  currentPartidas.splice(idx, 1);
+  renderPartidas(modalReadOnly);
+}
+
+function recalcTotal() {
+  const moneda = currentMoneda();
+  const total  = currentPartidas.reduce((s, p) => s + (p.cantidad||1)*(p.precio_unit||0), 0);
+  const el     = document.getElementById('partidasTotal');
+  if (el) el.textContent = fmtMonto(total, moneda);
+  const mMonto = document.getElementById('mMonto');
+  if (mMonto) mMonto.value = total;
+}
+
+function currentMoneda() {
+  return document.getElementById('mMoneda')?.value || 'MXN';
+}
+
+
+/* ═══════════════════════════════════════════
+   BITACORA
+═══════════════════════════════════════════ */
+function parseBitacora(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch(e) {}
+  // fallback: texto plano separado por ||
+  return raw.split('||').filter(Boolean).map(s => {
+    const parts = s.split('|');
+    return { fecha: parts[0]||'', usuario: parts[1]||'', texto: parts[2]||s };
+  });
+}
+
+function serializeBitacora(arr) {
+  return JSON.stringify(arr);
+}
+
+async function addComentario() {
+  const txt = document.getElementById('nuevoComentario').value.trim();
+  if (!txt) return;
+
+  const cot = editingId ? allCots.find(c => String(c.id) === String(editingId)) : null;
+  const comentarios = cot ? parseBitacora(cot.comentarios) : [];
+  comentarios.push({ fecha: today(), usuario: currentUser.area, texto: txt });
+
+  if (cot) {
+    // Guardar solo el comentario
+    setLoading(true);
+    try {
+      const r = await apiCotSave({ id: cot.id, comentarios: serializeBitacora(comentarios) });
+      setLoading(false);
+      if (r.ok) {
+        cot.comentarios = serializeBitacora(comentarios);
+        document.getElementById('nuevoComentario').value = '';
+        // Re-render bitacora
+        const listEl = document.getElementById('bitacoraList');
+        listEl.innerHTML = comentarios.map(c => `
+          <div class="bitacora-item">
+            <div class="bitacora-meta">${fmtDate(c.fecha)} &nbsp;·&nbsp; ${c.usuario}</div>
+            <div class="bitacora-text">${escHtml(c.texto)}</div>
+          </div>`).join('');
+        listEl.scrollTop = listEl.scrollHeight;
+        showToast('Comentario guardado', 'success');
+      } else {
+        showToast('Error al guardar comentario', 'error');
+      }
+    } catch(e) {
+      setLoading(false);
+      showToast('Error de conexion', 'error');
+    }
+  } else {
+    // Es nueva, lo guardo pendiente en campo oculto
+    document.getElementById('nuevoComentario').dataset.pending = serializeBitacora(comentarios);
+    const listEl = document.getElementById('bitacoraList');
+    listEl.innerHTML = comentarios.map(c => `
+      <div class="bitacora-item">
+        <div class="bitacora-meta">${fmtDate(c.fecha)} &nbsp;·&nbsp; ${c.usuario}</div>
+        <div class="bitacora-text">${escHtml(c.texto)}</div>
+      </div>`).join('');
+    document.getElementById('nuevoComentario').value = '';
+  }
+}
+
+
+function renderBitacoraHTML(raw, readOnly) {
+  const comentarios = parseBitacora(raw || '');
+  const listItems = comentarios.map(entry => `
+    <div class="bitacora-item">
+      <div class="bitacora-meta">${fmtDate(entry.fecha)} &nbsp;·&nbsp; ${escHtml(entry.usuario||'')}</div>
+      <div class="bitacora-text">${escHtml(entry.texto||'')}</div>
+    </div>`).join('');
+
+  return `
+    <div class="bitacora-wrap">
+      <div class="bitacora-list" id="bitacoraList" style="max-height:160px;overflow-y:auto;margin-bottom:10px">
+        ${listItems || '<div style="color:var(--muted);font-style:italic;font-size:12px;padding:8px 0">Sin comentarios aún</div>'}
+      </div>
+      ${!readOnly ? `
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <textarea id="nuevoComentario" rows="2" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical" placeholder="Agregar comentario…"></textarea>
+          <button class="btn btn-outline" style="white-space:nowrap;margin-top:2px" onclick="addComentario()">+ Agregar</button>
+        </div>` : ''}
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════
+   SAVE
+═══════════════════════════════════════════ */
+// Núcleo de guardado — construye el objeto "cot" desde el formulario y lo
+// manda al API. No toca UI (botón/toast/cierre de modal) — eso lo maneja
+// cada llamador. Se usa tanto desde el botón "Guardar" como, automáticamente,
+// justo antes de generar el PDF (ver confirmarGenerarPdfConNotas), para que
+// el PDF nunca quede desalineado de lo que está guardado en el Board.
+async function guardarCotizacionCore() {
+  const estado  = document.getElementById('mEstado')?.value || 'Nueva';
+  const clienteId = document.getElementById('mClienteId')?.value || '';
+  const cliente = document.getElementById('mCliente')?.value?.trim() || '';
+  const fecha   = document.getElementById('mFecha')?.value || today();
+
+  if (!cliente) { showToast('El cliente es requerido', 'error'); return { ok:false, error:'El cliente es requerido' }; }
+
+  // Determinar etapa_actual basada en datos completados
+  const monto       = Number(document.getElementById('mMonto')?.value) || 0;
+  const fechaEnvio  = document.getElementById('mFechaEnvio')?.value || '';
+  const estadosSeg  = ['En negociación','Colocada','Cancelada','Perdida','Sin respuesta'];
+  let etapa_actual  = 'requisicion';
+  if (monto > 0 || fechaEnvio) etapa_actual = estadosSeg.includes(estado) ? 'seguimiento' : 'cotizacion';
+  if (estadosSeg.includes(estado)) etapa_actual = 'seguimiento';
+
+  // Bitácora
+  const txtPend = document.getElementById('nuevoComentario');
+  let comentarios = '';
+  if (txtPend) {
+    const txt = txtPend.value.trim();
+    if (txt) {
+      const arr = parseBitacora(txtPend.dataset.pending || '');
+      arr.push({ fecha: today(), usuario: currentUser.area, texto: txt });
+      comentarios = serializeBitacora(arr);
+    } else {
+      comentarios = txtPend.dataset.pending || '';
+    }
+  }
+  if (!comentarios && editingId) {
+    comentarios = allCots.find(c => String(c.id) === String(editingId))?.comentarios || '';
+  }
+
+  // Orientacion
+  const orientRadio = document.querySelector('input[name="mOrientacion"]:checked');
+  const ingRadio    = document.querySelector('input[name="mTieneIng"]:checked');
+
+  const cot = {
+    id:              editingId || '',
+    folio:           document.getElementById('mFolio')?.value?.trim() || '',
+    cliente_id:      clienteId,
+    fecha,
+    cliente,
+    contacto:        document.getElementById('mContacto')?.value?.trim()     || '',
+    contacto_info:   document.getElementById('mContactoInfo')?.value?.trim() || '',
+    origen:          document.getElementById('mOrigen')?.value               || '',
+    responsable:     document.getElementById('mResponsable')?.value?.trim()  || '',
+
+    // Requerimientos técnicos
+    capacidad_l:     document.getElementById('mCapacidadL')?.value           || '',
+    fluido:          document.getElementById('mFluido')?.value?.trim()        || '',
+    presion:         document.getElementById('mPresion')?.value               || '',
+    material:        document.getElementById('mMaterial')?.value              || '',
+    orientacion:     orientRadio?.value                                        || 'Horizontal',
+    norma:           document.getElementById('mNorma')?.value                 || '',
+    conexiones:      JSON.stringify(currentConexiones),
+    tiene_ing:       ingRadio?.value                                           || 'No',
+    notas_req:       document.getElementById('mNotasReq')?.value?.trim()      || '',
+
+    // Estimación
+    ing_responsable: document.getElementById('mIngResponsable')?.value?.trim() || '',
+    fecha_comp:      document.getElementById('mFechaComp')?.value              || '',
+    estatus_est:     document.getElementById('mEstatusEst')?.value             || 'Pendiente',
+    notas_est:       document.getElementById('mNotasEst')?.value?.trim()       || '',
+
+    // Partidas
+    partidas:        JSON.stringify(currentPartidas),
+    tipo:            currentPartidas[0]?.tipo     || '',
+    cantidad:        currentPartidas[0]?.cantidad || 1,
+    capacidad:       currentPartidas[0]?.capacidad || '',
+    descripcion:     currentPartidas.map((p,i) => `${i+1}. ${p.cantidad}x ${p.tipo}${p.capacidad?' '+p.capacidad:''}`).join(' | '),
+
+    // Comercial
+    moneda:          document.getElementById('mMoneda')?.value                || 'MXN',
+    monto,
+    tipo_cambio:     document.getElementById('mTipoCambio')?.value            || 17,
+    cond_pago:       document.getElementById('mCondPago')?.value?.trim()      || '',
+    vigencia:        document.getElementById('mVigencia')?.value              || '',
+    fecha_envio:     fechaEnvio,
+    notas:           document.getElementById('mNotas')?.value?.trim()         || '',
+
+    // Notas del PDF (Incluye/No incluye/comerciales/especiales) — se leen de
+    // currentPdfNotas, que ya trae lo guardado previamente (openModal) o lo
+    // recién editado (confirmarGenerarPdfConNotas). Si nunca se tocó el
+    // editor en esta sesión, esto reescribe el mismo valor que ya había —
+    // no se pierde nada.
+    pdf_incluye:            currentPdfNotas.incluye  || '',
+    pdf_no_incluye:         currentPdfNotas.noIncluye || '',
+    notas_comerciales_pdf:  JSON.stringify(currentPdfNotas.notasComerciales || []),
+    notas_tecnicas_pdf:     JSON.stringify(currentPdfNotas.notasTecnicas || []),
+    notas_especiales_pdf:   currentPdfNotas.notasEsp || '',
+    revision:               currentPdfNotas.revision || 0,
+    // Campo transitorio — no es una columna del Sheet, solo viaja para que el
+    // backend complete el detalle del log de este guardado en particular.
+    _diff_pdf_notas:        _pendingDiffPdfNotas || '',
+
+    // Seguimiento
+    estado,
+    ultimo_contacto: document.getElementById('mUltimoContacto')?.value       || '',
+    proxima_accion:  document.getElementById('mProximaAccion')?.value?.trim() || '',
+    comentarios,
+
+    // Meta
+    etapa_actual,
+    modificado_por:  currentUser.area,
+    modificado_en:   today(),
+  };
+
+  if (estado === 'Colocada') {
+    cot.oc_vinculada = document.getElementById('mOcVinculada')?.value?.trim() || '';
+    cot.fecha_cierre = document.getElementById('mFechaCierre')?.value || '';
+    cot.folio_pedido = document.getElementById('mFolioPedido')?.value?.trim() || '';
+  }
+  if (['Perdida','Cancelada','Sin respuesta'].includes(estado)) {
+    cot.motivo_perdida = document.getElementById('mMotivoPerdida')?.value || '';
+  }
+
+  try {
+    const fd = new FormData();
+    fd.append('action', 'saveCotizacion');
+    fd.append('data', JSON.stringify(cot));
+    fd.append('_tk', API_TOKEN);
+    const res  = await fetch(API, { method:'POST', body: fd });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    if (!editingId && json.id) editingId = json.id; // por si el guardado silencioso crea el registro
+    return { ok:true, folio: json.folio || cot.folio, id: json.id || editingId };
+  } catch(err) {
+    return { ok:false, error: err.message };
+  }
+}
+
+async function saveCotizacion() {
+  const btn = document.getElementById('btnGuardar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+  const r = await guardarCotizacionCore();
+  if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+  if (!r.ok) { if (r.error) showToast('Error: ' + r.error, 'error'); return; }
+  showToast('Cotizacion guardada (' + (r.folio||'') + ')', 'success');
+  closeModal();
+  await loadData();
+}
+
+/* ═══════════════════════════════════════════
+   UTIL
+═══════════════════════════════════════════ */
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════
+   ESTADO GLOBAL — CLIENTES Y LISTA DE PRECIOS
+═══════════════════════════════════════════ */
+let allClientes = [];
+let editingClienteId = null;
+let clienteModalTarget = null; // null | 'cot' | 'express'
+
+/* ═══════════════════════════════════════════
+   TABS
+═══════════════════════════════════════════ */
+function switchTab(tab) {
+  ['cotizaciones','clientes','precios'].forEach(t => {
+    const pane = document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1));
+    const btn  = document.querySelector(`[onclick="switchTab('${t}')"]`);
+    if (!pane || !btn) return;
+    pane.classList.toggle('active', t === tab);
+    btn.classList.toggle('active', t === tab);
+  });
+  if (tab === 'clientes' && allClientes.length === 0)  loadClientes();
+  if (tab === 'precios'  && listaPrecios.length === 0) loadPrecios();
+}
+
+function updateTabBadges() {
+  const activas = allCots.filter(c => ['Nueva','En estimación','Estimación OK','Enviada','En negociación'].includes(c.estado)).length;
+  const badgeCot     = document.getElementById('tabBadgeCot');
+  const badgeCli     = document.getElementById('tabBadgeCli');
+  const badgePrecios = document.getElementById('tabBadgePrecios');
+  if (badgeCot)     badgeCot.textContent = activas;
+  if (badgeCli)     badgeCli.textContent = allClientes.length;
+  if (badgePrecios) badgePrecios.textContent = listaPrecios.length;
+}
+
+/* ═══════════════════════════════════════════
+   CLIENTES — API
+═══════════════════════════════════════════ */
+async function loadClientes() {
+  setLoading(true);
+  try {
+    const r = await fetch(`${API}?action=getClientes&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    allClientes = d.clientes || [];
+    setLoading(false);
+    // Resetear filtro para mostrar todos al cargar
+    const filtroEl = document.getElementById('filtroEstatus');
+    if (filtroEl) filtroEl.value = '';
+    renderClientes();
+    updateTabBadges();
+  } catch(e) {
+    setLoading(false);
+    showToast('Error al cargar clientes', 'error');
+  }
+}
+
+async function apiClienteSave(cliente) {
+  const body = new URLSearchParams();
+  body.append('action', 'saveCliente');
+  body.append('data', JSON.stringify(cliente));
+  body.append('_tk', API_TOKEN);
+  const r = await fetch(API, { method: 'POST', body });
+  const tx = await r.text();
+  try { return JSON.parse(tx); } catch(e) { return { error: tx }; }
+}
+
+/* ═══════════════════════════════════════════
+   CLIENTES — RENDER
+═══════════════════════════════════════════ */
+const ESTATUS_BADGE = {
+  'Prospecto':       'badge badge-nueva',
+  'Cliente activo':  'badge badge-ganada',
+  'Cliente inactivo':'badge badge-cancelada',
+  'Suspendido':      'badge badge-perdida',
+};
+
+function renderClientes() {
+  const search  = (document.getElementById('searchCliente')?.value || '').toLowerCase();
+  const fEstatus = document.getElementById('filtroEstatus')?.value || '';
+
+  let list = allClientes.slice();
+  if (search)   list = list.filter(c => (c.empresa||'').toLowerCase().includes(search) || (c.contacto||'').toLowerCase().includes(search) || (c.ciudad||'').toLowerCase().includes(search));
+  if (fEstatus) list = list.filter(c => c.estatus === fEstatus);
+  list.sort((a,b) => (a.empresa||'').localeCompare(b.empresa||''));
+
+  // Resumen
+  const sumEl = document.getElementById('clienteSummary');
+  if (sumEl) {
+    const counts = ['Prospecto','Cliente activo','Cliente inactivo','Suspendido'].map(e => ({
+      label: e, val: allClientes.filter(c => c.estatus === e).length
+    }));
+    sumEl.innerHTML = counts.filter(c=>c.val>0).map(c =>
+      `<div class="summary-card"><div class="sv">${c.val}</div><div class="sl">${c.label}</div></div>`
+    ).join('');
+  }
+
+  const tbody = document.getElementById('clientesTbody');
+  if (!tbody) return;
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);font-style:italic">Sin clientes registrados</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(c => {
+    const cots    = allCots.filter(q => q.cliente_id === c.id);
+    const ganadas = cots.filter(q => q.estado === 'Colocada');
+    const valorMXN = ganadas.reduce((a, q) => a + (q.moneda === 'USD' ? (parseFloat(q.monto)||0)*(parseFloat(q.tipo_cambio)||17) : (parseFloat(q.monto)||0)), 0);
+    const badgeCls = ESTATUS_BADGE[c.estatus] || 'badge badge-cancelada';
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 12px;font-weight:700;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(c.empresa||'')}">${escHtml(c.empresa||'–')}</td>
+      <td style="padding:9px 12px;color:var(--muted)">${escHtml(c.contacto||'–')}</td>
+      <td style="padding:9px 12px;white-space:nowrap;color:var(--muted)">${escHtml(c.ciudad||'–')}</td>
+      <td style="padding:9px 12px"><span class="${badgeCls}">${c.estatus||'–'}</span></td>
+      <td style="padding:9px 12px;font-size:12px;color:var(--muted)">${c.origen||'–'}</td>
+      <td style="padding:9px 12px;text-align:center;font-weight:700">${cots.length}</td>
+      <td style="padding:9px 12px;text-align:center;font-weight:700;color:var(--green)">${ganadas.length}</td>
+      <td style="padding:9px 12px;text-align:right;font-weight:700">${valorMXN > 0 ? fmtK(valorMXN) : '–'}</td>
+      <td style="padding:9px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px" title="${escHtml(c.notas||'')}">${c.notas ? escHtml(c.notas.slice(0,60)) + (c.notas.length>60?'…':'') : '–'}</td>
+      <td style="padding:9px 12px"><button class="btn-icon" onclick="openClienteModal('${c.id}')">✏️</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function fmtK(n) {
+  return n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : n >= 1000 ? `$${Math.round(n/1000)}K` : `$${Math.round(n)}`;
+}
+
+/* ═══════════════════════════════════════════
+   CLIENTES — MODAL
+═══════════════════════════════════════════ */
+function openClienteModal(id, target) {
+  clienteModalTarget = target || null;
+  editingClienteId = id;
+  const cl = id ? allClientes.find(c => String(c.id) === String(id)) : null;
+  document.getElementById('clienteModalTitle').textContent = cl ? `Editar: ${cl.empresa}` : 'Nuevo Cliente';
+  document.getElementById('cEmpresa').value    = cl?.empresa  || '';
+  document.getElementById('cContacto').value   = cl?.contacto || '';
+  document.getElementById('cCiudad').value     = cl?.ciudad   || '';
+  document.getElementById('cEmail').value      = cl?.email    || '';
+  document.getElementById('cTelefono').value   = cl?.telefono || '';
+  document.getElementById('cEstatus').value    = cl?.estatus  || 'Prospecto';
+  document.getElementById('cOrigen').value     = cl?.origen   || 'Llamada entrante';
+  document.getElementById('cNotas').value      = cl?.notas    || '';
+  document.getElementById('clienteModalOverlay').style.display = 'flex';
+  setTimeout(() => {
+    document.getElementById('btnCloseClienteModal').onclick  = closeClienteModal;
+    document.getElementById('btnCancelClienteModal').onclick = closeClienteModal;
+    document.getElementById('btnGuardarCliente').onclick     = saveClienteModal;
+  }, 0);
+}
+
+function closeClienteModal() {
+  document.getElementById('clienteModalOverlay').style.display = 'none';
+  editingClienteId = null;
+}
+
+async function saveClienteModal() {
+  const empresa = document.getElementById('cEmpresa').value.trim();
+  if (!empresa) { showToast('La empresa es requerida', 'error'); return; }
+  const cl = {
+    id:       editingClienteId || '',
+    empresa,
+    contacto: document.getElementById('cContacto').value.trim(),
+    ciudad:   document.getElementById('cCiudad').value.trim(),
+    email:    document.getElementById('cEmail').value.trim(),
+    telefono: document.getElementById('cTelefono').value.trim(),
+    estatus:  document.getElementById('cEstatus').value,
+    origen:   document.getElementById('cOrigen').value,
+    notas:    document.getElementById('cNotas').value.trim(),
+    creado:   today(),
+    modificado_por: currentUser?.area || '',
+  };
+  const wasNew = !editingClienteId;
+  const target = clienteModalTarget;
+  setLoading(true);
+  try {
+    const r = await apiClienteSave(cl);
+    setLoading(false);
+    if (r.ok) {
+      // Actualizar arreglo local sin recargar todo desde el servidor
+      if (wasNew) {
+        cl.id = r.id || cl.id;
+        allClientes.push(cl);
+      } else {
+        const idx = allClientes.findIndex(c => String(c.id) === String(editingClienteId));
+        if (idx > -1) allClientes[idx] = Object.assign({}, allClientes[idx], cl);
+      }
+      showToast(wasNew ? 'Cliente creado' : 'Cliente actualizado', 'success');
+      renderClientes();
+      updateTabBadges();
+      closeClienteModal();
+      clienteModalTarget = null;
+      // Si el alta vino desde un modal de cotización, seleccionarlo ahí mismo
+      if (wasNew && cl.id && target === 'cot' && document.getElementById('mClienteId')) {
+        populateClienteSelect(cl.id, '');
+        showToast('Cliente creado y seleccionado en la cotizacion', 'success');
+      } else if (wasNew && cl.id && target === 'express' && document.getElementById('exClienteId')) {
+        populateClienteSelectExpress(cl.id);
+        showToast('Cliente creado y seleccionado', 'success');
+      }
+    } else {
+      showToast('Error: ' + (r.error || 'desconocido'), 'error');
+    }
+  } catch(e) {
+    setLoading(false);
+    showToast('Error de conexion', 'error');
+  }
+}
+
+/* ═══════════════════════════════════════════
+   LISTA DE PRECIOS — solo consulta (catálogo de modelos)
+   Misma fuente que el Board de Admin (ListaPrecios_Aire / _Diesel).
+   No hay alta/edición aquí — eso se hace directo en el Sheet.
+═══════════════════════════════════════════ */
+let listaPrecios = [];
+let preciosCat   = 'Aire';
+let precioVista  = 'cliente';
+const PRECIOS_CORE_KEYS = ['categoria','modelo','capacidad','precio','precio_distribuidor','precio_cliente'];
+
+async function loadPrecios() {
+  const bodyEl = document.getElementById('preciosBodyCot');
+  if (bodyEl) bodyEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-style:italic">Cargando...</div>';
+  try {
+    const r = await fetch(`${API}?action=getPrecios&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    listaPrecios = d.items || [];
+    updateTabBadges();
+    if (!listaPrecios.length) {
+      document.getElementById('preciosCatTabsCot').innerHTML = '';
+      bodyEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-style:italic">No hay modelos capturados todavía. Agrega filas en ListaPrecios_Aire / ListaPrecios_Diesel del Sheet.</div>';
+      return;
+    }
+    const cats = [...new Set(listaPrecios.map(p => p.categoria))];
+    if (!cats.includes(preciosCat)) preciosCat = cats[0];
+    renderPreciosCatTabsCot();
+    renderPreciosBodyCot();
+  } catch(e) {
+    if (bodyEl) bodyEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--red)">Error al cargar: ' + e.message + '</div>';
+  }
+}
+
+function getPreciosCatItems(cat) { return listaPrecios.filter(p => p.categoria === cat); }
+
+function getPreciosSpecCols(items) {
+  // Columnas técnicas = todo lo que no sea campo "core", en el orden en que
+  // aparecen en el Sheet — cualquier columna nueva que agregues se muestra sola.
+  let cols = [];
+  items.forEach(it => Object.keys(it).forEach(k => { if (!PRECIOS_CORE_KEYS.includes(k) && !cols.includes(k)) cols.push(k); }));
+  return cols;
+}
+function esColUtilidad(k) { return /utilidad|margen/i.test(k); }
+function fmtPrecioRef(v) { return (v == null || v === '') ? null : '$' + parseFloat(v).toLocaleString('es-MX', { minimumFractionDigits: 2 }); }
+
+function renderPreciosCatTabsCot() {
+  const cats = [...new Set(listaPrecios.map(p => p.categoria))];
+  document.getElementById('preciosCatTabsCot').innerHTML = cats.map(c => {
+    const active = preciosCat === c;
+    return `<button type="button" class="btn" style="padding:6px 14px;font-size:12px;${active?'background:var(--navy);color:#fff':'background:#fff;color:var(--navy);border:1px solid var(--navy)'}" onclick="setPrecioCatCot('${c}')">${c}</button>`;
+  }).join('');
+}
+function setPrecioCatCot(cat) { preciosCat = cat; renderPreciosCatTabsCot(); renderPreciosBodyCot(); }
+function setPrecioVistaCot(v)  { precioVista = v; renderPreciosBodyCot(); }
+
+function renderPreciosBodyCot() {
+  const items = getPreciosCatItems(preciosCat);
+  const wrap  = document.getElementById('preciosVistaWrapCot');
+  const body  = document.getElementById('preciosBodyCot');
+  if (!items.length) {
+    if (wrap) wrap.style.display = 'none';
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-style:italic">Sin modelos capturados en esta categoría.</div>';
+    return;
+  }
+  const tieneDoble = items.some(p => p.precio_cliente != null && p.precio_cliente !== '');
+  if (wrap) wrap.style.display = tieneDoble ? 'flex' : 'none';
+  const distBtn = document.getElementById('btnVistaDistCot'), cliBtn = document.getElementById('btnVistaCliCot');
+  const activeStyle   = 'background:#C0391B;color:#fff;border-color:#C0391B;font-weight:700;font-size:12px;padding:6px 10px;border-radius:6px;border:1px solid #C0391B';
+  const inactiveStyle = 'background:#fff;color:#C0391B;border:1px solid #C0391B;font-weight:600;font-size:12px;padding:6px 10px;border-radius:6px';
+  if (distBtn) distBtn.setAttribute('style', precioVista === 'distribuidor' ? activeStyle : inactiveStyle);
+  if (cliBtn)  cliBtn.setAttribute('style',  precioVista === 'cliente'      ? activeStyle : inactiveStyle);
+  const specCols  = getPreciosSpecCols(items).filter(c => !esColUtilidad(c));
+  const precioKey = tieneDoble ? (precioVista === 'distribuidor' ? 'precio_distribuidor' : 'precio_cliente') : 'precio';
+
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html += '<thead><tr style="background:var(--navy);color:#fff">';
+  html += '<th style="padding:8px 10px;text-align:left;white-space:nowrap">Modelo</th>';
+  html += '<th style="padding:8px 10px;text-align:right;white-space:nowrap">Precio' + (tieneDoble ? ' (' + (precioVista === 'distribuidor' ? 'Distribuidor' : 'Cliente final') + ')' : '') + '</th>';
+  html += '<th style="padding:8px 10px;text-align:right;white-space:nowrap">Capacidad</th>';
+  specCols.forEach(c => { html += '<th style="padding:8px 10px;text-align:center;white-space:nowrap">' + c + '</th>'; });
+  html += '</tr></thead><tbody>';
+  items.forEach((it, i) => {
+    const bg = i % 2 ? '#F8F9FC' : '#fff';
+    const pv = fmtPrecioRef(it[precioKey]);
+    html += '<tr style="background:' + bg + '">';
+    html += '<td style="padding:8px 10px;font-weight:700;color:var(--navy);white-space:nowrap">' + (it.modelo || '—') + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;font-weight:700;color:#137333;white-space:nowrap">' + (pv || '—') + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;white-space:nowrap">' + (it.capacidad != null && it.capacidad !== '' ? it.capacidad + ' L' : '—') + '</td>';
+    specCols.forEach(c => {
+      html += '<td style="padding:8px 10px;text-align:center;white-space:nowrap">' + (it[c] != null && it[c] !== '' ? it[c] : '—') + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+/* ═══════════════════════════════════════════
+   PDF DE COTIZACIÓN — formato ALLTANSA
+═══════════════════════════════════════════ */
+const MATERIAL_POR_CATEGORIA = { 'Aire': 'SA-36', 'Diesel': 'A-36' };
+const NORMA_POR_CATEGORIA    = { 'Aire': 'ASME SECCIÓN VIII DIV I', 'Diesel': 'UL-142' };
+
+function buscarItemPrecioPorModelo(modelo, categoria) {
+  if (!modelo) return null;
+  return listaPrecios.find(p => p.modelo === modelo && p.categoria === categoria) || null;
+}
+
+/* ═══════════════════════════════════════════
+   EDITOR DE NOTAS COMERCIALES — previo a generar el PDF
+═══════════════════════════════════════════ */
+let pendingPdfDatos = null;
+
+// ── Prompt de revisión: ¿nueva revisión o ajuste menor? ──────────────
+let _revisionPromptResolve = null;
+function preguntarRevision() {
+  return new Promise(resolve => {
+    _revisionPromptResolve = resolve;
+    document.getElementById('revisionPromptOverlay').style.display = 'flex';
+  });
+}
+function resolverRevisionPrompt(choice) {
+  document.getElementById('revisionPromptOverlay').style.display = 'none';
+  if (_revisionPromptResolve) { _revisionPromptResolve(choice); _revisionPromptResolve = null; }
+}
+
+// ¿Cambió algo de cara al cliente desde la última vez que se generó un PDF?
+// Solo estos 3 disparan la pregunta de revisión — cambios internos (responsable,
+// próxima acción, etc.) no cuentan.
+// ¿Cambió cualquier cosa del PDF desde la última vez que se generó uno?
+// (partidas, precio, incluye/no incluye, notas comerciales, especificaciones
+// técnicas o notas especiales). Se compara contra pdfNotasBaseline (lo que
+// se vio en pantalla al abrir el editor) para las notas, y contra cotOriginal
+// para partidas/precio (eso sí vive solo en el registro guardado).
+function huboCambioEnPdf(cotOriginal, nuevo) {
+  if (!cotOriginal) return false; // nada que comparar todavía
+  const partidasAntes = cotOriginal.partidas || '[]';
+  const partidasAhora = JSON.stringify(currentPartidas);
+  if (partidasAntes !== partidasAhora) return true;
+  const montoAntes = Math.round(parseFloat(cotOriginal.monto) || 0);
+  const montoAhora = Math.round(currentPartidas.reduce((s,p) => s + (p.cantidad||1) * (p.precio_unit||0), 0));
+  if (montoAntes !== montoAhora) return true;
+  if ((pdfNotasBaseline.incluye||'') !== (nuevo.incluye||'')) return true;
+  if ((pdfNotasBaseline.noIncluye||'') !== (nuevo.noIncluye||'')) return true;
+  if (JSON.stringify(pdfNotasBaseline.notasComerciales||[]) !== JSON.stringify(nuevo.notasComerciales||[])) return true;
+  if (JSON.stringify(pdfNotasBaseline.notasTecnicas||[]) !== JSON.stringify(nuevo.notasTecnicas||[])) return true;
+  if ((pdfNotasBaseline.notasEsp||'') !== (nuevo.notasEsp||'')) return true;
+  return false;
+}
+
+// ── Diff de las notas del PDF, línea por línea ───────────────────────
+// Se compara contra pdfNotasBaseline (lo que se vio en pantalla al abrir el
+// editor), no contra lo guardado en el Sheet — así la primera vez que se usa
+// el editor para una cotización, el diff muestra solo lo que el usuario
+// realmente cambió respecto al default, no "todo agregado".
+function letraNota(i) { return String.fromCharCode(65 + i); }
+function truncarTextoJs(s, max) { s = String(s == null ? '' : s); return s.length > max ? s.slice(0, max) + '…' : s; }
+
+function diffNotasArrayJs(label, a, b) {
+  a = Array.isArray(a) ? a : [];
+  b = Array.isArray(b) ? b : [];
+  const cambios = [];
+  const maxLen = Math.max(a.length, b.length);
+  for (let i = 0; i < maxLen; i++) {
+    const antesTxt = a[i] || '', despuesTxt = b[i] || '';
+    if (antesTxt === despuesTxt) continue;
+    const nota = `${label} (nota ${letraNota(i)})`;
+    if (!antesTxt)        cambios.push(`${nota} agregada: '${truncarTextoJs(despuesTxt,100)}'`);
+    else if (!despuesTxt) cambios.push(`${nota} eliminada: '${truncarTextoJs(antesTxt,100)}'`);
+    else                  cambios.push(`${nota}: '${truncarTextoJs(antesTxt,100)}' -> '${truncarTextoJs(despuesTxt,100)}'`);
+  }
+  return cambios;
+}
+
+// Igual que diffNotasArrayJs pero numerado por línea en vez de letra — para
+// arreglos que NO se imprimen con letras (A, B, C) en el PDF, como las
+// especificaciones técnicas.
+function diffLineasArrayJs(label, a, b) {
+  a = Array.isArray(a) ? a : [];
+  b = Array.isArray(b) ? b : [];
+  const cambios = [];
+  const maxLen = Math.max(a.length, b.length);
+  for (let i = 0; i < maxLen; i++) {
+    const antesTxt = a[i] || '', despuesTxt = b[i] || '';
+    if (antesTxt === despuesTxt) continue;
+    if (!antesTxt)        cambios.push(`${label} (línea ${i+1}) agregada: '${truncarTextoJs(despuesTxt,100)}'`);
+    else if (!despuesTxt) cambios.push(`${label} (línea ${i+1}) eliminada: '${truncarTextoJs(antesTxt,100)}'`);
+    else                  cambios.push(`${label} (línea ${i+1}): '${truncarTextoJs(antesTxt,100)}' -> '${truncarTextoJs(despuesTxt,100)}'`);
+  }
+  return cambios;
+}
+
+function diffTextoMultilineaJs(label, a, b) {
+  const aLines = String(a||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const bLines = String(b||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const cambios = [];
+  const maxLen = Math.max(aLines.length, bLines.length);
+  for (let i = 0; i < maxLen; i++) {
+    const antesTxt = aLines[i] || '', despuesTxt = bLines[i] || '';
+    if (antesTxt === despuesTxt) continue;
+    if (!antesTxt)        cambios.push(`${label} (línea ${i+1}) agregada: '${truncarTextoJs(despuesTxt,100)}'`);
+    else if (!despuesTxt) cambios.push(`${label} (línea ${i+1}) eliminada: '${truncarTextoJs(antesTxt,100)}'`);
+    else                  cambios.push(`${label} (línea ${i+1}): '${truncarTextoJs(antesTxt,100)}' -> '${truncarTextoJs(despuesTxt,100)}'`);
+  }
+  return cambios;
+}
+
+function construirDiffPdfNotas(baseline, nuevo) {
+  const cambios = [];
+  const inclA = baseline.incluye || '', inclB = nuevo.incluye || '';
+  if (inclA !== inclB) cambios.push(`PDF — Incluye: '${truncarTextoJs(inclA,100)}' -> '${truncarTextoJs(inclB,100)}'`);
+  const noInclA = baseline.noIncluye || '', noInclB = nuevo.noIncluye || '';
+  if (noInclA !== noInclB) cambios.push(`PDF — No incluye: '${truncarTextoJs(noInclA,100)}' -> '${truncarTextoJs(noInclB,100)}'`);
+  cambios.push(...diffNotasArrayJs('PDF — Notas comerciales', baseline.notasComerciales || [], nuevo.notasComerciales || []));
+  cambios.push(...diffLineasArrayJs('PDF — Especificaciones técnicas', baseline.notasTecnicas || [], nuevo.notasTecnicas || []));
+  cambios.push(...diffTextoMultilineaJs('PDF — Notas especiales', baseline.notasEsp || '', nuevo.notasEsp || ''));
+  return cambios.join('; ');
+}
+
+function abrirEditorNotasPdf(datos) {
+  pendingPdfDatos = datos;
+  const notas = datos.notasComerciales || construirNotasComercialesDefault(datos.partidas, datos.condPago);
+  document.getElementById('notasPdfEditor').value     = notas.join('\n');
+  document.getElementById('notasPdfIncluye').value    = datos.incluye    || 'MATERIALES, MANO DE OBRA Y FLETE';
+  document.getElementById('notasPdfNoIncluye').value  = datos.noIncluye  || 'INSTALACIÓN EN SITIO';
+  const tecnicas = datos.notasTecnicas || construirEspecificacionesTecnicasDefault(datos.partidas);
+  document.getElementById('notasPdfTecnicas').value   = tecnicas.join('\n');
+  const notasEspBase = datos.notasEsp || construirNotasEspecialesDefault(datos.partidas).join('\n');
+  document.getElementById('notasPdfEspeciales').value = notasEspBase;
+
+  // Baseline = exactamente lo que se acaba de mostrar en pantalla (incluye
+  // defaults calculados si no había nada guardado). El diff al confirmar se
+  // compara contra esto, no contra la columna del Sheet.
+  pdfNotasBaseline = {
+    notasComerciales: notas.slice(),
+    notasTecnicas: tecnicas.slice(),
+    incluye:   document.getElementById('notasPdfIncluye').value,
+    noIncluye: document.getElementById('notasPdfNoIncluye').value,
+    notasEsp:  notasEspBase
+  };
+
+  document.getElementById('notasPdfModalOverlay').style.display = 'flex';
+  document.getElementById('btnCloseNotasPdfModal').onclick  = cerrarEditorNotasPdf;
+  document.getElementById('btnCancelNotasPdfModal').onclick = cerrarEditorNotasPdf;
+}
+
+function cerrarEditorNotasPdf() {
+  document.getElementById('notasPdfModalOverlay').style.display = 'none';
+  pendingPdfDatos = null;
+}
+
+async function confirmarGenerarPdfConNotas() {
+  if (!pendingPdfDatos) return;
+  const texto = document.getElementById('notasPdfEditor').value;
+  const notas = texto.split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(l => l.replace(/^[A-Za-z]\)\s*/, '')); // por si quedó la letra puesta, se renumera solo al generar
+  const incluye   = document.getElementById('notasPdfIncluye').value.trim()    || 'MATERIALES, MANO DE OBRA Y FLETE';
+  const noIncluye = document.getElementById('notasPdfNoIncluye').value.trim()  || 'INSTALACIÓN EN SITIO';
+  const notasTecnicas = document.getElementById('notasPdfTecnicas').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const notasEsp  = document.getElementById('notasPdfEspeciales').value.trim();
+  const datos = pendingPdfDatos;
+
+  // Estas notas ya no son efímeras — se guardan como parte de la cotización
+  // para que no se reseteen a los valores por defecto la próxima vez que se
+  // abra el editor.
+  currentPdfNotas = { notasComerciales: notas, notasTecnicas, incluye, noIncluye, notasEsp };
+
+  // ── Número de revisión ──────────────────────────────────────
+  // Sube solo si cambió CUALQUIER COSA del contenido del PDF (partidas,
+  // precio, incluye/no incluye, notas comerciales, especificaciones técnicas
+  // o notas especiales) desde la última vez que se generó un PDF, y solo si
+  // el usuario confirma que es una revisión nueva (no un ajuste menor).
+  const cotOriginal   = editingId ? allCots.find(c => String(c.id) === String(editingId)) : null;
+  const revisionActual = parseInt(cotOriginal?.revision) || 0;
+  let nuevaRevision = revisionActual;
+  if (revisionActual === 0) {
+    nuevaRevision = 1; // primer PDF que se genera para esta cotización — no cuenta como "revisión" todavía
+  } else if (huboCambioEnPdf(cotOriginal, { notasComerciales: notas, notasTecnicas, incluye, noIncluye, notasEsp })) {
+    const eleccion = await preguntarRevision();
+    nuevaRevision = eleccion === 'revision' ? revisionActual + 1 : revisionActual;
+  }
+  currentPdfNotas.revision = nuevaRevision;
+
+  // Diff de las notas del PDF comparado contra lo que se vio en pantalla al
+  // abrir el editor (pdfNotasBaseline) — no contra el Sheet. Esto es lo que
+  // se manda al backend para completar el detalle del log de movimientos.
+  _pendingDiffPdfNotas = construirDiffPdfNotas(pdfNotasBaseline, { notasComerciales: notas, notasTecnicas, incluye, noIncluye, notasEsp });
+
+  const btnConfirm = document.getElementById('btnGenerarPdfConNotas');
+  if (btnConfirm) { btnConfirm.disabled = true; btnConfirm.textContent = 'Guardando…'; }
+
+  let guardado;
+  if (editingId) {
+    // Flujo normal: guardarCotizacionCore ya incluye currentPdfNotas en el payload.
+    guardado = await guardarCotizacionCore();
+  } else if (datos.id) {
+    // Flujo Express: la cotización ya se guardó al generarla y no pasa por
+    // el modal completo (no hay editingId) — se actualizan solo estos campos
+    // directamente, sin tocar el resto del registro.
+    try {
+      const fd = new FormData();
+      fd.append('action', 'saveCotizacion');
+      fd.append('data', JSON.stringify({
+        id: datos.id,
+        pdf_incluye: incluye,
+        pdf_no_incluye: noIncluye,
+        notas_comerciales_pdf: JSON.stringify(notas),
+        notas_tecnicas_pdf: JSON.stringify(notasTecnicas),
+        notas_especiales_pdf: notasEsp,
+        revision: nuevaRevision,
+        _diff_pdf_notas: _pendingDiffPdfNotas,
+        modificado_por: currentUser?.area || ''
+      }));
+      fd.append('_tk', API_TOKEN);
+      const res  = await fetch(API, { method: 'POST', body: fd });
+      const json = await res.json();
+      guardado = (json.error || !json.ok) ? { ok:false, error: json.error||'Error al guardar' } : { ok:true };
+    } catch(e) { guardado = { ok:false, error: e.message }; }
+  } else {
+    // No hay forma de identificar el registro a actualizar — se sigue
+    // generando el PDF pero sin persistir las notas (mejor eso a fallar).
+    guardado = { ok:true };
+  }
+  if (btnConfirm) { btnConfirm.disabled = false; btnConfirm.textContent = 'Generar PDF'; }
+
+  if (!guardado.ok) {
+    // No se genera el PDF si no se pudo guardar — mejor eso a repetir el bug.
+    // El editor de notas se queda abierto para reintentar sin perder lo escrito.
+    if (guardado.error) showToast('No se guardó — el PDF no se generó. ' + guardado.error, 'error');
+    return;
+  }
+
+  document.getElementById('notasPdfModalOverlay').style.display = 'none';
+  pendingPdfDatos = null;
+  _pendingDiffPdfNotas = ''; // ya se usó — evitar que se filtre a un guardado posterior sin relación
+  generarPDFCotizacion({ ...datos, notasComerciales: notas, notasTecnicas, incluye, noIncluye, notasEsp, revision: nuevaRevision });
+  showToast('Cotización guardada y PDF generado ✓', 'success');
+  await loadData(); // refresca el Board en segundo plano; el modal de edición sigue abierto
+}
+
+function construirNotasComercialesDefault(partidas, condPago) {
+  return [
+    'PRECIO: EN MXN MAS IVA.',
+    `CONDICIONES DE PAGO: ${condPago || '70% ANTICIPO, RESTO CONTRA AVISO DE EMBARQUE'}.`,
+    'VIGENCIA DE LA COTIZACION: 15 DIAS (PRECIOS DE REFERENCIA, PUEDEN CAMBIAR).',
+    'TIEMPO DE ENTREGA:',
+    'LUGAR DE ENTREGA: LAB NUESTRA PLANTA.',
+    'COMPRA MINIMA:'
+  ];
+}
+
+function construirEspecificacionesTecnicasDefault(partidas) {
+  // Diesel primero, luego Aire — mismo orden usado en el formato de referencia.
+  const ordenCategorias = ['Diesel', 'Aire'];
+  const categoriasPresentes = ordenCategorias.filter(c => (partidas || []).some(p => p.tipo === c));
+  const materialTxt = categoriasPresentes.length
+    ? categoriasPresentes.map(c => `${c.toUpperCase()} — ACERO AL CARBÓN ${MATERIAL_POR_CATEGORIA[c] || 'VER ESPECIFICACIÓN'}`).join(' · ')
+    : 'VER ESPECIFICACIÓN POR MODELO';
+  const normaTxt = categoriasPresentes.length
+    ? categoriasPresentes.map(c => `${c.toUpperCase()} — ${NORMA_POR_CATEGORIA[c] || 'VER ESPECIFICACIÓN'}`).join(' · ')
+    : 'VER ESPECIFICACIÓN POR MODELO';
+  return [
+    'PRESIÓN DE DISEÑO:',
+    'MEDIDAS GENERALES:',
+    'TEMPERATURA DE OPERACIÓN: AMBIENTE.',
+    'SUPERFICIE: SAND BLAST Y PINTURA.',
+    'PESO:',
+    'CONEXIONES:',
+    `MATERIAL: ${materialTxt}.`,
+    'TIPO DE TAPAS:',
+    'DOCUMENTACIÓN SEGÚN APLIQUE: MEMORIA DE CÁLCULO, CERTIFICADO ALLTANSA Y/O DOSSIER DE FABRICACIÓN.',
+    `NORMAS DE FABRICACIÓN DE REFERENCIA: ${normaTxt}.`
+  ];
+}
+
+function construirNotasEspecialesDefault(partidas) {
+  return []; // en blanco por default — se llena a mano solo cuando aplica algo fuera de lo estándar
+}
+
+function descargarCotizacionPDF() {
+  if (!currentPartidas.length) { showToast('No hay partidas para incluir en la cotización', 'error'); return; }
+  abrirEditorNotasPdf({
+    folio:    document.getElementById('mFolio')?.value?.trim() || '',
+    cliente:  document.getElementById('mCliente')?.value?.trim() || '',
+    contacto: document.getElementById('mContacto')?.value?.trim() || '',
+    condPago: '',
+    notasComerciales: currentPdfNotas.notasComerciales || null,
+    notasTecnicas: currentPdfNotas.notasTecnicas || null,
+    incluye:  currentPdfNotas.incluye || '',
+    noIncluye: currentPdfNotas.noIncluye || '',
+    notasEsp: currentPdfNotas.notasEsp || '',
+    moneda:   document.getElementById('mMoneda')?.value || 'MXN',
+    partidas: currentPartidas
+  });
+}
+
+function generarPDFCotizacion(datos) {
+  if (!window.jspdf) { showToast('La librería de PDF no está disponible. Recarga la página.', 'error'); return; }
+  const partidas = datos.partidas || [];
+  if (!partidas.length) { showToast('No hay partidas para incluir en la cotización', 'error'); return; }
+  const { jsPDF } = window.jspdf;
+
+  const folio    = datos.folio || '';
+  const cliente  = datos.cliente || '';
+  const contacto = datos.contacto || '';
+  const condPago = datos.condPago || '';
+  const notasEsp = datos.notasEsp || '';
+  const notasTecnicas = datos.notasTecnicas || null;
+  const moneda   = datos.moneda || 'MXN';
+  const revision = parseInt(datos.revision) || 0;
+
+  // Categorías presentes en esta cotización → Material/Norma dinámico (una línea por categoría).
+  const categoriasPresentes = [...new Set(partidas.map(p => p.tipo).filter(t => t === 'Aire' || t === 'Diesel'))];
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const W = 215.9, M = 14;
+  const mesAnio = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+
+  // ── Logo + título ──────────────────────────────────────────────
+  try {
+    const logoEl = document.querySelector('.topbar-logo');
+    if (logoEl && logoEl.complete && logoEl.naturalWidth) {
+      const canvas = document.createElement('canvas');
+      canvas.width = logoEl.naturalWidth; canvas.height = logoEl.naturalHeight;
+      canvas.getContext('2d').drawImage(logoEl, 0, 0);
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', M, 10, 42, 24);
+    }
+  } catch(e) {}
+  doc.setTextColor(27,42,74); doc.setFontSize(20); doc.setFont('helvetica','bold');
+  doc.text('COTIZACIÓN', W / 2, 26, { align: 'center' });
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(80,90,110);
+  doc.text(mesAnio, W - M, 26, { align: 'right' });
+
+  // ── Datos de cliente / folio ─────────────────────────────────────
+  let y = 44;
+  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
+  doc.text(`ATENCIÓN: ${(contacto || '—').toUpperCase()}`, M, y); y += 6;
+  doc.text((cliente || '—').toUpperCase(), M, y); y += 6;
+  doc.setTextColor(192,57,27); doc.setFont('helvetica','bold');
+  doc.text(`FOLIO: ${folio}${revision > 1 ? ' · REV. ' + revision : ''}`, M, y); y += 8;
+
+  // ── Tabla de partidas ────────────────────────────────────────────
+  // Descripción por partida:
+  //  - Aire:   "TANQUE DE AIRE [modelo] PARA [capacidad] — [medidas] — [peso] — [presión]"
+  //            (medidas/peso/presión solo si la partida viene de un modelo real de Lista de Precios)
+  //  - Diesel: "TANQUE DE DIESEL [modelo] PARA [capacidad]"
+  //  - Otros tipos: igual que antes (descripción/tipo + capacidad)
+  // Descripción por partida:
+  //  - Con modelo vinculado (viene de Lista de Precios, cotización Express):
+  //      "TANQUE DE AIRE/DIESEL [modelo] PARA [capacidad] — [medidas] — [peso] — [presión]"
+  //  - Sin modelo (capturada a mano, cotización custom): la descripción tal cual se escribió,
+  //    sin agregar "TANQUE DE...", solo con la capacidad si se llenó ese campo.
+  //  Todo el texto del PDF sale en mayúsculas.
+  const construirDescripcionPartida = (p, i) => {
+    let base;
+    if (p.tipo === 'Aire' && p.modelo) {
+      const capacidadTxt = p.capacidad ? ' PARA ' + p.capacidad : '';
+      base = `TANQUE DE AIRE ${(p.descripcion || '')}${capacidadTxt}`;
+    } else if (p.tipo === 'Diesel' && p.modelo) {
+      const capacidadTxt = p.capacidad ? ' PARA ' + p.capacidad : '';
+      base = `TANQUE DE DIESEL ${(p.descripcion || '')}${capacidadTxt}`;
+    } else {
+      // Cotización custom: la descripción tal cual se escribió, sin agregar nada más.
+      base = p.descripcion || p.tipo || '';
+    }
+    let renglonExtra = '';
+    if (p.tipo === 'Aire' && p.modelo) {
+      const item = buscarItemPrecioPorModelo(p.modelo, 'Aire');
+      if (item) {
+        const tara = item['Tara (kg)'];
+        const dIn = item['D (in)'], hIn = item['H Total (in)'];
+        const pdis = item['P dis (PSI)'];
+        const partesExtra = [];
+        if (tara != null && tara !== '') partesExtra.push(`Peso: ${tara} kg`);
+        if (pdis != null && pdis !== '') partesExtra.push(`Presión: ${pdis} PSI`);
+        if (dIn != null && hIn != null && dIn !== '' && hIn !== '') partesExtra.push(`Medidas: ${hIn}" alto x ${dIn}" diám.`);
+        if (partesExtra.length) renglonExtra = '\n' + partesExtra.join('   ');
+      }
+    }
+    return `${i+1}- ${base}${renglonExtra}`.toUpperCase();
+  };
+
+  // Alineación puesta directamente en cada celda del encabezado — jsPDF-autoTable
+  // 3.8.2 NO aplica el halign de columnStyles a las celdas del head, solo al body,
+  // por eso antes se veían corridos los encabezados contra los montos.
+  const head = [[
+    { content: 'PARTIDA' },
+    { content: 'CANT',     styles: { halign: 'center' } },
+    { content: 'P. UNIT',  styles: { halign: 'right' } },
+    { content: 'SUBTOTAL', styles: { halign: 'right' } }
+  ]];
+  let total = 0;
+  const rows = partidas.map((p, i) => {
+    const cant = Number(p.cantidad) || 1;
+    const punit = Number(p.precio_unit) || 0;
+    const subtotal = cant * punit;
+    total += subtotal;
+    return [construirDescripcionPartida(p, i), String(cant), fmtSinDivisa(punit), fmtSinDivisa(subtotal)];
+  });
+  const footRow = [
+    { content: 'TOTAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtMonto(total, moneda), styles: { halign: 'right', fontStyle: 'bold', textColor: [19,115,51] } }
+  ];
+
+  // PARTIDA se lleva la mayor parte del ancho; CANT/P.UNIT/SUBTOTAL van compactos
+  // y agrupados hacia la derecha, en vez de columnas anchas con espacio de sobra.
+  const columnStyles = {
+    0: { fontStyle: 'bold', halign: 'left', cellWidth: 116.9 },
+    1: { halign: 'center', cellWidth: 15 },
+    2: { halign: 'right', cellWidth: 26 },
+    3: { halign: 'right', cellWidth: 30 }
+  };
+
+  doc.autoTable({
+    startY: y,
+    head, body: rows, foot: [footRow],
+    styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica', textColor: [27,42,74] },
+    headStyles: { fillColor: [27,42,74], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8.5 },
+    footStyles: { fillColor: [255,255,255], textColor: [27,42,74], lineWidth: 0.1 },
+    alternateRowStyles: { fillColor: [248,249,252] },
+    columnStyles,
+    margin: { left: M, right: M }
+  });
+
+  let yy = doc.lastAutoTable.finalY + 10;
+
+  // ── Incluye / No incluye ─────────────────────────────────────────
+  const incluyeTxt   = (datos.incluye   || 'MATERIALES, MANO DE OBRA Y FLETE').toUpperCase();
+  const noIncluyeTxt = (datos.noIncluye || 'INSTALACIÓN EN SITIO').toUpperCase();
+  doc.setFontSize(9.5); doc.setTextColor(20,20,20);
+  doc.setFont('helvetica','bold'); doc.text('INCLUYE:', M, yy);
+  doc.setFont('helvetica','normal');
+  doc.splitTextToSize(incluyeTxt, W - 2*M - 22).forEach((l, i) => { doc.text(l, M + 22, yy + i*5); });
+  yy += 6 * doc.splitTextToSize(incluyeTxt, W - 2*M - 22).length;
+  doc.setFont('helvetica','bold'); doc.text('NO INCLUYE:', M, yy);
+  doc.setFont('helvetica','normal');
+  doc.splitTextToSize(noIncluyeTxt, W - 2*M - 26).forEach((l, i) => { doc.text(l, M + 26, yy + i*5); });
+  yy += 6 * doc.splitTextToSize(noIncluyeTxt, W - 2*M - 26).length + 4;
+
+  // ── Notas comerciales ────────────────────────────────────────────
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('NOTAS COMERCIALES:', M, yy); yy += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+
+  const notasComerciales = datos.notasComerciales || construirNotasComercialesDefault(partidas, condPago);
+  notasComerciales.forEach((nota, i) => {
+    const letra  = String.fromCharCode(65 + i);
+    const lineas = doc.splitTextToSize(`${letra}) ${nota}`.toUpperCase(), W - 2*M - 6);
+    lineas.forEach(l => {
+      if (yy > doc.internal.pageSize.height - 25) { doc.addPage(); yy = 20; }
+      doc.text(l, M + 4, yy); yy += 5;
+    });
+  });
+
+  yy += 4;
+  if (yy > doc.internal.pageSize.height - 30) { doc.addPage(); yy = 20; }
+
+  // ── Especificaciones técnicas (sin letras, una línea tal cual) ────
+  const especTecnicas = notasTecnicas || construirEspecificacionesTecnicasDefault(partidas);
+  if (especTecnicas.length) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('ESPECIFICACIONES TÉCNICAS:', M, yy); yy += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    especTecnicas.forEach(linea => {
+      const lineas = doc.splitTextToSize(linea.toUpperCase(), W - 2*M - 6);
+      lineas.forEach(l => {
+        if (yy > doc.internal.pageSize.height - 25) { doc.addPage(); yy = 20; }
+        doc.text(l, M + 4, yy); yy += 5;
+      });
+    });
+    yy += 4;
+  }
+
+  if (yy > doc.internal.pageSize.height - 30) { doc.addPage(); yy = 20; }
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('NOTAS ESPECIALES:', M, yy); yy += 6;
+  doc.setFont('helvetica','normal');
+  const notasEspecialesLineas = (notasEsp || '').split('\n').map(l => l.trim()).filter(Boolean);
+  notasEspecialesLineas.forEach(nota => {
+    const lineas = doc.splitTextToSize(`•  ${nota}`.toUpperCase(), W - 2*M - 6);
+    lineas.forEach(l => {
+      if (yy > doc.internal.pageSize.height - 25) { doc.addPage(); yy = 20; }
+      doc.text(l, M + 4, yy); yy += 5;
+    });
+  });
+
+  // ── Pie de página (todas las páginas) ─────────────────────────────
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let pg = 1; pg <= totalPages; pg++) {
+    doc.setPage(pg);
+    const pageH = doc.internal.pageSize.height;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(27,42,74);
+    doc.text('ALLTANSA S.A. DE C.V.', M, pageH - 14);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(90,100,120);
+    doc.text('CALLEJÓN SANTO DOMINGO #1115 COL. LA GRANGE, SAN NICOLAS DE LOS GARZA, N.L. C.P. 66490', M, pageH - 9);
+  }
+
+  doc.save(`${folio}${revision > 1 ? '_Rev' + revision : ''}_${(cliente||'cliente').replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`);
+  showToast('📄 Cotización descargada', 'success');
+}
+
+/* ═══════════════════════════════════════════
+   COTIZACIÓN EXPRESS — desde Lista de Precios
+═══════════════════════════════════════════ */
+let currentPartidasExpress = [];
+let expressCat = 'Aire';
+let expressResultado = null; // datos para el PDF, disponibles tras generar
+
+function abrirExpressModal() {
+  currentPartidasExpress = [];
+  expressResultado = null;
+  const cats = [...new Set(listaPrecios.map(p => p.categoria))];
+  if (!cats.includes(expressCat)) expressCat = cats[0] || 'Aire';
+  document.getElementById('exContacto').value = '';
+  document.getElementById('exContactoInfo').value = '';
+  document.getElementById('exClienteBuscar').value = '';
+  document.getElementById('expressFormWrap').style.display = '';
+  document.getElementById('expressConfirmWrap').style.display = 'none';
+  document.getElementById('expressFooter').style.display = 'flex';
+  document.getElementById('expressModalOverlay').style.display = 'flex';
+  populateClienteSelectExpress('');
+  renderExpressCatTabs();
+  renderExpressModelosTable();
+  renderExpressPartidasList();
+  document.getElementById('btnCloseExpressModal').onclick  = cerrarExpressModal;
+  document.getElementById('btnCancelExpressModal').onclick = cerrarExpressModal;
+}
+
+function cerrarExpressModal() {
+  document.getElementById('expressModalOverlay').style.display = 'none';
+}
+
+function populateClienteSelectExpress(selectedId) {
+  const hidden = document.getElementById('exClienteId');
+  if (!hidden) return;
+  const cl = selectedId ? allClientes.find(x => String(x.id) === String(selectedId)) : null;
+  hidden.value = cl ? cl.id : '';
+  const buscarEl = document.getElementById('exClienteBuscar');
+  if (buscarEl) buscarEl.value = cl ? cl.empresa : '';
+  if (cl) fillClienteFieldsExpress(cl);
+
+  initClienteCombo('exClienteBuscar', 'exClienteId', 'exClienteDropdown', (clSel) => {
+    if (clSel) fillClienteFieldsExpress(clSel);
+  });
+}
+
+function fillClienteFieldsExpress(cl) {
+  const c  = document.getElementById('exContacto');
+  const ci = document.getElementById('exContactoInfo');
+  if (c)  c.value  = cl.contacto || '';
+  if (ci) ci.value = cl.email ? (cl.email + (cl.telefono ? ' / ' + cl.telefono : '')) : (cl.telefono || '');
+}
+
+function renderExpressCatTabs() {
+  const cats = [...new Set(listaPrecios.map(p => p.categoria))];
+  document.getElementById('exCatTabs').innerHTML = cats.map(c => {
+    const active = expressCat === c;
+    return `<button type="button" class="btn" style="padding:6px 14px;font-size:12px;${active?'background:var(--navy);color:#fff':'background:#fff;color:var(--navy);border:1px solid var(--navy)'}" onclick="setExpressCat('${c}')">${c}</button>`;
+  }).join('');
+}
+function setExpressCat(cat) { expressCat = cat; renderExpressCatTabs(); renderExpressModelosTable(); }
+
+function renderExpressModelosTable() {
+  const items = getPreciosCatItems(expressCat);
+  const tbody = document.getElementById('exModelosTbody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted);font-style:italic">Sin modelos en esta categoría</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((it, i) => {
+    const precio = (it.precio_cliente != null && it.precio_cliente !== '') ? it.precio_cliente : it.precio;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 10px;font-weight:700;color:var(--navy)">${it.modelo || '—'}</td>
+      <td style="padding:6px 10px;text-align:right;color:#137333;font-weight:700">${fmtPrecioRef(precio) || '—'}</td>
+      <td style="padding:6px 10px;text-align:right">${it.capacidad != null && it.capacidad !== '' ? it.capacidad + ' L' : '—'}</td>
+      <td style="padding:6px 10px;text-align:center"><input type="number" min="1" value="1" id="exCant${i}" style="width:50px;text-align:center;padding:4px"/></td>
+      <td style="padding:6px 10px"><button type="button" class="btn btn-primary" style="font-size:11px;padding:5px 10px;white-space:nowrap" onclick="agregarPartidaExpress(${i})">Agregar</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function agregarPartidaExpress(idx) {
+  const items = getPreciosCatItems(expressCat);
+  const it = items[idx];
+  if (!it) return;
+  const cantEl   = document.getElementById('exCant' + idx);
+  const cantidad = parseInt(cantEl?.value) || 1;
+  const precio   = (it.precio_cliente != null && it.precio_cliente !== '') ? it.precio_cliente : it.precio;
+  const tipoMap  = { 'Aire': 'Aire', 'Diésel': 'Diesel', 'Diesel': 'Diesel' };
+  const tipo     = tipoMap[it.categoria] || it.categoria || 'Otro';
+  currentPartidasExpress.push({
+    tipo,
+    cantidad,
+    capacidad:   it.capacidad != null && it.capacidad !== '' ? it.capacidad + ' L' : '',
+    descripcion: it.modelo || '',
+    precio_unit: parseFloat(precio) || 0,
+    modelo:    it.modelo || '',
+    categoria: it.categoria || ''
+  });
+  renderExpressPartidasList();
+  showToast('Agregado: ' + (it.modelo || ''), 'success');
+}
+
+function quitarPartidaExpress(idx) {
+  currentPartidasExpress.splice(idx, 1);
+  renderExpressPartidasList();
+}
+
+function renderExpressPartidasList() {
+  const tbody = document.getElementById('exPartidasTbody');
+  if (!currentPartidasExpress.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--muted);font-style:italic">Sin partidas agregadas todavía</td></tr>';
+    document.getElementById('exTotal').textContent = '$0.00';
+    return;
+  }
+  let total = 0;
+  tbody.innerHTML = currentPartidasExpress.map((p, i) => {
+    const subtotal = (p.cantidad || 1) * (p.precio_unit || 0);
+    total += subtotal;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 10px">${escHtml(p.descripcion || p.tipo || '')}</td>
+      <td style="padding:6px 10px;text-align:center">
+        <input type="number" min="1" value="${p.cantidad||1}" style="width:55px;text-align:center;padding:4px;border:1px solid var(--border);border-radius:4px"
+          onchange="updatePartidaExpress(${i},'cantidad',this.value)"/>
+      </td>
+      <td style="padding:6px 10px;text-align:right">
+        <input type="number" min="0" step="100" value="${p.precio_unit||0}" style="width:95px;text-align:right;padding:4px;border:1px solid var(--border);border-radius:4px"
+          onchange="updatePartidaExpress(${i},'precio_unit',this.value)"/>
+      </td>
+      <td style="padding:6px 10px;text-align:right;font-weight:700">${fmtMonto(subtotal, 'MXN')}</td>
+      <td style="padding:6px 10px"><button class="btn-icon" onclick="quitarPartidaExpress(${i})">🗑️</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('exTotal').textContent = fmtMonto(total, 'MXN');
+}
+
+function updatePartidaExpress(idx, field, value) {
+  if (!currentPartidasExpress[idx]) return;
+  currentPartidasExpress[idx][field] = Number(value) || 0;
+  renderExpressPartidasList();
+}
+
+async function generarCotizacionExpress() {
+  const clienteId = document.getElementById('exClienteId')?.value || '';
+  const cliente   = clienteId ? (allClientes.find(c => String(c.id) === String(clienteId))?.empresa || '') : '';
+  const contacto     = document.getElementById('exContacto')?.value?.trim() || '';
+  const contactoInfo = document.getElementById('exContactoInfo')?.value?.trim() || '';
+
+  if (!cliente)    { showToast('Selecciona un cliente', 'error'); return; }
+  if (!currentPartidasExpress.length) { showToast('Agrega al menos un modelo', 'error'); return; }
+
+  const total = currentPartidasExpress.reduce((s, p) => s + (p.cantidad || 1) * (p.precio_unit || 0), 0);
+
+  // Cotización real, con los mismos campos que el modal completo — solo que los
+  // técnicos de requisición/estimación quedan en blanco/por defecto porque no
+  // aplican a un modelo estándar de catálogo. Si después hace falta más detalle,
+  // se abre esta misma cotización con el modal normal de 4 etapas.
+  const cot = {
+    id: '', folio: '',
+    cliente_id: clienteId, fecha: today(), cliente,
+    contacto, contacto_info: contactoInfo,
+    origen: 'Otro', responsable: currentUser?.area || '',
+    capacidad_l: '', fluido: '', presion: '', material: '', orientacion: '', norma: '',
+    conexiones: '[]', tiene_ing: 'No', notas_req: '',
+    ing_responsable: '', fecha_comp: '', estatus_est: 'Pendiente', notas_est: '',
+    partidas: JSON.stringify(currentPartidasExpress),
+    tipo: currentPartidasExpress[0]?.tipo || '',
+    cantidad: currentPartidasExpress[0]?.cantidad || 1,
+    capacidad: currentPartidasExpress[0]?.capacidad || '',
+    descripcion: currentPartidasExpress.map((p,i) => `${i+1}. ${p.cantidad}x ${p.tipo}${p.capacidad?' '+p.capacidad:''}`).join(' | '),
+    moneda: 'MXN', monto: total, tipo_cambio: 17,
+    cond_pago: '', vigencia: '', fecha_envio: '', notas: '',
+    estado: 'Nueva', ultimo_contacto: '', proxima_accion: '', comentarios: '',
+    etapa_actual: 'cotizacion',
+    modificado_por: currentUser?.area || '', modificado_en: today()
+  };
+
+  const btn = document.getElementById('btnGenerarExpress');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const fd = new FormData();
+    fd.append('action', 'saveCotizacion');
+    fd.append('data', JSON.stringify(cot));
+    fd.append('_tk', API_TOKEN);
+    const res  = await fetch(API, { method: 'POST', body: fd });
+    const json = await res.json();
+    if (json.error || !json.ok) throw new Error(json.error || 'Error al guardar');
+
+    expressResultado = {
+      id: json.id || '',
+      folio: json.folio || '',
+      cliente, contacto,
+      condPago: '', notasEsp: '',
+      moneda: 'MXN',
+      partidas: currentPartidasExpress.slice()
+    };
+    document.getElementById('exFolioResultado').textContent = expressResultado.folio;
+    document.getElementById('expressFormWrap').style.display = 'none';
+    document.getElementById('expressConfirmWrap').style.display = 'block';
+    document.getElementById('expressFooter').style.display = 'none';
+    loadData();
+    showToast('Cotización express generada', 'success');
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Generar cotización'; }
+  }
+}
+
+function descargarExpressPDF() {
+  if (!expressResultado) return;
+  abrirEditorNotasPdf(expressResultado);
+}
+
+/* ═══════════════════════════════════════════
+   RESUMEN DE REQUISICIÓN + HISTORIAL — PDF interno
+═══════════════════════════════════════════ */
+async function descargarResumenPDF(id) {
+  const cot = allCots.find(c => String(c.id) === String(id));
+  if (!cot) { showToast('No se encontró la cotización', 'error'); return; }
+  if (!window.jspdf) { showToast('La librería de PDF no está disponible. Recarga la página.', 'error'); return; }
+
+  let movimientos = [];
+  try {
+    const r = await fetch(`${API}?action=getLogCotizacion&folio=${encodeURIComponent(cot.folio||'')}&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    movimientos = d.movimientos || [];
+  } catch(e) { /* si falla el log, seguimos solo con la bitácora */ }
+
+  // Línea de tiempo combinada: movimientos automáticos (con hora) + notas
+  // manuales de la bitácora (solo fecha) — todo ordenado cronológicamente.
+  const notas = parseBitacora(cot.comentarios).map(n => ({
+    orden:   n.fecha || '',
+    fecha:   fmtDate(n.fecha),
+    usuario: n.usuario || '',
+    accion:  'Nota',
+    detalle: n.texto || ''
+  }));
+  const movs = movimientos.map(m => ({
+    orden:   m.timestamp || '',
+    fecha:   m.timestamp ? new Date(m.timestamp).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '',
+    usuario: m.usuario || '',
+    accion:  m.accion || '',
+    detalle: m.detalle || ''
+  }));
+  const timeline = [...movs, ...notas].sort((a, b) => String(a.orden).localeCompare(String(b.orden)));
+
+  generarResumenRequisicionPDF(cot, timeline);
+}
+
+// Defaults de requisición para cotizaciones que vienen de Lista de Precios —
+// esos campos nunca se llenan a mano en el flujo Express, así que se
+// completan según la categoría del modelo elegido en vez de mostrar vacío
+// o el default genérico del formulario (que no aplica en este flujo).
+const REQUISICION_DEFAULTS_POR_CATEGORIA = {
+  'Aire':   { material: 'SA-36', fluido: 'Aire',   orientacion: 'Vertical',   presion: '200 PSI' },
+  'Diesel': { material: 'A-36',  fluido: 'Diesel', orientacion: 'Horizontal', presion: 'N/A',     norma: 'UL-142' }
+};
+
+function obtenerInfoListaPrecios(cot) {
+  let partidas = [];
+  try { partidas = cot.partidas ? JSON.parse(cot.partidas) : []; } catch(e) {}
+  const conModelo = partidas.filter(p => p.modelo && (p.tipo === 'Aire' || p.tipo === 'Diesel'));
+  if (!conModelo.length) return null;
+  // Si la cotización mezcla Aire y Diesel, Diesel domina (orientación horizontal
+  // aplica sin importar qué más lleve la cotización). Si es solo Aire, Vertical.
+  const item = conModelo.find(p => p.tipo === 'Diesel') || conModelo.find(p => p.tipo === 'Aire');
+  return { categoria: item.tipo, capacidad: item.capacidad || '' };
+}
+
+function generarResumenRequisicionPDF(cot, timeline) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const W = 215.9, M = 14;
+
+  // ── Logo + título ──────────────────────────────────────────────
+  try {
+    const logoEl = document.querySelector('.topbar-logo');
+    if (logoEl && logoEl.complete && logoEl.naturalWidth) {
+      const canvas = document.createElement('canvas');
+      canvas.width = logoEl.naturalWidth; canvas.height = logoEl.naturalHeight;
+      canvas.getContext('2d').drawImage(logoEl, 0, 0);
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', M, 10, 42, 24);
+    }
+  } catch(e) {}
+  doc.setTextColor(27,42,74); doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text('RESUMEN DE REQUISICIÓN', W / 2, 22, { align: 'center' });
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(90,100,120);
+  doc.text('Documento interno — no es la cotización para el cliente', W / 2, 28, { align: 'center' });
+
+  let y = 44;
+  doc.setFontSize(10); doc.setTextColor(30,30,30); doc.setFont('helvetica','normal');
+  doc.text(`CLIENTE: ${(cot.cliente || '—').toUpperCase()}`, M, y); y += 6;
+  doc.text(`CONTACTO: ${(cot.contacto || '—').toUpperCase()}`, M, y); y += 6;
+  doc.setTextColor(192,57,27); doc.setFont('helvetica','bold');
+  doc.text(`FOLIO: ${cot.folio || '—'}`, M, y); y += 8;
+
+  // ── Datos de requisición (Fase 1) ─────────────────────────────────
+  doc.setTextColor(27,42,74); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('DATOS DE REQUISICIÓN', M, y); y += 6;
+  doc.setDrawColor(220,224,232); doc.line(M, y - 3, W - M, y - 3);
+
+  const listaInfo = obtenerInfoListaPrecios(cot);
+  const defCat = listaInfo ? REQUISICION_DEFAULTS_POR_CATEGORIA[listaInfo.categoria] : null;
+
+  const campos = [
+    ['Fecha de recepción', fmtDate(cot.fecha)],
+    ['Responsable', cot.responsable || '—'],
+    ['Origen del lead', cot.origen || '—'],
+    ['Capacidad (litros)', cot.capacidad_l || (listaInfo && listaInfo.capacidad) || '—'],
+    ['Fluido', cot.fluido || (defCat && defCat.fluido) || '—'],
+    ['Presión de trabajo', cot.presion ? cot.presion + ' PSI' : ((defCat && defCat.presion) || '—')],
+    ['Material del tanque', cot.material || (defCat && defCat.material) || '—'],
+    ['Orientación', cot.orientacion || (defCat && defCat.orientacion) || '—'],
+    ['Norma aplicable', cot.norma || (defCat && defCat.norma) || '—'],
+    ['¿Cuenta con ingeniería?', cot.tiene_ing || '—']
+  ];
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
+  campos.forEach(([label, val]) => {
+    doc.setFont('helvetica','bold'); doc.text(`${label}:`, M, y);
+    doc.setFont('helvetica','normal');
+    doc.text(String(val).toUpperCase(), M + 55, y);
+    y += 6;
+  });
+
+  // Conexiones requeridas
+  let conexiones = [];
+  try { conexiones = cot.conexiones ? JSON.parse(cot.conexiones) : []; } catch(e) {}
+  if (conexiones.length) {
+    y += 2;
+    doc.setFont('helvetica','bold'); doc.text('Conexiones requeridas:', M, y); y += 5;
+    doc.setFont('helvetica','normal');
+    conexiones.forEach(cn => {
+      const linea = `• ${cn.tipo || ''} ${cn.tamanio || ''} x${cn.cantidad || 1}${cn.descripcion ? ' — ' + cn.descripcion : ''}`.toUpperCase();
+      doc.splitTextToSize(linea, W - 2*M - 4).forEach(l => { doc.text(l, M + 4, y); y += 5; });
+    });
+  }
+
+  // Notas de requisición
+  if (cot.notas_req) {
+    y += 2;
+    doc.setFont('helvetica','bold'); doc.text('Notas de requisición:', M, y); y += 5;
+    doc.setFont('helvetica','normal');
+    doc.splitTextToSize(cot.notas_req.toUpperCase(), W - 2*M).forEach(l => {
+      if (y > doc.internal.pageSize.height - 25) { doc.addPage(); y = 20; }
+      doc.text(l, M, y); y += 5;
+    });
+  }
+
+  // ── Historial (movimientos + notas, cronológico) ──────────────────
+  y += 8;
+  if (y > doc.internal.pageSize.height - 40) { doc.addPage(); y = 20; }
+  doc.setTextColor(27,42,74); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('HISTORIAL', M, y); y += 6;
+  doc.setDrawColor(220,224,232); doc.line(M, y - 3, W - M, y - 3);
+
+  if (!timeline.length) {
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120,120,120);
+    doc.text('Sin movimientos registrados todavía.', M, y); y += 6;
+  } else {
+    const head = [['FECHA', 'USUARIO', 'ACCIÓN', 'DETALLE']];
+    const rows = timeline.map(t => [t.fecha, (t.usuario||'').toUpperCase(), (t.accion||'').toUpperCase(), (t.detalle||'').toUpperCase()]);
+    doc.autoTable({
+      startY: y,
+      head, body: rows,
+      styles: { fontSize: 8, cellPadding: 2.5, font: 'helvetica', textColor: [27,42,74] },
+      headStyles: { fillColor: [27,42,74], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8 },
+      alternateRowStyles: { fillColor: [248,249,252] },
+      columnStyles: { 0: { cellWidth: 34 }, 1: { cellWidth: 28 }, 2: { cellWidth: 34 } },
+      margin: { left: M, right: M }
+    });
+  }
+
+  // ── Pie de página ──────────────────────────────────────────────
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let pg = 1; pg <= totalPages; pg++) {
+    doc.setPage(pg);
+    const pageH = doc.internal.pageSize.height;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(27,42,74);
+    doc.text('ALLTANSA S.A. DE C.V.', M, pageH - 14);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(90,100,120);
+    doc.text('CALLEJÓN SANTO DOMINGO #1115 COL. LA GRANGE, SAN NICOLAS DE LOS GARZA, N.L. C.P. 66490', M, pageH - 9);
+  }
+
+  doc.save(`Resumen_${(cot.folio||'cotizacion')}.pdf`);
+  showToast('📋 Resumen descargado', 'success');
+}
+
+/* ═══════════════════════════════════════════
+   MODAL COTIZACION — selector de cliente y SKU
+═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   BÚSQUEDA DE CLIENTE — filtra el <select> mientras se escribe,
+   sin perder la opción ya seleccionada aunque no coincida con el texto.
+═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   COMBOBOX DE CLIENTE — un solo campo que busca y selecciona.
+   searchId: input de texto visible. hiddenId: input oculto con el ID real.
+   dropdownId: contenedor de sugerencias. onSelect: callback(cliente|null).
+═══════════════════════════════════════════ */
+function initClienteCombo(searchId, hiddenId, dropdownId, onSelect) {
+  const searchEl = document.getElementById(searchId);
+  const dropEl   = document.getElementById(dropdownId);
+  const hiddenEl = document.getElementById(hiddenId);
+  if (!searchEl || !dropEl || !hiddenEl) return;
+
+  const renderLista = (term) => {
+    const t = (term || '').trim().toLowerCase();
+    const clientesOrdenados = [...allClientes].sort((a, b) =>
+      (a.empresa || '').localeCompare(b.empresa || '', 'es', { sensitivity: 'base' })
+    );
+    const filtrados = t ? clientesOrdenados.filter(cl => (cl.empresa || '').toLowerCase().includes(t)) : clientesOrdenados;
+    dropEl.innerHTML = filtrados.length
+      ? filtrados.map(cl => `<div class="cliente-combo-item" data-id="${cl.id}">${escHtml(cl.empresa)}</div>`).join('')
+      : '<div class="cliente-combo-empty">Sin resultados</div>';
+    dropEl.style.display = 'block';
+  };
+
+  searchEl.oninput = () => {
+    hiddenEl.value = '';
+    if (onSelect) onSelect(null);
+    renderLista(searchEl.value);
+  };
+  searchEl.onfocus = () => renderLista(searchEl.value);
+  searchEl.onblur  = () => setTimeout(() => { dropEl.style.display = 'none'; }, 150);
+
+  dropEl.onmousedown = (e) => {
+    const item = e.target.closest('.cliente-combo-item');
+    if (!item) return;
+    e.preventDefault(); // evitar que el blur del input dispare antes del click
+    const id = item.dataset.id;
+    const cl = allClientes.find(c => String(c.id) === String(id));
+    if (!cl) return;
+    searchEl.value = cl.empresa;
+    hiddenEl.value = cl.id;
+    dropEl.style.display = 'none';
+    if (onSelect) onSelect(cl);
+  };
+}
+
+function populateClienteSelect(selectedId, fallbackNombre) {
+  const hidden = document.getElementById('mClienteId');
+  if (!hidden) return;
+  // Buscar por ID primero, luego por nombre (fallback para cotizaciones legacy).
+  // IMPORTANTE: aquí solo se sincroniza el valor — NO se llama a fillClienteFields(),
+  // porque Contacto y Correo/Tel ya vienen precargados con lo que se guardó
+  // específicamente para ESTA cotización (ver render de mContacto/mContactoInfo).
+  // Sobrescribirlos aquí borraría esos valores guardados cada vez que se reabre.
+  let cl = null;
+  if (selectedId) {
+    cl = allClientes.find(x => String(x.id) === String(selectedId));
+  } else if (fallbackNombre) {
+    cl = allClientes.find(x => (x.empresa || '').toLowerCase() === fallbackNombre.toLowerCase());
+  }
+  hidden.value = cl ? cl.id : '';
+  const buscarEl = document.getElementById('mClienteBuscar');
+  if (buscarEl) buscarEl.value = cl ? cl.empresa : '';
+  const mCliente = document.getElementById('mCliente');
+  if (cl && mCliente) mCliente.value = cl.empresa || '';
+
+  // Solo al CAMBIAR activamente el cliente (clic en una sugerencia del buscador)
+  // se prellenan Contacto/Correo-Tel con los datos por defecto del catálogo.
+  initClienteCombo('mClienteBuscar', 'mClienteId', 'mClienteDropdown', (clSel) => {
+    if (clSel) fillClienteFields(clSel);
+  });
+}
+
+function fillClienteFields(cl) {
+  const mCliente      = document.getElementById('mCliente');
+  const mContacto     = document.getElementById('mContacto');
+  const mContactoInfo = document.getElementById('mContactoInfo');
+  if (mCliente)      mCliente.value      = cl.empresa || '';
+  if (mContacto)     mContacto.value     = cl.contacto || '';
+  if (mContactoInfo) mContactoInfo.value = cl.email ? (cl.email + (cl.telefono ? ' / ' + cl.telefono : '')) : (cl.telefono || '');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initLogin();
+});
+</script>
+</body>
+</html>
