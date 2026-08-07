@@ -123,7 +123,11 @@
   }
   .cell-input:focus { border-color: var(--navy); }
   input.cell-input[type="date"] { min-width: 118px; }
-  .col-folio    { min-width: 130px; }
+  .col-folio    { min-width: 160px; }
+  .folio-info {
+    font-size: 10.5px; color: var(--muted); margin-top: 3px; padding: 0 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+  }
   .col-servicio { min-width: 140px; }
   .col-proveedor{ min-width: 120px; }
   .col-oc       { min-width: 100px; }
@@ -344,7 +348,7 @@ async function loadFoliosLigero() {
     const d = await r.json();
     foliosCache = d.folios || [];
     const dl = document.getElementById('foliosDatalist');
-    dl.innerHTML = foliosCache.map(f => `<option value="${escHtml(f.folio)}">${escHtml(f.folio)} — ${escHtml(f.cliente||'')}</option>`).join('');
+    dl.innerHTML = foliosCache.map(f => `<option value="${escHtml(f.folio)}">${escHtml(f.folio)} — ${escHtml(f.cliente||'')} — ${escHtml(f.modelo||'')}</option>`).join('');
   } catch(e) { /* si falla, el folio sigue siendo editable como texto libre */ }
 }
 
@@ -426,6 +430,26 @@ function updateCampoTexto(id, field, value) {
   guardarCampo(id, field, value);
 }
 
+// Busca folio en el catálogo ligero (getFoliosLigero) y regresa "Cliente — Modelo"
+// para mostrarlo debajo del campo de folio. No hace ninguna llamada al servidor
+// por tecla — usa el catálogo ya cargado en memoria (foliosCache).
+function infoFolioTexto(folio) {
+  if (!folio) return '';
+  const norm = s => String(s||'').trim().toLowerCase();
+  const match = foliosCache.find(f => norm(f.folio) === norm(folio));
+  if (!match) return '';
+  const partes = [match.cliente, match.modelo].filter(Boolean);
+  return partes.length ? partes.join(' — ') : '';
+}
+
+// Actualiza SOLO el texto de cliente/modelo bajo el input, sin re-renderizar
+// la tabla — igual que el fix del bug de Cotización Express: reconstruir la
+// fila en cada tecla le quitaría el foco al campo de folio.
+function mostrarInfoFolio(id, value) {
+  const el = document.getElementById('folioInfo_' + id);
+  if (el) el.textContent = infoFolioTexto(value);
+}
+
 function abrirEdicionPastilla(id, field) {
   editingCell = { id, field };
   renderMaquilaList();
@@ -467,7 +491,9 @@ function renderMaquilaList() {
     const alerta = !m.fecha_recogido && dias !== null && dias > DIAS_ALERTA_SIN_REGRESAR;
     return `<tr class="${alerta ? 'row-alert' : ''}">
       <td><input class="cell-input" list="foliosDatalist" value="${escHtml(m.folio_pedido||'')}" placeholder="A-YYMM-##"
-          onchange="updateCampoTexto('${m.id}','folio_pedido',this.value)"/></td>
+          oninput="mostrarInfoFolio('${m.id}',this.value)"
+          onchange="updateCampoTexto('${m.id}','folio_pedido',this.value)"/>
+          <div class="folio-info" id="folioInfo_${m.id}">${infoFolioTexto(m.folio_pedido)}</div></td>
       <td><select class="cell-input" onchange="updateCampoTexto('${m.id}','servicio',this.value)">
         ${SERVICIOS.map(s => `<option value="${s}" ${m.servicio===s?'selected':''}>${s}</option>`).join('')}
       </select></td>
@@ -580,7 +606,7 @@ function setLoading(v) {
    CHEQUEO DE VERSIÓN — version.json comparte llaves con
    index.html / cotizaciones.html; este módulo usa la llave "maquila".
 ═══════════════════════════════════════════ */
-const APP_VERSION = '2026-08-07-1600';
+const APP_VERSION = '2026-08-07-1800';
 let _versionCheckTimer = null;
 
 function _mostrarTagVersion(){
