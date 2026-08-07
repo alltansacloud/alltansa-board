@@ -42,33 +42,8 @@
   .btn-topbar.danger { background: rgba(192,57,27,.35); border-color: rgba(192,57,27,.5); }
   .topbar-user { font-size: 12px; opacity: .75; }
 
-  /* ── LOGIN ── */
-  #loginScreen {
-    position: fixed; inset: 0; background: var(--navy);
-    display: flex; align-items: center; justify-content: center; z-index: 9999;
-  }
-  .login-box {
-    background: #fff; border-radius: 14px; padding: 38px 44px;
-    width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,.25); text-align: center;
-  }
-  .login-box img { height: 48px; margin-bottom: 18px; }
-  .login-box h2 { font-size: 17px; color: var(--navy); margin-bottom: 6px; }
-  .login-box p { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
-  .login-box input {
-    width: 100%; padding: 9px 12px; border: 1px solid var(--border);
-    border-radius: 7px; font-size: 14px; margin-bottom: 12px; outline: none;
-  }
-  .login-box input:focus { border-color: var(--navy); }
-  .btn-login {
-    width: 100%; background: var(--navy); color: #fff; border: none;
-    padding: 10px; border-radius: 7px; font-size: 14px; font-weight: 700;
-    cursor: pointer; transition: background .2s;
-  }
-  .btn-login:hover { background: #243a63; }
-  .login-err { color: var(--red); font-size: 12px; margin-top: 6px; display: none; }
-
   /* ── MAIN LAYOUT ── */
-  #appScreen { display: none; }
+  #appScreen { display: block; }
   .main-wrap { max-width: 1400px; margin: 0 auto; padding: 18px 16px 40px; }
 
   /* ── SUMMARY ── */
@@ -123,11 +98,14 @@
   }
   .cell-input:focus { border-color: var(--navy); }
   input.cell-input[type="date"] { min-width: 118px; }
-  .col-folio    { min-width: 160px; }
-  .folio-info {
-    font-size: 10.5px; color: var(--muted); margin-top: 3px; padding: 0 2px;
+  .col-folio    { min-width: 130px; }
+  .col-cliente  { min-width: 140px; }
+  .col-modelo   { min-width: 160px; }
+  .col-derivada {
+    display: block; font-size: 12.5px; color: var(--text); padding: 5px 4px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
   }
+  .col-derivada:empty::before { content: '–'; color: var(--muted); }
   .col-servicio { min-width: 140px; }
   .col-proveedor{ min-width: 120px; }
   .col-oc       { min-width: 100px; }
@@ -191,18 +169,6 @@
 <!-- TOAST -->
 <div id="toast"></div>
 
-<!-- LOGIN -->
-<div id="loginScreen">
-  <div class="login-box">
-    <img id="loginLogo" src="logo.png" alt="ALLTANSA" onerror="this.style.display='none'"/>
-    <h2>Control de Maquila</h2>
-    <p>Acceso de Dirección</p>
-    <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password"/>
-    <button class="btn-login" id="btnLogin">Entrar</button>
-    <div class="login-err" id="loginErr">Contraseña incorrecta.</div>
-  </div>
-</div>
-
 <!-- APP -->
 <div id="appScreen">
 
@@ -213,10 +179,9 @@
       <span class="topbar-title">Control de Maquila</span>
     </div>
     <div class="topbar-right">
-      <span class="topbar-user" id="topbarUser"></span>
+      <span class="topbar-user">Dirección</span>
       <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/','_self')">Board Principal</button>
       <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/cotizaciones.html','_blank')">Cotizaciones</button>
-      <button class="btn-topbar danger" onclick="logout()">Salir</button>
     </div>
   </div>
 
@@ -258,6 +223,8 @@
         <thead>
           <tr>
             <th class="col-folio">Folio ALLTANSA</th>
+            <th class="col-cliente">Cliente</th>
+            <th class="col-modelo">Modelo</th>
             <th class="col-servicio">Servicio</th>
             <th class="col-proveedor">Proveedor</th>
             <th class="col-oc">OC ALLTANSA</th>
@@ -269,7 +236,7 @@
           </tr>
         </thead>
         <tbody id="maquilaTbody">
-          <tr class="empty-row"><td colspan="9">Cargando...</td></tr>
+          <tr class="empty-row"><td colspan="11">Cargando...</td></tr>
         </tbody>
       </table>
     </div>
@@ -294,49 +261,14 @@ let editingCell = null; // { id, field } — celda tipo pastilla actualmente en 
 let foliosCache = [];   // [{folio, cliente}] — vía getFoliosLigero, no carga pedidos completos
 
 /* ═══════════════════════════════════════════
-   LOGIN
+   INICIO — sin login: el acceso se controla entrando desde el botón
+   "🏭 Maquila" dentro de Compras en el Board, que ya requiere sesión ahí.
 ═══════════════════════════════════════════ */
-function initLogin() {
-  document.getElementById('btnLogin').onclick = attemptLogin;
-  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
-}
-
-async function attemptLogin() {
-  const pass = document.getElementById('loginPass').value.trim();
-  const errEl = document.getElementById('loginErr');
-  errEl.style.display = 'none';
-  if (!pass) { errEl.textContent = 'Ingresa la contraseña.'; errEl.style.display = 'block'; return; }
-
-  setLoading(true);
-  try {
-    const r = await fetch(`${API}?action=getPasswords&_tk=${API_TOKEN}`);
-    const d = await r.json();
-    setLoading(false);
-    if (!d.passwords) { errEl.textContent = 'Error al conectar. Intenta de nuevo.'; errEl.style.display = 'block'; return; }
-    const norm = s => String(s || '').trim().toLowerCase();
-    const areaKey = Object.keys(d.passwords).find(k => norm(k) === 'dirección' || norm(k) === 'direccion');
-    const pwd = areaKey ? String(d.passwords[areaKey]).trim() : undefined;
-    if (!pwd || pwd !== pass) { errEl.textContent = 'Contraseña incorrecta.'; errEl.style.display = 'block'; return; }
-    currentUser = { area: 'Dirección' };
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('appScreen').style.display = 'block';
-    document.getElementById('topbarUser').textContent = 'Dirección';
-    loadFoliosLigero();
-    loadMaquila();
-    iniciarChequeoVersion();
-  } catch(e) {
-    setLoading(false);
-    errEl.textContent = 'Error de conexión. Verifica tu red.';
-    errEl.style.display = 'block';
-  }
-}
-
-function logout() {
-  currentUser = null;
-  allMaquila = [];
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('appScreen').style.display = 'none';
-  document.getElementById('loginPass').value = '';
+function iniciarApp() {
+  currentUser = { area: 'Dirección' };
+  loadFoliosLigero();
+  loadMaquila();
+  iniciarChequeoVersion();
 }
 
 /* ═══════════════════════════════════════════
@@ -383,7 +315,7 @@ async function guardarCampo(id, field, value) {
 
 async function agregarEnvio() {
   const nuevo = {
-    folio_pedido: '', servicio: 'Rolado', proveedor: '', oc_alltansa: '',
+    folio_pedido: '', servicio: 'Rolado', proveedor: PROVEEDOR_DEFAULT['Rolado'], oc_alltansa: '',
     fecha_envio: todayStr(), fecha_recogido: '', factura: '', fecha_pago: '',
     modificado_por: 'Dirección'
   };
@@ -430,24 +362,44 @@ function updateCampoTexto(id, field, value) {
   guardarCampo(id, field, value);
 }
 
-// Busca folio en el catálogo ligero (getFoliosLigero) y regresa "Cliente — Modelo"
-// para mostrarlo debajo del campo de folio. No hace ninguna llamada al servidor
-// por tecla — usa el catálogo ya cargado en memoria (foliosCache).
-function infoFolioTexto(folio) {
-  if (!folio) return '';
-  const norm = s => String(s||'').trim().toLowerCase();
-  const match = foliosCache.find(f => norm(f.folio) === norm(folio));
-  if (!match) return '';
-  const partes = [match.cliente, match.modelo].filter(Boolean);
-  return partes.length ? partes.join(' — ') : '';
+// Proveedor por default según el tipo de servicio — la casilla sigue siendo
+// editable, esto solo precarga el valor más común para agilizar la captura.
+const PROVEEDOR_DEFAULT = {
+  'Rolado': 'PAILERIA RUIZ',
+  'Formado de tapas': 'SILSA',
+  'Otro': ''
+};
+
+function updateServicio(id, servicio) {
+  const item = allMaquila.find(m => String(m.id) === String(id));
+  if (!item) return;
+  const nuevoProveedor = PROVEEDOR_DEFAULT[servicio] !== undefined ? PROVEEDOR_DEFAULT[servicio] : (item.proveedor || '');
+  item.servicio = servicio;
+  item.proveedor = nuevoProveedor;
+  guardarCampo(id, 'servicio', servicio);
+  guardarCampo(id, 'proveedor', nuevoProveedor);
+  renderMaquilaList(); // cambio discreto (onchange, no tecla a tecla) — seguro re-renderizar aquí
 }
 
-// Actualiza SOLO el texto de cliente/modelo bajo el input, sin re-renderizar
+// Busca folio en el catálogo ligero (getFoliosLigero) y regresa {cliente, modelo}
+// para las columnas derivadas de la tabla. No hace ninguna llamada al servidor
+// por tecla — usa el catálogo ya cargado en memoria (foliosCache).
+function obtenerInfoFolio(folio) {
+  if (!folio) return { cliente: '', modelo: '' };
+  const norm = s => String(s||'').trim().toLowerCase();
+  const match = foliosCache.find(f => norm(f.folio) === norm(folio));
+  return match ? { cliente: match.cliente||'', modelo: match.modelo||'' } : { cliente: '', modelo: '' };
+}
+
+// Actualiza SOLO el texto de las columnas Cliente/Modelo, sin re-renderizar
 // la tabla — igual que el fix del bug de Cotización Express: reconstruir la
 // fila en cada tecla le quitaría el foco al campo de folio.
 function mostrarInfoFolio(id, value) {
-  const el = document.getElementById('folioInfo_' + id);
-  if (el) el.textContent = infoFolioTexto(value);
+  const info = obtenerInfoFolio(value);
+  const elC = document.getElementById('clienteCell_' + id);
+  const elM = document.getElementById('modeloCell_' + id);
+  if (elC) elC.textContent = info.cliente;
+  if (elM) elM.textContent = info.modelo;
 }
 
 function abrirEdicionPastilla(id, field) {
@@ -482,19 +434,21 @@ function renderMaquilaList() {
   actualizarResumen();
 
   if (!items.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="9">${allMaquila.length ? 'Sin resultados para tu búsqueda' : 'Sin envíos registrados — usa "＋ Agregar envío"'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="11">${allMaquila.length ? 'Sin resultados para tu búsqueda' : 'Sin envíos registrados — usa "＋ Agregar envío"'}</td></tr>`;
     return;
   }
 
   tbody.innerHTML = items.map(m => {
     const dias = diasSinRegreso(m);
     const alerta = !m.fecha_recogido && dias !== null && dias > DIAS_ALERTA_SIN_REGRESAR;
+    const info = obtenerInfoFolio(m.folio_pedido);
     return `<tr class="${alerta ? 'row-alert' : ''}">
       <td><input class="cell-input" list="foliosDatalist" value="${escHtml(m.folio_pedido||'')}" placeholder="A-YYMM-##"
           oninput="mostrarInfoFolio('${m.id}',this.value)"
-          onchange="updateCampoTexto('${m.id}','folio_pedido',this.value)"/>
-          <div class="folio-info" id="folioInfo_${m.id}">${infoFolioTexto(m.folio_pedido)}</div></td>
-      <td><select class="cell-input" onchange="updateCampoTexto('${m.id}','servicio',this.value)">
+          onchange="updateCampoTexto('${m.id}','folio_pedido',this.value)"/></td>
+      <td><span class="col-derivada" id="clienteCell_${m.id}">${escHtml(info.cliente)}</span></td>
+      <td><span class="col-derivada" id="modeloCell_${m.id}">${escHtml(info.modelo)}</span></td>
+      <td><select class="cell-input" onchange="updateServicio('${m.id}',this.value)">
         ${SERVICIOS.map(s => `<option value="${s}" ${m.servicio===s?'selected':''}>${s}</option>`).join('')}
       </select></td>
       <td><input class="cell-input" value="${escHtml(m.proveedor||'')}" placeholder="Proveedor"
@@ -606,7 +560,7 @@ function setLoading(v) {
    CHEQUEO DE VERSIÓN — version.json comparte llaves con
    index.html / cotizaciones.html; este módulo usa la llave "maquila".
 ═══════════════════════════════════════════ */
-const APP_VERSION = '2026-08-07-1800';
+const APP_VERSION = '2026-08-07-1900';
 let _versionCheckTimer = null;
 
 function _mostrarTagVersion(){
@@ -650,7 +604,7 @@ function iniciarChequeoVersion(){
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  initLogin();
+  iniciarApp();
 });
 </script>
 </body>
