@@ -44,7 +44,7 @@
 
   /* ── MAIN LAYOUT ── */
   #appScreen { display: block; }
-  .main-wrap { max-width: 1400px; margin: 0 auto; padding: 18px 16px 40px; }
+  .main-wrap { max-width: 100%; margin: 0 auto; padding: 18px 20px 40px; }
 
   /* ── SUMMARY ── */
   .summary-row { display: flex; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -76,54 +76,66 @@
 
   /* ── TABLE ── */
   .table-wrap {
-    overflow-x: auto; border-radius: 10px; box-shadow: var(--shadow);
+    overflow-x: hidden; border-radius: 10px; box-shadow: var(--shadow);
     max-height: calc(100vh - 300px); overflow-y: auto; background: var(--white);
   }
-  table { width: 100%; border-collapse: collapse; background: var(--white); font-size: 13px; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; background: var(--white); font-size: 12.5px; }
   thead th {
-    background: var(--navy); color: #fff; padding: 9px 8px;
+    background: var(--navy); color: #fff; padding: 8px 6px;
     text-align: left; font-weight: 600; white-space: nowrap;
-    position: sticky; top: 0; z-index: 2;
+    position: sticky; top: 0; z-index: 2; overflow: hidden; text-overflow: ellipsis;
   }
   tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
   tbody tr:hover { background: #f0f4ff; }
   tbody tr.row-alert { background: #fdeeec; }
   tbody tr.row-alert:hover { background: #fbe1de; }
-  tbody td { padding: 6px 8px; vertical-align: middle; }
+  tbody td { padding: 5px 6px; vertical-align: middle; overflow: hidden; }
   .empty-row td { text-align: center; color: var(--muted); padding: 32px; font-style: italic; }
 
   .cell-input {
-    width: 100%; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px;
-    font-size: 13px; font-family: inherit; outline: none; background: #fff;
+    width: 100%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12.5px; font-family: inherit; outline: none; background: #fff;
   }
   .cell-input:focus { border-color: var(--navy); }
-  input.cell-input[type="date"] { min-width: 118px; }
-  .col-folio    { min-width: 130px; }
-  .col-cliente  { min-width: 140px; }
-  .col-modelo   { min-width: 160px; }
+  /* Anchos por porcentaje — suman 100%, así la tabla nunca necesita scroll
+     horizontal sin importar el ancho de pantalla; el texto largo se trunca
+     con "..." (Modelo, con tooltip) o se ajusta en varias líneas (Comentarios). */
+  .col-folio     { width: 8%; }
+  .col-cliente   { width: 8%; }
+  .col-modelo    { width: 11%; }
+  .col-servicio  { width: 9%; }
+  .col-proveedor { width: 8%; }
+  .col-oc        { width: 6%; }
+  .col-fecha     { width: 7%; }
+  .col-factura   { width: 7%; }
+  .col-comentarios { width: 15%; }
+  .col-del       { width: 3%; text-align: center; }
+
   .col-derivada {
-    display: block; font-size: 12.5px; color: var(--text); padding: 5px 4px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+    display: block; font-size: 12px; color: var(--text); padding: 4px 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .col-derivada:empty::before { content: '–'; color: var(--muted); }
-  .col-servicio { min-width: 140px; }
-  .col-proveedor{ min-width: 120px; }
-  .col-oc       { min-width: 100px; }
-  .col-fecha    { min-width: 128px; }
-  .col-factura  { min-width: 130px; }
-  .col-del      { width: 40px; text-align: center; }
+
+  .cell-textarea {
+    width: 100%; min-height: 30px; max-height: 70px; resize: vertical;
+    padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12px; font-family: inherit; outline: none; background: #fff;
+    white-space: normal; overflow-wrap: break-word;
+  }
+  .cell-textarea:focus { border-color: var(--navy); }
 
   /* Pastillas de estatus (Recogido / Factura / Pago) */
   .pill {
-    display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px;
-    border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px;
+    border-radius: 20px; font-size: 11.5px; font-weight: 700; cursor: pointer;
     white-space: nowrap; border: 1px solid transparent; width: 100%; justify-content: center;
+    overflow: hidden; text-overflow: ellipsis;
   }
   .pill-ok { background: #e8f5e9; color: var(--green); border-color: #b6e0bb; }
   .pill-ok:hover { background: #d9f0db; }
   .pill-pendiente { background: #fff3e6; color: var(--orange); border-color: #ffd9ad; }
   .pill-pendiente:hover { background: #ffe9d1; }
-  .pill-envio { background: #e8ecf7; color: var(--navy); border-color: #ccd4ec; cursor: default; }
 
   .alert-badge {
     display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700;
@@ -194,6 +206,10 @@
         <div class="sl">Envíos totales</div>
       </div>
       <div class="summary-card orange">
+        <div class="sv" id="sumSinEnviar">0</div>
+        <div class="sl">Sin enviar</div>
+      </div>
+      <div class="summary-card orange">
         <div class="sv" id="sumSinRegresar">0</div>
         <div class="sl">Sin regresar</div>
       </div>
@@ -210,7 +226,7 @@
     <!-- TOOLBAR -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <input type="text" class="search-input" id="buscador" placeholder="🔍 Buscar por folio, proveedor, OC, servicio o factura..." oninput="renderMaquilaList()"/>
+        <input type="text" class="search-input" id="buscador" placeholder="🔍 Buscar por folio, cliente, proveedor, OC, factura o comentario..." oninput="renderMaquilaList()"/>
       </div>
       <div class="toolbar-right">
         <button class="btn btn-primary" onclick="agregarEnvio()">＋ Agregar envío</button>
@@ -232,11 +248,12 @@
             <th class="col-fecha">Recogido</th>
             <th class="col-factura">Factura</th>
             <th class="col-fecha">Pago</th>
+            <th class="col-comentarios">Comentarios</th>
             <th class="col-del"></th>
           </tr>
         </thead>
         <tbody id="maquilaTbody">
-          <tr class="empty-row"><td colspan="11">Cargando...</td></tr>
+          <tr class="empty-row"><td colspan="12">Cargando...</td></tr>
         </tbody>
       </table>
     </div>
@@ -316,7 +333,7 @@ async function guardarCampo(id, field, value) {
 async function agregarEnvio() {
   const nuevo = {
     folio_pedido: '', servicio: 'Rolado', proveedor: PROVEEDOR_DEFAULT['Rolado'], oc_alltansa: '',
-    fecha_envio: todayStr(), fecha_recogido: '', factura: '', fecha_pago: '',
+    fecha_envio: '', fecha_recogido: '', factura: '', fecha_pago: '',
     modificado_por: 'Dirección'
   };
   setLoading(true);
@@ -422,19 +439,23 @@ function renderMaquilaList() {
 
   let items = allMaquila.slice();
   if (q) {
-    items = items.filter(m =>
-      String(m.folio_pedido||'').toLowerCase().includes(q) ||
+    items = items.filter(m => {
+      const info = obtenerInfoFolio(m.folio_pedido);
+      return String(m.folio_pedido||'').toLowerCase().includes(q) ||
+      String(info.cliente||'').toLowerCase().includes(q) ||
+      String(info.modelo||'').toLowerCase().includes(q) ||
       String(m.servicio||'').toLowerCase().includes(q) ||
       String(m.proveedor||'').toLowerCase().includes(q) ||
       String(m.oc_alltansa||'').toLowerCase().includes(q) ||
-      String(m.factura||'').toLowerCase().includes(q)
-    );
+      String(m.factura||'').toLowerCase().includes(q) ||
+      String(m.comentarios||'').toLowerCase().includes(q);
+    });
   }
 
   actualizarResumen();
 
   if (!items.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="11">${allMaquila.length ? 'Sin resultados para tu búsqueda' : 'Sin envíos registrados — usa "＋ Agregar envío"'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">${allMaquila.length ? 'Sin resultados para tu búsqueda' : 'Sin envíos registrados — usa "＋ Agregar envío"'}</td></tr>`;
     return;
   }
 
@@ -446,8 +467,8 @@ function renderMaquilaList() {
       <td><input class="cell-input" list="foliosDatalist" value="${escHtml(m.folio_pedido||'')}" placeholder="A-YYMM-##"
           oninput="mostrarInfoFolio('${m.id}',this.value)"
           onchange="updateCampoTexto('${m.id}','folio_pedido',this.value)"/></td>
-      <td><span class="col-derivada" id="clienteCell_${m.id}">${escHtml(info.cliente)}</span></td>
-      <td><span class="col-derivada" id="modeloCell_${m.id}">${escHtml(info.modelo)}</span></td>
+      <td><span class="col-derivada" id="clienteCell_${m.id}" title="${escHtml(info.cliente)}">${escHtml(info.cliente)}</span></td>
+      <td><span class="col-derivada" id="modeloCell_${m.id}" title="${escHtml(info.modelo)}">${escHtml(info.modelo)}</span></td>
       <td><select class="cell-input" onchange="updateServicio('${m.id}',this.value)">
         ${SERVICIOS.map(s => `<option value="${s}" ${m.servicio===s?'selected':''}>${s}</option>`).join('')}
       </select></td>
@@ -455,10 +476,12 @@ function renderMaquilaList() {
           onchange="updateCampoTexto('${m.id}','proveedor',this.value)"/></td>
       <td><input class="cell-input" value="${escHtml(m.oc_alltansa||'')}" placeholder="OC"
           onchange="updateCampoTexto('${m.id}','oc_alltansa',this.value)"/></td>
-      <td>${celdaFecha(m, 'fecha_envio', false)}</td>
-      <td>${celdaFecha(m, 'fecha_recogido', true)}${alerta ? `<span class="alert-badge">⚠ ${dias}d</span>` : ''}</td>
+      <td>${celdaFecha(m, 'fecha_envio')}</td>
+      <td>${celdaFecha(m, 'fecha_recogido')}${alerta ? `<span class="alert-badge">⚠ ${dias}d</span>` : ''}</td>
       <td>${celdaFactura(m)}</td>
-      <td>${celdaFecha(m, 'fecha_pago', true)}</td>
+      <td>${celdaFecha(m, 'fecha_pago')}</td>
+      <td><textarea class="cell-textarea" placeholder="Ej. Proveedor pide anticipo / entrega con material incluido..."
+          onchange="updateCampoTexto('${m.id}','comentarios',this.value)">${escHtml(m.comentarios||'')}</textarea></td>
       <td class="col-del"><button class="btn-icon" title="Eliminar" onclick="eliminarEnvio('${m.id}')">🗑️</button></td>
     </tr>`;
   }).join('');
@@ -469,7 +492,7 @@ function renderMaquilaList() {
 // Al hacer clic se convierte en un <input type="date"> real para capturar
 // o corregir la fecha. `esOpcional` distingue Recogido/Pago (pueden estar
 // pendientes) de Enviado (siempre tiene valor, se ve en azul/navy).
-function celdaFecha(m, field, esOpcional) {
+function celdaFecha(m, field) {
   const val = m[field] || '';
   const enEdicion = editingCell && String(editingCell.id) === String(m.id) && editingCell.field === field;
   if (enEdicion) {
@@ -477,11 +500,10 @@ function celdaFecha(m, field, esOpcional) {
       onchange="guardarPastilla('${m.id}','${field}',this.value)"
       onblur="if(editingCell && editingCell.id=='${m.id}' && editingCell.field=='${field}'){editingCell=null;renderMaquilaList();}"/>`;
   }
-  if (!val && esOpcional) {
+  if (!val) {
     return `<div class="pill pill-pendiente" onclick="abrirEdicionPastilla('${m.id}','${field}')">PENDIENTE</div>`;
   }
-  const clase = esOpcional ? 'pill-ok' : 'pill-envio';
-  return `<div class="pill ${clase}" onclick="abrirEdicionPastilla('${m.id}','${field}')">${fmtFechaCorta(val)}</div>`;
+  return `<div class="pill pill-ok" onclick="abrirEdicionPastilla('${m.id}','${field}')">${fmtFechaCorta(val)}</div>`;
 }
 
 function celdaFactura(m) {
@@ -500,13 +522,15 @@ function celdaFactura(m) {
 
 function actualizarResumen() {
   const total = allMaquila.length;
-  const sinRegresar = allMaquila.filter(m => !m.fecha_recogido).length;
+  const sinEnviar = allMaquila.filter(m => !m.fecha_envio).length;
+  const sinRegresar = allMaquila.filter(m => m.fecha_envio && !m.fecha_recogido).length;
   const alerta = allMaquila.filter(m => {
     const d = diasSinRegreso(m);
     return !m.fecha_recogido && d !== null && d > DIAS_ALERTA_SIN_REGRESAR;
   }).length;
   const sinPagar = allMaquila.filter(m => !m.fecha_pago).length;
   document.getElementById('sumTotal').textContent = total;
+  document.getElementById('sumSinEnviar').textContent = sinEnviar;
   document.getElementById('sumSinRegresar').textContent = sinRegresar;
   document.getElementById('sumAlerta').textContent = alerta;
   document.getElementById('sumSinPagar').textContent = sinPagar;
@@ -560,7 +584,7 @@ function setLoading(v) {
    CHEQUEO DE VERSIÓN — version.json comparte llaves con
    index.html / cotizaciones.html; este módulo usa la llave "maquila".
 ═══════════════════════════════════════════ */
-const APP_VERSION = '2026-08-07-1900';
+const APP_VERSION = '2026-08-07-2000';
 let _versionCheckTimer = null;
 
 function _mostrarTagVersion(){
