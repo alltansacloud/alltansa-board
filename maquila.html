@@ -452,6 +452,11 @@ function renderMaquilaList() {
     });
   }
 
+  // Orden descendente por folio (más recientes primero). Al comparar por la
+  // MISMA llave, todas las filas de un folio repetido (ej. un pedido con
+  // Rolado Y Formado de tapas) quedan una junto a la otra automáticamente.
+  items.sort((a, b) => compareFolioDesc(a.folio_pedido, b.folio_pedido));
+
   actualizarResumen();
 
   if (!items.length) {
@@ -539,6 +544,23 @@ function actualizarResumen() {
 /* ═══════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════ */
+// Ordena folios tipo "A-2607-39" o "STK-2608-02" de forma numérica real
+// (año-mes y consecutivo), no como texto plano — así "A-2608-02" queda
+// arriba de "A-2607-39" y no al revés como saldría con orden alfabético.
+function compareFolioDesc(folioA, folioB) {
+  const parse = f => {
+    const m = String(f||'').match(/^([A-Za-z]+)-(\d+)-(\d+)$/);
+    return m ? { anioMes: parseInt(m[2],10), consecutivo: parseInt(m[3],10) } : null;
+  };
+  const pa = parse(folioA), pb = parse(folioB);
+  if (pa && pb) {
+    if (pa.anioMes !== pb.anioMes) return pb.anioMes - pa.anioMes;
+    return pb.consecutivo - pa.consecutivo;
+  }
+  // Folio con formato distinto o vacío — respaldo por texto descendente
+  return String(folioB||'').localeCompare(String(folioA||''));
+}
+
 // Fecha local (no UTC) — mismo criterio que today() en apps_script.js
 function todayStr() {
   const d = new Date();
@@ -584,7 +606,7 @@ function setLoading(v) {
    CHEQUEO DE VERSIÓN — version.json comparte llaves con
    index.html / cotizaciones.html; este módulo usa la llave "maquila".
 ═══════════════════════════════════════════ */
-const APP_VERSION = '2026-08-07-2000';
+const APP_VERSION = '2026-08-07-2100';
 let _versionCheckTimer = null;
 
 function _mostrarTagVersion(){
