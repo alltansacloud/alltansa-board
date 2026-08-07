@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ALLTANSA – Maquila</title>
+<style>
+  :root {
+    --navy:   #1B2A4A;
+    --red:    #C0391B;
+    --light:  #F4F6FA;
+    --white:  #FFFFFF;
+    --border: #D0D7E3;
+    --text:   #1a1a2e;
+    --muted:  #6c757d;
+    --green:  #198754;
+    --yellow: #ffc107;
+    --orange: #fd7e14;
+    --blue:   #0d6efd;
+    --shadow: 0 2px 8px rgba(0,0,0,.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--light); color: var(--text); font-size: 14px; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    background: var(--navy); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px; height: 54px; position: sticky; top: 0; z-index: 100;
+    box-shadow: var(--shadow);
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar-logo { height: 34px; }
+  .topbar-title { font-size: 15px; font-weight: 700; letter-spacing: .4px; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+  .btn-topbar {
+    background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.25);
+    color: #fff; padding: 5px 13px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: background .2s;
+  }
+  .btn-topbar:hover { background: rgba(255,255,255,.22); }
+  .btn-topbar.danger { background: rgba(192,57,27,.35); border-color: rgba(192,57,27,.5); }
+  .topbar-user { font-size: 12px; opacity: .75; }
+
+  /* ── LOGIN ── */
+  #loginScreen {
+    position: fixed; inset: 0; background: var(--navy);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+  }
+  .login-box {
+    background: #fff; border-radius: 14px; padding: 38px 44px;
+    width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,.25); text-align: center;
+  }
+  .login-box img { height: 48px; margin-bottom: 18px; }
+  .login-box h2 { font-size: 17px; color: var(--navy); margin-bottom: 6px; }
+  .login-box p { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
+  .login-box input {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+    border-radius: 7px; font-size: 14px; margin-bottom: 12px; outline: none;
+  }
+  .login-box input:focus { border-color: var(--navy); }
+  .btn-login {
+    width: 100%; background: var(--navy); color: #fff; border: none;
+    padding: 10px; border-radius: 7px; font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: background .2s;
+  }
+  .btn-login:hover { background: #243a63; }
+  .login-err { color: var(--red); font-size: 12px; margin-top: 6px; display: none; }
+
+  /* ── MAIN LAYOUT ── */
+  #appScreen { display: none; }
+  .main-wrap { max-width: 1400px; margin: 0 auto; padding: 18px 16px 40px; }
+
+  /* ── SUMMARY ── */
+  .summary-row { display: flex; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+  .summary-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 18px; text-align:center; min-width:120px; box-shadow: var(--shadow); border-top: 4px solid var(--navy); }
+  .summary-card.orange { border-top-color: var(--orange); }
+  .summary-card.red    { border-top-color: var(--red); }
+  .summary-card .sv { font-size:24px; font-weight:800; color:var(--navy); line-height:1; }
+  .summary-card .sl { font-size:11px; color:var(--muted); margin-top:4px; text-transform: uppercase; letter-spacing: .4px; }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px;
+    margin-bottom: 14px; overflow-x: auto; padding-bottom: 2px;
+  }
+  .toolbar-left  { display: flex; gap: 8px; flex-wrap: nowrap; flex: 1; min-width: 0; }
+  .toolbar-right { display: flex; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; }
+  .search-input {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13px; width: 260px; min-width: 140px; flex-shrink: 1; outline: none;
+  }
+  .search-input:focus { border-color: var(--navy); }
+  .btn {
+    padding: 7px 16px; border-radius: 7px; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: opacity .2s; white-space: nowrap;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-outline { background: #fff; color: var(--navy); border: 1px solid var(--navy); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    overflow-x: auto; border-radius: 10px; box-shadow: var(--shadow);
+    max-height: calc(100vh - 300px); overflow-y: auto; background: var(--white);
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--white); font-size: 13px; }
+  thead th {
+    background: var(--navy); color: #fff; padding: 9px 8px;
+    text-align: left; font-weight: 600; white-space: nowrap;
+    position: sticky; top: 0; z-index: 2;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+  tbody tr:hover { background: #f0f4ff; }
+  tbody tr.row-alert { background: #fdeeec; }
+  tbody tr.row-alert:hover { background: #fbe1de; }
+  tbody td { padding: 6px 8px; vertical-align: middle; }
+  .empty-row td { text-align: center; color: var(--muted); padding: 32px; font-style: italic; }
+
+  .cell-input {
+    width: 100%; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; font-family: inherit; outline: none; background: #fff;
+  }
+  .cell-input:focus { border-color: var(--navy); }
+  input.cell-input[type="date"] { min-width: 118px; }
+  .col-folio    { min-width: 130px; }
+  .col-servicio { min-width: 140px; }
+  .col-proveedor{ min-width: 120px; }
+  .col-oc       { min-width: 100px; }
+  .col-fecha    { min-width: 128px; }
+  .col-factura  { min-width: 130px; }
+  .col-del      { width: 40px; text-align: center; }
+
+  /* Pastillas de estatus (Recogido / Factura / Pago) */
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px;
+    border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer;
+    white-space: nowrap; border: 1px solid transparent; width: 100%; justify-content: center;
+  }
+  .pill-ok { background: #e8f5e9; color: var(--green); border-color: #b6e0bb; }
+  .pill-ok:hover { background: #d9f0db; }
+  .pill-pendiente { background: #fff3e6; color: var(--orange); border-color: #ffd9ad; }
+  .pill-pendiente:hover { background: #ffe9d1; }
+  .pill-envio { background: #e8ecf7; color: var(--navy); border-color: #ccd4ec; cursor: default; }
+
+  .alert-badge {
+    display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700;
+    color: var(--red); background: #fdeeec; border: 1px solid #f3c8c2;
+    border-radius: 10px; padding: 1px 7px; white-space: nowrap;
+  }
+
+  .btn-icon { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 5px; border-radius: 4px; }
+  .btn-icon:hover { background: #e9ecef; }
+
+  /* Loading */
+  .loading-overlay {
+    position: fixed; inset: 0; background: rgba(255,255,255,.7);
+    display: flex; align-items: center; justify-content: center; z-index: 9000;
+  }
+  .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--navy); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--navy); color: #fff; padding: 10px 22px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; z-index: 9999; opacity: 0;
+    transition: opacity .3s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #toast.error { background: var(--red); }
+  #toast.success { background: var(--green); }
+
+  @media(max-width:600px){
+    .topbar-title { font-size: 13px; }
+    tbody td, thead th { padding: 6px 6px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay" style="display:none">
+  <div class="spinner"></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <img id="loginLogo" src="logo.png" alt="ALLTANSA" onerror="this.style.display='none'"/>
+    <h2>Control de Maquila</h2>
+    <p>Acceso de Dirección</p>
+    <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password"/>
+    <button class="btn-login" id="btnLogin">Entrar</button>
+    <div class="login-err" id="loginErr">Contraseña incorrecta.</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <img class="topbar-logo" src="logo.png" alt="ALLTANSA" onerror="this.style.display='none'"/>
+      <span class="topbar-title">Control de Maquila</span>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-user" id="topbarUser"></span>
+      <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/','_self')">Board Principal</button>
+      <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/cotizaciones.html','_blank')">Cotizaciones</button>
+      <button class="btn-topbar danger" onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="main-wrap">
+
+    <!-- RESUMEN -->
+    <div class="summary-row">
+      <div class="summary-card">
+        <div class="sv" id="sumTotal">0</div>
+        <div class="sl">Envíos totales</div>
+      </div>
+      <div class="summary-card orange">
+        <div class="sv" id="sumSinRegresar">0</div>
+        <div class="sl">Sin regresar</div>
+      </div>
+      <div class="summary-card red">
+        <div class="sv" id="sumAlerta">0</div>
+        <div class="sl">+10 días sin regresar</div>
+      </div>
+      <div class="summary-card orange">
+        <div class="sv" id="sumSinPagar">0</div>
+        <div class="sl">Servicios sin pagar</div>
+      </div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <input type="text" class="search-input" id="buscador" placeholder="🔍 Buscar por folio, proveedor, OC, servicio o factura..." oninput="renderMaquilaList()"/>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-primary" onclick="agregarEnvio()">＋ Agregar envío</button>
+      </div>
+    </div>
+
+    <!-- TABLA -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-folio">Folio ALLTANSA</th>
+            <th class="col-servicio">Servicio</th>
+            <th class="col-proveedor">Proveedor</th>
+            <th class="col-oc">OC ALLTANSA</th>
+            <th class="col-fecha">Enviado</th>
+            <th class="col-fecha">Recogido</th>
+            <th class="col-factura">Factura</th>
+            <th class="col-fecha">Pago</th>
+            <th class="col-del"></th>
+          </tr>
+        </thead>
+        <tbody id="maquilaTbody">
+          <tr class="empty-row"><td colspan="9">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<datalist id="foliosDatalist"></datalist>
+
+<script>
+/* ═══════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════ */
+const API = 'https://script.google.com/macros/s/AKfycbxFGplnK4-63imhYKIjfDsrlblmp1d-FU1BPzdA0LtImKaRjdEqYal32CBrVmJ4GGE3uw/exec';
+const API_TOKEN = 'segurid@d-ALLTANSA';
+const DIAS_ALERTA_SIN_REGRESAR = 10;
+const SERVICIOS = ['Rolado', 'Formado de tapas', 'Otro'];
+
+let currentUser = null;
+let allMaquila = [];
+let editingCell = null; // { id, field } — celda tipo pastilla actualmente en edición
+let foliosCache = [];   // [{folio, cliente}] — vía getFoliosLigero, no carga pedidos completos
+
+/* ═══════════════════════════════════════════
+   LOGIN
+═══════════════════════════════════════════ */
+function initLogin() {
+  document.getElementById('btnLogin').onclick = attemptLogin;
+  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
+}
+
+async function attemptLogin() {
+  const pass = document.getElementById('loginPass').value.trim();
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+  if (!pass) { errEl.textContent = 'Ingresa la contraseña.'; errEl.style.display = 'block'; return; }
+
+  setLoading(true);
+  try {
+    const r = await fetch(`${API}?action=getPasswords&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    setLoading(false);
+    if (!d.passwords) { errEl.textContent = 'Error al conectar. Intenta de nuevo.'; errEl.style.display = 'block'; return; }
+    const norm = s => String(s || '').trim().toLowerCase();
+    const areaKey = Object.keys(d.passwords).find(k => norm(k) === 'dirección' || norm(k) === 'direccion');
+    const pwd = areaKey ? String(d.passwords[areaKey]).trim() : undefined;
+    if (!pwd || pwd !== pass) { errEl.textContent = 'Contraseña incorrecta.'; errEl.style.display = 'block'; return; }
+    currentUser = { area: 'Dirección' };
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    document.getElementById('topbarUser').textContent = 'Dirección';
+    loadFoliosLigero();
+    loadMaquila();
+    iniciarChequeoVersion();
+  } catch(e) {
+    setLoading(false);
+    errEl.textContent = 'Error de conexión. Verifica tu red.';
+    errEl.style.display = 'block';
+  }
+}
+
+function logout() {
+  currentUser = null;
+  allMaquila = [];
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('loginPass').value = '';
+}
+
+/* ═══════════════════════════════════════════
+   DATA
+═══════════════════════════════════════════ */
+async function loadFoliosLigero() {
+  try {
+    const r = await fetch(`${API}?action=getFoliosLigero&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    foliosCache = d.folios || [];
+    const dl = document.getElementById('foliosDatalist');
+    dl.innerHTML = foliosCache.map(f => `<option value="${escHtml(f.folio)}">${escHtml(f.folio)} — ${escHtml(f.cliente||'')}</option>`).join('');
+  } catch(e) { /* si falla, el folio sigue siendo editable como texto libre */ }
+}
+
+async function loadMaquila() {
+  setLoading(true);
+  try {
+    const r = await fetch(`${API}?action=getMaquila&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    allMaquila = d.items || [];
+    setLoading(false);
+    renderMaquilaList();
+  } catch(e) {
+    setLoading(false);
+    showToast('Error al cargar los envíos.', 'error');
+  }
+}
+
+async function guardarCampo(id, field, value) {
+  const item = allMaquila.find(m => String(m.id) === String(id));
+  if (!item) return;
+  item[field] = value;
+  try {
+    const body = new FormData();
+    body.append('action', 'saveMaquila');
+    body.append('data', JSON.stringify({ id, [field]: value }));
+    body.append('_tk', API_TOKEN);
+    await fetch(API, { method: 'POST', body });
+  } catch(e) {
+    showToast('No se pudo guardar el cambio. Intenta de nuevo.', 'error');
+  }
+}
+
+async function agregarEnvio() {
+  const nuevo = {
+    folio_pedido: '', servicio: 'Rolado', proveedor: '', oc_alltansa: '',
+    fecha_envio: todayStr(), fecha_recogido: '', factura: '', fecha_pago: '',
+    modificado_por: 'Dirección'
+  };
+  setLoading(true);
+  try {
+    const body = new FormData();
+    body.append('action', 'saveMaquila');
+    body.append('data', JSON.stringify(nuevo));
+    body.append('_tk', API_TOKEN);
+    const r = await fetch(API, { method: 'POST', body });
+    const d = await r.json();
+    setLoading(false);
+    if (!d.success) { showToast('No se pudo crear el envío.', 'error'); return; }
+    nuevo.id = d.id;
+    allMaquila.unshift(nuevo);
+    renderMaquilaList();
+  } catch(e) {
+    setLoading(false);
+    showToast('Error de conexión al crear el envío.', 'error');
+  }
+}
+
+async function eliminarEnvio(id) {
+  if (!confirm('¿Eliminar este registro de maquila? No se puede deshacer.')) return;
+  setLoading(true);
+  try {
+    const r = await fetch(`${API}?action=deleteMaquila&id=${encodeURIComponent(id)}&_tk=${API_TOKEN}`);
+    const d = await r.json();
+    setLoading(false);
+    if (d.error) { showToast(d.error, 'error'); return; }
+    allMaquila = allMaquila.filter(m => String(m.id) !== String(id));
+    renderMaquilaList();
+    showToast('Registro eliminado.', 'success');
+  } catch(e) {
+    setLoading(false);
+    showToast('Error de conexión al eliminar.', 'error');
+  }
+}
+
+/* ═══════════════════════════════════════════
+   EDICIÓN INLINE
+═══════════════════════════════════════════ */
+function updateCampoTexto(id, field, value) {
+  guardarCampo(id, field, value);
+}
+
+function abrirEdicionPastilla(id, field) {
+  editingCell = { id, field };
+  renderMaquilaList();
+}
+
+function guardarPastilla(id, field, value) {
+  editingCell = null;
+  guardarCampo(id, field, value);
+  renderMaquilaList();
+}
+
+/* ═══════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════ */
+function renderMaquilaList() {
+  const tbody = document.getElementById('maquilaTbody');
+  const q = (document.getElementById('buscador').value || '').trim().toLowerCase();
+
+  let items = allMaquila.slice();
+  if (q) {
+    items = items.filter(m =>
+      String(m.folio_pedido||'').toLowerCase().includes(q) ||
+      String(m.servicio||'').toLowerCase().includes(q) ||
+      String(m.proveedor||'').toLowerCase().includes(q) ||
+      String(m.oc_alltansa||'').toLowerCase().includes(q) ||
+      String(m.factura||'').toLowerCase().includes(q)
+    );
+  }
+
+  actualizarResumen();
+
+  if (!items.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="9">${allMaquila.length ? 'Sin resultados para tu búsqueda' : 'Sin envíos registrados — usa "＋ Agregar envío"'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map(m => {
+    const dias = diasSinRegreso(m);
+    const alerta = !m.fecha_recogido && dias !== null && dias > DIAS_ALERTA_SIN_REGRESAR;
+    return `<tr class="${alerta ? 'row-alert' : ''}">
+      <td><input class="cell-input" list="foliosDatalist" value="${escHtml(m.folio_pedido||'')}" placeholder="A-YYMM-##"
+          onchange="updateCampoTexto('${m.id}','folio_pedido',this.value)"/></td>
+      <td><select class="cell-input" onchange="updateCampoTexto('${m.id}','servicio',this.value)">
+        ${SERVICIOS.map(s => `<option value="${s}" ${m.servicio===s?'selected':''}>${s}</option>`).join('')}
+      </select></td>
+      <td><input class="cell-input" value="${escHtml(m.proveedor||'')}" placeholder="Proveedor"
+          onchange="updateCampoTexto('${m.id}','proveedor',this.value)"/></td>
+      <td><input class="cell-input" value="${escHtml(m.oc_alltansa||'')}" placeholder="OC"
+          onchange="updateCampoTexto('${m.id}','oc_alltansa',this.value)"/></td>
+      <td>${celdaFecha(m, 'fecha_envio', false)}</td>
+      <td>${celdaFecha(m, 'fecha_recogido', true)}${alerta ? `<span class="alert-badge">⚠ ${dias}d</span>` : ''}</td>
+      <td>${celdaFactura(m)}</td>
+      <td>${celdaFecha(m, 'fecha_pago', true)}</td>
+      <td class="col-del"><button class="btn-icon" title="Eliminar" onclick="eliminarEnvio('${m.id}')">🗑️</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// Celda de fecha: si tiene valor se muestra en verde (pastilla) con la fecha
+// formateada; si está pendiente se muestra la pastilla naranja "PENDIENTE".
+// Al hacer clic se convierte en un <input type="date"> real para capturar
+// o corregir la fecha. `esOpcional` distingue Recogido/Pago (pueden estar
+// pendientes) de Enviado (siempre tiene valor, se ve en azul/navy).
+function celdaFecha(m, field, esOpcional) {
+  const val = m[field] || '';
+  const enEdicion = editingCell && String(editingCell.id) === String(m.id) && editingCell.field === field;
+  if (enEdicion) {
+    return `<input type="date" class="cell-input" value="${val}" autofocus
+      onchange="guardarPastilla('${m.id}','${field}',this.value)"
+      onblur="if(editingCell && editingCell.id=='${m.id}' && editingCell.field=='${field}'){editingCell=null;renderMaquilaList();}"/>`;
+  }
+  if (!val && esOpcional) {
+    return `<div class="pill pill-pendiente" onclick="abrirEdicionPastilla('${m.id}','${field}')">PENDIENTE</div>`;
+  }
+  const clase = esOpcional ? 'pill-ok' : 'pill-envio';
+  return `<div class="pill ${clase}" onclick="abrirEdicionPastilla('${m.id}','${field}')">${fmtFechaCorta(val)}</div>`;
+}
+
+function celdaFactura(m) {
+  const val = m.factura || '';
+  const enEdicion = editingCell && String(editingCell.id) === String(m.id) && editingCell.field === 'factura';
+  if (enEdicion) {
+    return `<input type="text" class="cell-input" value="${escHtml(val)}" placeholder="Núm. factura" autofocus
+      onchange="guardarPastilla('${m.id}','factura',this.value)"
+      onblur="if(editingCell && editingCell.id=='${m.id}' && editingCell.field=='factura'){editingCell=null;renderMaquilaList();}"/>`;
+  }
+  if (!val) {
+    return `<div class="pill pill-pendiente" onclick="abrirEdicionPastilla('${m.id}','factura')">PENDIENTE</div>`;
+  }
+  return `<div class="pill pill-ok" onclick="abrirEdicionPastilla('${m.id}','factura')">${escHtml(val)}</div>`;
+}
+
+function actualizarResumen() {
+  const total = allMaquila.length;
+  const sinRegresar = allMaquila.filter(m => !m.fecha_recogido).length;
+  const alerta = allMaquila.filter(m => {
+    const d = diasSinRegreso(m);
+    return !m.fecha_recogido && d !== null && d > DIAS_ALERTA_SIN_REGRESAR;
+  }).length;
+  const sinPagar = allMaquila.filter(m => !m.fecha_pago).length;
+  document.getElementById('sumTotal').textContent = total;
+  document.getElementById('sumSinRegresar').textContent = sinRegresar;
+  document.getElementById('sumAlerta').textContent = alerta;
+  document.getElementById('sumSinPagar').textContent = sinPagar;
+}
+
+/* ═══════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════ */
+// Fecha local (no UTC) — mismo criterio que today() en apps_script.js
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function diasSinRegreso(m) {
+  if (!m.fecha_envio) return null;
+  const envio = new Date(m.fecha_envio + 'T00:00:00');
+  const hoy = new Date(todayStr() + 'T00:00:00');
+  if (isNaN(envio.getTime())) return null;
+  return Math.floor((hoy - envio) / 86400000);
+}
+
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function fmtFechaCorta(iso) {
+  if (!iso) return '–';
+  const [y,m,d] = iso.split('-');
+  if (!y||!m||!d) return iso;
+  return `${d}-${MESES[parseInt(m,10)-1]}-${y.slice(2)}`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' '+type : '');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.className = '', 3000);
+}
+
+function setLoading(v) {
+  document.getElementById('loadingOverlay').style.display = v ? 'flex' : 'none';
+}
+
+/* ═══════════════════════════════════════════
+   CHEQUEO DE VERSIÓN — version.json comparte llaves con
+   index.html / cotizaciones.html; este módulo usa la llave "maquila".
+═══════════════════════════════════════════ */
+const APP_VERSION = '2026-08-07-1600';
+let _versionCheckTimer = null;
+
+function _mostrarTagVersion(){
+  if (document.getElementById('appVersionTag')) return;
+  const el = document.createElement('div');
+  el.id = 'appVersionTag';
+  el.style.cssText = 'position:fixed;bottom:4px;left:8px;font-size:10px;color:#9aa3b5;z-index:50;pointer-events:none;opacity:.7;font-family:inherit';
+  el.textContent = 'v' + APP_VERSION;
+  document.body.appendChild(el);
+}
+
+function _mostrarBannerNuevaVersion(){
+  if (document.getElementById('bannerNuevaVersion')) return;
+  const b = document.createElement('div');
+  b.id = 'bannerNuevaVersion';
+  b.style.cssText = 'position:fixed;bottom:16px;right:16px;background:var(--navy,#1B2A4A);color:#fff;padding:12px 16px;border-radius:8px;font-size:13px;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;align-items:center;gap:12px;max-width:320px';
+  b.innerHTML = '<span>Hay una actualización disponible.</span><button style="background:#fff;color:#1B2A4A;border:none;padding:6px 12px;border-radius:6px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0" onclick="location.reload()">Recargar</button>';
+  document.body.appendChild(b);
+}
+
+async function _chequearVersionNueva(){
+  try{
+    const r = await fetch('version.json?_=' + Date.now(), { cache:'no-store' });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data && data.maquila && data.maquila !== APP_VERSION) _mostrarBannerNuevaVersion();
+  }catch(e){ /* silencioso */ }
+}
+
+function iniciarChequeoVersion(){
+  _mostrarTagVersion();
+  _chequearVersionNueva();
+  if (_versionCheckTimer) clearInterval(_versionCheckTimer);
+  _versionCheckTimer = setInterval(()=>{
+    if (document.hidden) return;
+    _chequearVersionNueva();
+  }, 5*60*1000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) _chequearVersionNueva();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initLogin();
+});
+</script>
+</body>
+</html>
