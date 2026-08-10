@@ -298,6 +298,10 @@ async function loadFoliosLigero() {
     foliosCache = d.folios || [];
     const dl = document.getElementById('foliosDatalist');
     dl.innerHTML = foliosCache.map(f => `<option value="${escHtml(f.folio)}">${escHtml(f.folio)} — ${escHtml(f.cliente||'')} — ${escHtml(f.modelo||'')}</option>`).join('');
+    // getMaquila puede resolver antes que este catálogo — si la tabla ya se
+    // pintó sin el catálogo listo, Cliente/Modelo se quedarían en blanco.
+    // Se vuelve a pintar aquí para refrescarlos sin importar el orden de llegada.
+    if (allMaquila.length) renderMaquilaList();
   } catch(e) { /* si falla, el folio sigue siendo editable como texto libre */ }
 }
 
@@ -606,7 +610,7 @@ function setLoading(v) {
    CHEQUEO DE VERSIÓN — version.json comparte llaves con
    index.html / cotizaciones.html; este módulo usa la llave "maquila".
 ═══════════════════════════════════════════ */
-const APP_VERSION = '2026-08-07-2100';
+const APP_VERSION = '2026-08-08-0900';
 let _versionCheckTimer = null;
 
 function _mostrarTagVersion(){
