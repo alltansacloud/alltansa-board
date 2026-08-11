@@ -888,7 +888,7 @@ function fmtMonto(v, moneda) {
   if (!v && v !== 0) return '–';
   const n = parseFloat(v);
   if (isNaN(n)) return '–';
-  const fmt = new Intl.NumberFormat('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}).format(n);
+  const fmt = new Intl.NumberFormat('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
   return moneda === 'USD' ? `USD $${fmt}` : `MXN $${fmt}`;
 }
 
@@ -898,7 +898,7 @@ function fmtSinDivisa(v) {
   if (!v && v !== 0) return '–';
   const n = parseFloat(v);
   if (isNaN(n)) return '–';
-  return '$' + new Intl.NumberFormat('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0}).format(n);
+  return '$' + new Intl.NumberFormat('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 }
 
 function showToast(msg, type='') {
@@ -1900,7 +1900,7 @@ function renderPartidas(readOnly) {
       <td><textarea placeholder="Descripcion" ${readOnly?'disabled':''}
         oninput="updatePartida(${i},'descripcion',this.value)"
         style="width:100%;min-height:100px;resize:vertical;font-family:inherit;font-size:13px;padding:6px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box">${escHtml(p.descripcion||'')}</textarea></td>
-      <td><input type="number" min="0" step="100" value="${p.precio_unit||0}" ${readOnly?'disabled':''}
+      <td><input type="number" min="0" step="0.01" value="${p.precio_unit||0}" ${readOnly?'disabled':''}
         onchange="updatePartida(${i},'precio_unit',this.value)" style="width:95px"/></td>
       <td class="subtotal-cell">${fmtMonto((p.cantidad||1)*(p.precio_unit||0), currentMoneda())}</td>
       ${!readOnly ? `<td><button class="btn-del-partida" onclick="deletePartida(${i})">✕</button></td>` : ''}
@@ -1963,7 +1963,7 @@ function renderServiciosExtra(readOnly) {
         oninput="updateServicioExtra(${i},'descripcion',this.value)"/></td>
       <td><input type="number" min="1" value="${s.cantidad||1}" ${readOnly?'disabled':''}
         onchange="updateServicioExtra(${i},'cantidad',this.value)" style="width:48px"/></td>
-      <td><input type="number" min="0" step="100" value="${s.precio_unit||0}" ${readOnly?'disabled':''}
+      <td><input type="number" min="0" step="0.01" value="${s.precio_unit||0}" ${readOnly?'disabled':''}
         onchange="updateServicioExtra(${i},'precio_unit',this.value)" style="width:95px"/></td>
       <td class="subtotal-cell-servicio">${fmtMonto((s.cantidad||1)*(s.precio_unit||0), currentMoneda())}</td>
       ${!readOnly ? `<td><button class="btn-del-partida" onclick="deleteServicioExtra(${i})">✕</button></td>` : ''}
@@ -3377,7 +3377,7 @@ function renderExpressPartidasList() {
           onchange="updatePartidaExpress(${i},'cantidad',this.value)"/>
       </td>
       <td style="padding:6px 10px;text-align:right">
-        <input type="number" min="0" step="100" value="${p.precio_unit||0}" style="width:95px;text-align:right;padding:4px;border:1px solid var(--border);border-radius:4px"
+        <input type="number" min="0" step="0.01" value="${p.precio_unit||0}" style="width:95px;text-align:right;padding:4px;border:1px solid var(--border);border-radius:4px"
           onchange="updatePartidaExpress(${i},'precio_unit',this.value)"/>
       </td>
       <td style="padding:6px 10px;text-align:right;font-weight:700">${fmtMonto(subtotal, 'MXN')}</td>
@@ -3430,7 +3430,7 @@ function renderExpressServiciosList() {
           onchange="updateServicioExpress(${i},'cantidad',this.value)"/>
       </td>
       <td style="padding:6px 10px;text-align:right">
-        <input type="number" min="0" step="100" value="${s.precio_unit||0}" style="width:95px;text-align:right;padding:4px;border:1px solid var(--border);border-radius:4px"
+        <input type="number" min="0" step="0.01" value="${s.precio_unit||0}" style="width:95px;text-align:right;padding:4px;border:1px solid var(--border);border-radius:4px"
           onchange="updateServicioExpress(${i},'precio_unit',this.value)"/>
       </td>
       <td style="padding:6px 10px;text-align:right;font-weight:700">${fmtMonto(subtotal, 'MXN')}</td>
@@ -3862,7 +3862,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-08-07-1400';
+const APP_VERSION = '2026-08-08-1000';
 
 let _versionCheckTimer = null;
 
