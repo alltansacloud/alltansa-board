@@ -847,6 +847,9 @@ textarea{resize:vertical;min-height:58px}
     <h2 id="hDetailT"></h2>
     <div class="mfolio" id="hDetailS"></div>
     <div id="hDetailInfo" class="pinfo"></div>
+    <div class="sec-t">Etapas de gestión</div>
+    <div id="hDetailGestion"></div>
+    <div id="hDetailNC" class="hidden"></div>
     <div class="sec-t">Etapas de producción</div>
     <div id="hDetailSF"></div>
     <div id="hDetailEmbarque"></div>
@@ -2740,7 +2743,7 @@ function renderAT(){
     const rowStyle=isSTK?'background:'+(!['closed','stk_done','cancelado'].includes(gSt(o))?'#FFFBF5':'')+'':'';
     const stickyBg=isSTK&&!['closed','stk_done','cancelado'].includes(gSt(o))?'#FFFBF5':'#fff';
     return'<tr style="'+rowStyle+'">'+
-      '<td style="position:sticky;left:0;background:'+stickyBg+';z-index:1;box-shadow:2px 0 4px rgba(0,0,0,.06);width:110px;min-width:110px"><div class="'+(isSTK?'folio-stk':'folio')+'">'+(o.folio||'—')+'</div>'+(o.num&&!isSTK?'<div class="sub">'+o.num+'</div>':'')+'</td>'+
+      '<td style="position:sticky;left:0;background:'+stickyBg+';z-index:1;box-shadow:2px 0 4px rgba(0,0,0,.06);width:110px;min-width:110px"><div class="'+(isSTK?'folio-stk':'folio')+'" style="cursor:pointer" title="Ver detalle del pedido" onclick="openHistDetail(\''+o.id+'\')">'+(o.folio||'—')+'</div>'+(o.num&&!isSTK?'<div class="sub">'+o.num+'</div>':'')+'</td>'+
       '<td style="position:sticky;left:110px;background:'+stickyBg+';z-index:1;box-shadow:2px 0 4px rgba(0,0,0,.06);min-width:140px"><div>'+(isSTK?'<em style="color:var(--muted)">Almacén interno</em>':o.client||'')+'</div>'+(o.notes?'<div class="sub">'+o.notes+'</div>':'')+'</td>'+
       '<td>'+(o.desc||'')+'<br>'+(o.fluido||o.capacidad_litros||o.presion_psi||o.material?'<span style="font-size:10px;color:var(--muted)">'+(o.fluido?o.fluido:'')+( o.capacidad_litros?' · '+o.capacidad_litros+'L':'')+( o.presion_psi?' · '+o.presion_psi+' psi':'')+( o.material?' · '+o.material:'')+( o.acabado?' · '+o.acabado:'' )+'</span>':'')+'</td>'+
       '<td style="text-align:center"><span class="qty-pill">'+(o.qty||1)+'</span>'+(tieneAlmacenAdmin?'<div class="badge" style="background:#E6F4EA;color:#137333;margin-top:3px;font-size:9px;display:inline-flex;white-space:nowrap">📦 '+o.qty_almacen+' almacén'+(parseInt(o.qty_produccion)>0?' / '+o.qty_produccion+' prod':'')+'</div>':'')+'</td>'+
@@ -2787,7 +2790,7 @@ function renderAMobile(fl){
     return'<div class="m-card'+(isSTK?' stk-row':'')+'">'+
       '<div class="m-card-header">'+
         '<div class="m-card-folio-wrap">'+
-          '<span class="'+(isSTK?'folio-stk':'folio')+'">'+(o.folio||'—')+'</span>'+
+          '<span class="'+(isSTK?'folio-stk':'folio')+'" style="cursor:pointer" onclick="openHistDetail(\''+o.id+'\')">'+(o.folio||'—')+'</span>'+
           (isSTK?stkBadge():'')+
         '</div>'+
         '<div class="sem-wrap"><span class="sem '+sem.cls+'"></span><span style="font-size:11px">'+sem.lbl+'</span></div>'+
@@ -6699,6 +6702,34 @@ function openHistDetail(id){
     '<div><div class="pil">Accesorios</div><div class="piv">'+comprasStatBadge(o.compras_accesorios)+'</div></div>'+
     (o.notes?'<div style="grid-column:1/-1"><div class="pil">Notas</div><div class="piv">'+o.notes+'</div></div>':'');
 
+  document.getElementById('hDetailGestion').innerHTML=STAGES.map(st=>{
+    const s=(o.stages&&o.stages[st.key])||{done:false,date:null,by:null};
+    const icono=s.done?'✓':'—';
+    return'<div class="psi'+(s.done?' done':'')+'">'+
+      '<div class="psi-left"><div class="psi-num">'+icono+'</div>'+
+      '<div><div class="psi-name">'+st.label+'</div>'+
+      (s.done&&s.date?'<div class="psi-date">Completado: '+fd(s.date)+(s.by?' · '+s.by:'')+'</div>':'<div class="psi-date" style="color:var(--muted)">No completado</div>')+
+      '</div></div>'+
+    '</div>';
+  }).join('');
+
+  const ncEl=document.getElementById('hDetailNC');
+  const ncList=o.calidad_no_conformidades||[];
+  if(ncList.length){
+    ncEl.classList.remove('hidden');
+    ncEl.innerHTML='<div class="sec-t">No conformidades de Calidad</div>'+ncList.slice().reverse().map(nc=>
+      '<div class="psi'+(nc.resuelto?' done':'')+'">'+
+        '<div class="psi-left"><div class="psi-num">'+(nc.resuelto?'✓':'⚠️')+'</div>'+
+        '<div><div class="psi-name">'+(nc.motivo||'Sin motivo especificado')+'</div>'+
+        '<div class="psi-date">'+(nc.fecha?fd(nc.fecha):'')+(nc.by?' · '+nc.by:'')+'</div>'+
+        (nc.resuelto?'<div class="psi-date" style="color:#137333">Resuelto'+(nc.notas_resolucion?': '+nc.notas_resolucion:'')+'</div>':'<div class="psi-date" style="color:#C0391B">Abierta</div>')+
+        '</div></div>'+
+      '</div>'
+    ).join('');
+  } else {
+    ncEl.classList.add('hidden');
+  }
+
   document.getElementById('hDetailSF').innerHTML=PROD_STAGES.map(st=>{
     const s=ps[st.key]||{done:false,date:null,by:null};
     const icono=s.done?'✓':'—';
@@ -6739,7 +6770,7 @@ function openHistDetail(id){
 
   // Sección Contabilidad
   const hContEl = document.getElementById('hDetailCont');
-  if (hContEl && !isSTK) {
+  if (hContEl && !isSTK && canContab()) {
     const folio = o.folio||o.id;
     const totalFact = ctTotalFacturado(folio);
     const cobrado = ctTotalCobrado(folio);
@@ -6764,6 +6795,8 @@ function openHistDetail(id){
         '</div></div>';
       hContEl.classList.remove('hidden');
     } else { hContEl.classList.add('hidden'); }
+  } else if (hContEl) {
+    hContEl.classList.add('hidden');
   }
 
   document.getElementById('hDetailModal').classList.remove('hidden');
@@ -8089,7 +8122,7 @@ function ctBannerCancelado(o) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-07-1700';
+const APP_VERSION = '2026-08-08-1400';
 
 let _versionCheckTimer = null;
 
