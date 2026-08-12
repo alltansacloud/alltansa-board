@@ -2788,7 +2788,15 @@ function huboCambioEnPdf(cotOriginal) {
   const partidasAhora = JSON.stringify(currentPartidas);
   if (partidasAntes !== partidasAhora) return true;
   const montoAntes = Math.round(parseFloat(cotOriginal.monto) || 0);
-  const montoAhora = Math.round(currentPartidas.reduce((s,p) => s + (p.cantidad||1) * (p.precio_unit||0), 0));
+  // cotOriginal.monto se guarda como partidas + servicios extra (ver recalcTotal),
+  // así que aquí también hay que sumar servicios extra — si no, cualquier
+  // cotización con flete/accesorios/otro siempre "detecta un cambio" que en
+  // realidad nunca ocurrió, y dispara el prompt de revisión en cada guardado
+  // (incluso al solo agregar un comentario de seguimiento en la etapa 3).
+  const montoAhora = Math.round(
+    currentPartidas.reduce((s,p) => s + (p.cantidad||1) * (p.precio_unit||0), 0) +
+    currentServiciosExtra.reduce((s,x) => s + (x.cantidad||1) * (x.precio_unit||0), 0)
+  );
   if (montoAntes !== montoAhora) return true;
   const serviciosAntes = cotOriginal.servicios_extra || '[]';
   const serviciosAhora = JSON.stringify(currentServiciosExtra);
@@ -3471,7 +3479,11 @@ async function generarCotizacionExpress() {
   if (!cliente)    { showToast('Selecciona un cliente', 'error'); return; }
   if (!currentPartidasExpress.length) { showToast('Agrega al menos un modelo', 'error'); return; }
 
-  const total = currentPartidasExpress.reduce((s, p) => s + (p.cantidad || 1) * (p.precio_unit || 0), 0);
+  const totalPartidasEx = currentPartidasExpress.reduce((s, p) => s + (p.cantidad || 1) * (p.precio_unit || 0), 0);
+  const totalServiciosEx = currentServiciosExpress.reduce((s, x) => s + (x.cantidad || 1) * (x.precio_unit || 0), 0);
+  // "monto" alimenta tanto la columna de la tabla general como la suma mensual
+  // de cotizaciones (sumMonto) — debe incluir accesorios/flete, no solo tanques.
+  const total = totalPartidasEx + totalServiciosEx;
 
   // Notas del PDF — ya viven inline en este mismo formulario, no en un popup
   // aparte. Si el usuario nunca las tocó, se usan los defaults ya puestos por
@@ -3862,7 +3874,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-08-08-1000';
+const APP_VERSION = '2026-08-08-1200';
 
 let _versionCheckTimer = null;
 
