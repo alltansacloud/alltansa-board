@@ -186,17 +186,18 @@
   }
   .modal {
     background: #fff; border-radius: 14px; width: 100%; max-width: 780px;
-    max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 48px rgba(0,0,0,.25);
+    max-height: 90vh; overflow: hidden; box-shadow: 0 12px 48px rgba(0,0,0,.25);
+    display: flex; flex-direction: column;
   }
   .modal-header {
     background: var(--navy); color: #fff; padding: 16px 22px;
     display: flex; justify-content: space-between; align-items: center;
-    border-radius: 14px 14px 0 0; position: sticky; top: 0; z-index: 10;
+    border-radius: 14px 14px 0 0; flex-shrink: 0;
   }
   .modal-header h3 { font-size: 15px; font-weight: 700; }
   .modal-close { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; line-height: 1; }
-  .modal-body  { padding: 22px; }
-  .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #fafafa; border-radius: 0 0 14px 14px; }
+  .modal-body  { padding: 22px; flex: 1; min-height: 0; overflow-y: auto; }
+  .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #fafafa; border-radius: 0 0 14px 14px; flex-shrink: 0; }
 
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media(max-width:600px){ .form-grid { grid-template-columns: 1fr; } }
@@ -304,8 +305,16 @@
 
 
   /* ── Stepper de etapas ────────────────────────────────── */
-  .stepper { display:flex; align-items:center; gap:0; padding:18px 24px 14px; border-bottom:1px solid var(--border); background:#fafafa; border-radius:14px 14px 0 0; }
-  .step { display:flex; align-items:center; gap:8px; flex:1; }
+  /* Sticky respecto al scroll de .modal-body (que tiene padding:22px) — los
+     márgenes/padding negativos compensan el padding del contenedor para que
+     el stepper se vea pegado al header sin dejar un hueco al hacer scroll. */
+  .stepper {
+    display:flex; align-items:center; gap:0; padding:18px 24px 14px;
+    border-bottom:1px solid var(--border); background:#fafafa;
+    position: sticky; top: -22px; margin: -22px -22px 14px -22px; z-index: 5;
+  }
+  .step { display:flex; align-items:center; gap:8px; flex:1; cursor:pointer; border-radius:8px; padding:4px; margin:-4px; transition:background .15s; }
+  .step:hover { background: rgba(27,42,74,.06); }
   .step-circle { width:30px; height:30px; border-radius:50%; border:2px solid var(--border); background:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; color:#aaa; flex-shrink:0; transition:all .2s; }
   .step-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#aaa; white-space:nowrap; transition:all .2s; }
   .step-line { flex:1; height:2px; background:var(--border); margin:0 6px; min-width:16px; transition:background .2s; }
@@ -340,7 +349,7 @@
   .etapa-badge.seg    { background:#e8f5e9; color:#2e7d32; }
 
   /* ── Nav footer del modal ─────────────────────────────── */
-  .modal-nav { display:flex; justify-content:space-between; align-items:center; padding:12px 22px; border-top:1px solid var(--border); background:#fafafa; border-radius:0 0 14px 14px; }
+  .modal-nav { display:flex; justify-content:space-between; align-items:center; padding:12px 22px; border-top:1px solid var(--border); background:#fafafa; border-radius:0 0 14px 14px; flex-shrink:0; }
   .modal-nav .nav-right { display:flex; gap:8px; }
 
   /* ── Partidas (tabla de productos) ───────────────────── */
@@ -1398,17 +1407,17 @@ function openModal(id) {
 
   <!-- STEPPER -->
   <div class="stepper" id="modalStepper">
-    <div class="step ${currentEtapa>=1?'active':''} ${currentEtapa>1?'done':''}" id="step1">
+    <div class="step ${currentEtapa>=1?'active':''} ${currentEtapa>1?'done':''}" id="step1" onclick="irAEtapa(1)">
       <div class="step-circle">1</div>
       <div class="step-label">Requisición</div>
     </div>
     <div class="step-line ${currentEtapa>1?'done':''}"></div>
-    <div class="step ${currentEtapa>=2?'active':''} ${currentEtapa>2?'done':''}" id="step2">
+    <div class="step ${currentEtapa>=2?'active':''} ${currentEtapa>2?'done':''}" id="step2" onclick="irAEtapa(2)">
       <div class="step-circle">2</div>
       <div class="step-label">Cotización</div>
     </div>
     <div class="step-line ${currentEtapa>2?'done':''}"></div>
-    <div class="step ${currentEtapa>=3?'active':''}" id="step3">
+    <div class="step ${currentEtapa>=3?'active':''}" id="step3" onclick="irAEtapa(3)">
       <div class="step-circle">3</div>
       <div class="step-label">Seguimiento</div>
     </div>
@@ -1792,6 +1801,17 @@ function renderStepper() {
   }
   // Actualizar botones nav
   updateNavButtons();
+}
+
+// Permite saltar directo a una etapa haciendo clic en su número/nombre en el
+// stepper, sin tener que usar Anterior/Siguiente uno por uno. Si el panel no
+// existe en este modo (ej. "Cotización Directa" no tiene Etapa 1), no hace nada.
+function irAEtapa(n) {
+  if (!document.getElementById('etapa' + n)) return;
+  currentEtapa = n;
+  renderStepper();
+  const body = document.getElementById('modalBody');
+  if (body) body.scrollTop = 0;
 }
 
 function bindNavButtons() {
@@ -3874,7 +3894,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-08-08-1200';
+const APP_VERSION = '2026-08-08-1300';
 
 let _versionCheckTimer = null;
 
