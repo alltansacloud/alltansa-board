@@ -1207,6 +1207,7 @@ textarea{resize:vertical;min-height:58px}
     <div id="ctBtnAutorizarEmbarque" style="display:none;margin-bottom:12px">
       <button style="background:#E37400;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔑 Autorizar embarque sin pago completo (Dirección)</button>
     </div>
+    <div id="ctBannerSinFactura" style="margin-bottom:12px"></div>
       <!-- Tabs internas -->
       <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">
         <button id="ctMTabFact" onclick="ctMTab('fact')" style="padding:8px 18px;border:none;background:none;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid var(--navy);color:var(--navy);margin-bottom:-2px">Facturas</button>
@@ -2576,21 +2577,33 @@ function renderAS(){
   const s=computeOpsStats(orders); // stats globales — misma fuente de verdad que los botones
   const act=s.act,stks=s.stks,cer=s.cer,canc=s.canc,rie=s.rie,pfiniq=s.pfiniq,porEmbarcar=s.porEmbarcar;
   const car=(function(){
-    // Cartera activa: SIEMPRE el saldo real del ledger (ctSaldoEfectivo vía
-    // saldoPendiente), sin importar si el pedido está cerrado o qué diga el
-    // dropdown manual "finiquito" — así coincide en $ con Contabilidad
-    // (Cartera vigente + vencida) y Reportes (Total por cobrar).
-    // FIX (ago 2026, decisión de Alex): antes se sumaba sobre 'act', que
+    // Cartera activa: SIEMPRE el saldo real del ledger (ctSaldoEfectivo),
+    // sin importar si el pedido está cerrado o qué diga el dropdown manual
+    // "finiquito" — así coincide en $ con Contabilidad (Cartera vigente +
+    // vencida) y Reportes (Total por cobrar).
+    // FIX #1 (ago 2026, decisión de Alex): antes se sumaba sobre 'act', que
     // depende de algoPendiente()/finiquito con sync de UN SOLO SENTIDO hacia
-    // el ledger (ctSincronizarDropdownsPago solo avanza a "Pagado", nunca
-    // revierte) — un pedido cerrado marcado "Pagado" manualmente pero con
+    // el ledger — un pedido cerrado marcado "Pagado" manualmente pero con
     // saldo real pendiente en el ledger desaparecía de esta tarjeta aunque
     // Contabilidad/Reportes sí lo siguieran contando. 'act' en sí NO se
     // toca — sigue siendo la fuente de verdad para los conteos operativos
-    // (Activos/Cerrados en los chips), que es un concepto aparte: "¿cuántos
-    // pedidos siguen operativamente abiertos?" vs. "¿cuánto me deben en $?".
+    // (Activos/Cerrados en los chips), que es un concepto aparte.
+    // FIX #2 (ago 2026, decisión de Alex): antes se usaba saldoPendiente(o),
+    // que para un pedido SIN actividad real (0 facturas, 0 abonos) cae en
+    // estimadoPendienteSinFacturar() — un ESTIMADO basado en los dropdowns
+    // anticipo/finiquito, no en el ledger. Eso hacía que "Cartera activa"
+    // pudiera mostrar más que Contabilidad/Reportes, que solo cuentan
+    // Cartera si hay actividad real capturada (tieneActividad). Ahora exige
+    // la misma actividad real — un pedido sin facturas ni abonos aporta $0
+    // aquí también, y solo aparece en "Total por facturar" (Contabilidad)
+    // y "Pendientes por facturar" (Reportes), nunca en los 3 al mismo tiempo.
     const pedidosParaCarteraAdmin = orders.filter(o => o.tipo !== 'stk' && gSt(o) !== 'cancelado');
-    return pedidosParaCarteraAdmin.reduce((a,o) => a + saldoPendiente(o), 0);
+    return pedidosParaCarteraAdmin.reduce((a,o) => {
+      const folio = o.folio||o.id;
+      const tieneActividad = (typeof ctFacturasDePedido==='function' && ctFacturasDePedido(folio).length>0) ||
+                              (typeof ctAbonosDePedido==='function' && ctAbonosDePedido(folio).length>0);
+      return tieneActividad ? a + Math.max(0, ctSaldoEfectivo(o)) : a;
+    }, 0);
   })();
 
   // ── KPIs financieros del mes ──────────────────────────────
@@ -4383,12 +4396,12 @@ function calcCarteraGeneral(){
       }
     }
 
-    // 2. Remanente por facturar — misma fórmula que ya usa el propio tablero
-    // de Contabilidad (ctEstatusCartera) para su columna "POR FACTURAR", así
-    // los dos módulos siempre coinciden en el número.
+    // 2. Remanente por facturar — usa ctPorFacturar(o), fuente única que
+    // respeta el flag "sin_factura" (Dirección marcó que este pedido no
+    // llevará factura, ej. pago en efectivo — caso OVSA, ago 2026), así los
+    // dos módulos siempre coinciden en el número.
     const valorPedido=(typeof ctValorPedido==='function')?ctValorPedido(o):ct(o.qty,o.value);
-    const facturadoSinIva=(typeof ctTotalSinIvaFacturado==='function')?ctTotalSinIvaFacturado(folioKey):0;
-    const porFacturar=Math.max(0,valorPedido-facturadoSinIva);
+    const porFacturar=(typeof ctPorFacturar==='function')?ctPorFacturar(o):Math.max(0,valorPedido-((typeof ctTotalSinIvaFacturado==='function')?ctTotalSinIvaFacturado(folioKey):0));
     if(porFacturar>1){
       if(!porClienteSinFacturar[cli])porClienteSinFacturar[cli]={total:0,folios:[]};
       porClienteSinFacturar[cli].total+=porFacturar;
@@ -7170,6 +7183,26 @@ function ctSaldoEfectivo(o) {
   }
 }
 
+// Fuente única de verdad para "cuánto le falta facturar a este pedido" —
+// usada por Contabilidad (tabla, modal, KPI "Total por facturar",
+// ctEstatusCartera), Reportes (calcCarteraGeneral > "Pendientes por
+// facturar") y el cierre automático (ctVerificarCierreAutomatico).
+// CASO OVSA (ago 2026): un pedido pagado en efectivo, sin factura y que
+// NUNCA la va a tener, se quedaba mostrando el valor completo del pedido
+// como "pendiente de facturar" para siempre — inflando Total por facturar
+// (Contabilidad) y Pendientes por facturar (Reportes) con dinero que en
+// realidad ya no está pendiente de nada. o.sin_factura = {done,by,date,nota}
+// es una decisión explícita de Dirección (botón "Marcar sin factura" en el
+// modal) — cuando está marcada, este pedido deja de contar como pendiente
+// de facturar en todos lados, aunque nunca se le haya hecho una factura real.
+function ctPorFacturar(o) {
+  if (o.sin_factura && o.sin_factura.done) return 0;
+  const folio = o.folio || o.id;
+  const valorPedido = ctValorPedido(o);
+  const sinIvaFact = ctTotalSinIvaFacturado(folio);
+  return Math.max(0, valorPedido - sinIvaFact);
+}
+
 function ctEstatusCartera(o) {
   // Un pedido cancelado se marca así SIEMPRE, sin importar si tiene o no
   // facturas/abonos previos — para que Contabilidad lo vea de inmediato y no
@@ -7177,11 +7210,9 @@ function ctEstatusCartera(o) {
   if (gSt(o) === 'cancelado') return 'cancelado';
   const folio = o.folio || o.id;
   const facts = ctFacturasDePedido(folio);
-  const valorPedido = ctValorPedido(o);
-  const sinIvaFact = ctTotalSinIvaFacturado(folio);
   const cobrado = ctTotalCobrado(folio);
   const saldo = ctSaldoEfectivo(o);
-  const porFacturar = Math.max(0, valorPedido - sinIvaFact);
+  const porFacturar = ctPorFacturar(o);
 
   // Sin facturas y sin abonos
   if (facts.length === 0 && cobrado === 0) return 'sin_facturar';
@@ -7325,14 +7356,12 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
         else carteraVigente += saldo;
       }
     }
-    // Por facturar — misma fórmula que ya usa calcCarteraGeneral() en
-    // Reportes > Cuentas por Cobrar, para que los dos módulos coincidan.
-    // Esta SÍ aplica siempre, tenga o no actividad — es lo opuesto a
-    // Cartera: "lo que falta facturar" existe independientemente de si ya
-    // se facturó algo antes.
-    const valorPedido = ctValorPedido(o);
-    const sinIvaFact = ctTotalSinIvaFacturado(folio);
-    porFacturarTotal += Math.max(0, valorPedido - sinIvaFact);
+    // Por facturar — usa ctPorFacturar(o), fuente única que respeta el flag
+    // "sin_factura" y coincide con calcCarteraGeneral() en Reportes. Esta SÍ
+    // aplica siempre, tenga o no actividad — es lo opuesto a Cartera: "lo
+    // que falta facturar" existe independientemente de si ya se facturó
+    // algo antes.
+    porFacturarTotal += ctPorFacturar(o);
   });
 
   const kpis = [
@@ -7463,9 +7492,16 @@ function renderContab() {
     })();
 
     const sinIvaFact = ctTotalSinIvaFacturado(folio);
-    const porFacturar = Math.max(0, valorPedido - sinIvaFact);
+    const porFacturar = ctPorFacturar(o);
     const pctFact = valorPedido > 0 ? Math.round((sinIvaFact / valorPedido) * 100) : 0;
-    const pctPend = 100 - pctFact;
+    // pctPend ya NO es el complemento de pctFact (100-pctFact) — se deriva
+    // directo de porFacturar, que puede estar en $0 por el flag sin_factura
+    // aunque pctFact (lo REALMENTE facturado) siga en 0%. Así el $ y el %
+    // de esta columna siempre coinciden entre sí.
+    const pctPend = valorPedido > 0 ? Math.round((porFacturar / valorPedido) * 100) : 0;
+    const badgeSinFactura = (o.sin_factura && o.sin_factura.done)
+      ? ' <span style="background:#F3E8FD;color:#6A1B9A;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600" title="Marcado sin factura por '+(o.sin_factura.by||'')+' el '+fd(o.sin_factura.date)+'">📝 Sin factura</span>'
+      : '';
 
     // Cobrado / Saldo x cobrar — misma base que usa ctSaldoEfectivo: si hay
     // facturas, % es sobre lo facturado (c/IVA); si no hay facturas pero sí
@@ -7486,7 +7522,7 @@ function renderContab() {
       '<td style="font-size:13px;color:#34A853;font-weight:600">'+ctFmt(cobrado)+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+pctCobrado+'% cob.</span></td>' +
       '<td style="font-size:13px;font-weight:700;color:'+(saldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(Math.max(0,saldo))+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+pctSaldoCobro+'% pend.</span></td>' +
       '<td style="font-size:12px">'+vencTxt+'</td>' +
-      '<td>'+semaforo+' '+badgeEstDinamico(est, pctPend)+'</td>' +
+      '<td>'+semaforo+' '+badgeEstDinamico(est, pctPend)+badgeSinFactura+'</td>' +
       '<td><button data-folio="'+folio+'" onclick="event.stopPropagation();openCTModal(this.dataset.folio)" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">Abrir</button></td>' +
       '</tr>';
   }).join('');
@@ -7530,10 +7566,15 @@ function openCTModal(folio) {
   // Banner cancelado
   const bannerEl = document.getElementById('ctBannerCanc');
   if (bannerEl) bannerEl.innerHTML = ctBannerCancelado(o);
+  // Banner / botón de "Sin factura"
+  const bannerSFEl = document.getElementById('ctBannerSinFactura');
+  if (bannerSFEl) bannerSFEl.innerHTML = ctBannerSinFactura(o);
   const sinIvaFact2  = ctTotalSinIvaFacturado(folio2);
-  const porFacturar2 = Math.max(0, valorPedido - sinIvaFact2);
+  const porFacturar2 = ctPorFacturar(o);
   const pctFact2     = valorPedido > 0 ? Math.round((sinIvaFact2 / valorPedido) * 100) : 0;
-  const pctPendFact2 = 100 - pctFact2;
+  // pctPendFact2 se deriva de porFacturar2 (respeta sin_factura), no del
+  // complemento de pctFact2 — mismo criterio que en la tabla.
+  const pctPendFact2 = valorPedido > 0 ? Math.round((porFacturar2 / valorPedido) * 100) : 0;
   const saldoCobro2  = ctSaldoEfectivo(o);
   // Anticipo y Finiquito por separado
   const factsAnticipo2 = ctFacturasDePedido(folio2).filter(f => f.tipo_factura === 'Anticipo');
@@ -8129,9 +8170,7 @@ async function ctVerificarCierreAutomatico(folio) {
   const st = gSt(o);
   if (st === 'closed' || st === 'cancelado') return;
   // Verificar si ya está liquidado
-  const sinIvaFact = ctTotalSinIvaFacturado(folio);
-  const valorPedido = ctValorPedido(o);
-  const porFacturar = Math.max(0, valorPedido - sinIvaFact);
+  const porFacturar = ctPorFacturar(o);
   const saldo = ctSaldoEfectivo(o);
   if (porFacturar > 0.01 || saldo > 0.01) return; // Aún falta facturar o cobrar
   // Pedido liquidado — cerrar automáticamente
@@ -8189,6 +8228,89 @@ function ctBannerCancelado(o) {
 }
 
 // ===================================================
+// BLOQUE 2B: "SIN FACTURA" — caso OVSA (ago 2026)
+// ===================================================
+// Un pedido pagado (efectivo u otro medio fuera de Contabilidad) que
+// NUNCA va a tener factura se quedaba mostrando el valor completo como
+// "pendiente de facturar" para siempre — inflando Total por facturar
+// (Contabilidad) y Pendientes por facturar (Reportes), y sin poder
+// cerrarse automáticamente (ctVerificarCierreAutomatico exige porFacturar
+// en $0). o.sin_factura = {done,by,date,nota} es una decisión explícita de
+// Dirección, con motivo obligatorio para dejar rastro — ver ctPorFacturar().
+
+function ctBannerSinFactura(o) {
+  const st = gSt(o);
+  if (st === 'cancelado') return ''; // el banner de cancelado ya cubre este caso
+  const marcado = !!(o.sin_factura && o.sin_factura.done);
+  if (marcado) {
+    const by = o.sin_factura.by || '—';
+    const fecha = o.sin_factura.date ? fd(o.sin_factura.date) : '—';
+    const nota = o.sin_factura.nota || '';
+    return '<div style="background:#F3E8FD;border:1px solid #E1BEE7;border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span style="font-size:18px">📝</span>' +
+        '<div><strong style="color:#6A1B9A">Marcado "sin factura"</strong>' +
+        '<div style="font-size:12px;color:#6A1B9A;margin-top:2px">Por ' + by + ' el ' + fecha + (nota ? ' — "' + nota + '"' : '') + '</div></div>' +
+      '</div>' +
+      (isDir() ? '<button onclick="revertirSinFactura(\'' + o.id + '\')" style="background:#fff;color:#6A1B9A;border:1px solid #6A1B9A;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">↩️ Revertir</button>' : '') +
+    '</div>';
+  }
+  // Aún no marcado — el botón solo tiene sentido si falta algo por facturar,
+  // y solo Dirección puede tomar esta decisión (mismo nivel que autorizar embarque).
+  if (ctPorFacturar(o) <= 0.01) return '';
+  if (!isDir()) return '';
+  return '<button onclick="marcarSinFactura(\'' + o.id + '\')" style="background:#fff;color:#6A1B9A;border:1px solid #6A1B9A;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📝 Marcar sin factura (Dirección)</button>';
+}
+
+async function marcarSinFactura(oid) {
+  const o = orders.find(x => x.id === oid);
+  if (!o) return;
+  if (!isDir()) { showAlert('Solo Dirección puede marcar un pedido como sin factura.', '🚫'); return; }
+  const nota = prompt('Motivo (requerido) — ej. "Pago en efectivo, cliente no requiere factura":');
+  if (!nota || !nota.trim()) { showAlert('Debes ingresar un motivo.', '⚠️'); return; }
+  const folio = o.folio || o.id;
+  const by = CU.name + ' (' + CU.area + ')';
+  const ts = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const upd = {
+    ...o,
+    sin_factura: { done: true, by, date: today(), nota: nota.trim() },
+    log: [...(o.log||[]), { by, msg: '📝 Marcado "sin factura" — ya no cuenta como pendiente de facturar. Motivo: ' + nota.trim(), ts }]
+  };
+  try {
+    invalidarCache();
+    await apiSave(upd);
+    await loadAll(true);
+    renderContab();
+    showAlert('Pedido marcado como "sin factura". Ya no aparece como pendiente de facturar.', '✅');
+    await ctVerificarCierreAutomatico(folio);
+    openCTModal(folio);
+  } catch(e) { showAlert('Error: ' + e.message, '❌'); }
+}
+
+async function revertirSinFactura(oid) {
+  const o = orders.find(x => x.id === oid);
+  if (!o) return;
+  if (!isDir()) { showAlert('Solo Dirección puede revertir esto.', '🚫'); return; }
+  if (!confirm('¿Revertir "sin factura"? El pedido volverá a aparecer como pendiente de facturar por el monto que falte.')) return;
+  const folio = o.folio || o.id;
+  const by = CU.name + ' (' + CU.area + ')';
+  const ts = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const upd = {
+    ...o,
+    sin_factura: { done: false, by, date: today(), nota: '' },
+    log: [...(o.log||[]), { by, msg: '↩️ Revertido "sin factura" — vuelve a contar como pendiente de facturar.', ts }]
+  };
+  try {
+    invalidarCache();
+    await apiSave(upd);
+    await loadAll(true);
+    renderContab();
+    showAlert('Revertido. El pedido vuelve a contar como pendiente de facturar.', '✅');
+    openCTModal(folio);
+  } catch(e) { showAlert('Error: ' + e.message, '❌'); }
+}
+
+// ===================================================
 // CHEQUEO DE VERSIÓN — avisa si hay una versión más nueva publicada
 // ===================================================
 // version.json ahora es COMPARTIDO entre módulos: una llave por archivo HTML
@@ -8198,7 +8320,7 @@ function ctBannerCancelado(o) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-17-2100';
+const APP_VERSION = '2026-08-18-1200';
 
 let _versionCheckTimer = null;
 
