@@ -308,8 +308,9 @@ textarea{resize:vertical;min-height:58px}
   .stat-mes{border-top-color:#1a73e8}
   .stat-dep{border-top-color:#137333}
   .stat-car{border-top-color:#C0391B}
+  .stat-porfact{border-top-color:#E37400}
   /* Fila financiera: 3 cards medianas */
-  .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:8px}
   .kpi-row .stat{padding:10px 14px}
   .kpi-row .stat-val{font-size:16px}
   .kpi-row .stat-label{font-size:10px}
@@ -2583,7 +2584,7 @@ function calcDepositadoMes(yymm){
 function renderAS(){
   const s=computeOpsStats(orders); // stats globales — misma fuente de verdad que los botones
   const act=s.act,stks=s.stks,cer=s.cer,canc=s.canc,rie=s.rie,pfiniq=s.pfiniq,porEmbarcar=s.porEmbarcar;
-  const car=(function(){
+  const {car, porFacturarAdmin} = (function(){
     // Cartera activa: SIEMPRE el saldo real del ledger (ctSaldoEfectivo),
     // sin importar si el pedido está cerrado o qué diga el dropdown manual
     // "finiquito" — así coincide en $ con Contabilidad (Cartera vigente +
@@ -2604,13 +2605,25 @@ function renderAS(){
     // la misma actividad real — un pedido sin facturas ni abonos aporta $0
     // aquí también, y solo aparece en "Total por facturar" (Contabilidad)
     // y "Pendientes por facturar" (Reportes), nunca en los 3 al mismo tiempo.
+    //
+    // Por facturar (ago 2026, pedido de Alex): misma tarjeta que ya existe
+    // en Contabilidad ("Total por facturar") y Reportes ("Pendientes por
+    // facturar"), ahora también visible aquí sin tener que cambiar de
+    // pantalla. Usa ctPorFacturar(o) — misma fórmula, mismo universo de
+    // pedidos (pedidosParaCarteraAdmin), y respeta el flag "sin_factura"
+    // (caso OVSA) automáticamente. A diferencia de Cartera, esta SÍ aplica
+    // siempre, tenga o no actividad — "lo que falta facturar" existe
+    // independientemente de si ya se facturó algo antes.
     const pedidosParaCarteraAdmin = orders.filter(o => o.tipo !== 'stk' && gSt(o) !== 'cancelado');
-    return pedidosParaCarteraAdmin.reduce((a,o) => {
+    let car = 0, porFacturarAdmin = 0;
+    pedidosParaCarteraAdmin.forEach(o => {
       const folio = o.folio||o.id;
       const tieneActividad = (typeof ctFacturasDePedido==='function' && ctFacturasDePedido(folio).length>0) ||
                               (typeof ctAbonosDePedido==='function' && ctAbonosDePedido(folio).length>0);
-      return tieneActividad ? a + Math.max(0, ctSaldoEfectivo(o)) : a;
-    }, 0);
+      if (tieneActividad) car += Math.max(0, ctSaldoEfectivo(o));
+      porFacturarAdmin += (typeof ctPorFacturar==='function') ? ctPorFacturar(o) : 0;
+    });
+    return {car, porFacturarAdmin};
   })();
 
   // ── KPIs financieros del mes ──────────────────────────────
@@ -2663,6 +2676,11 @@ function renderAS(){
         (depObjMes.posibleIva?'<div style="font-size:9px;color:var(--muted);font-style:italic;margin-top:2px">* incluye abonos ligados a factura — su IVA no está restado de este monto</div>':'')+
         deltaLabel(depDelta)+
       '</div>'+
+      '<div class="stat stat-porfact">'+
+        '<div class="stat-label">Por facturar <span style="font-size:9px;font-weight:400;color:#E37400">antes de IVA</span></div>'+
+        '<div class="stat-val sm" style="color:#E37400">'+(porFacturarAdmin>0?fm(porFacturarAdmin):'—')+'</div>'+
+        '<div class="stat-sub">todos los pedidos activos</div>'+
+        (porFacturarAdmin>0?'<div style="font-size:10px;color:var(--muted);margin-top:2px;font-style:italic">remanente sin facturar</div>':'')+'</div>'+
       '<div class="stat stat-car">'+
         '<div class="stat-label">Cartera activa <span style="font-size:9px;font-weight:400;color:#E37400">antes de IVA</span></div>'+
         '<div class="stat-val sm" style="color:#C0391B">'+(car>0?fm(car):'—')+'</div>'+
@@ -8327,7 +8345,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-18-1400';
+const APP_VERSION = '2026-08-18-1600';
 
 let _versionCheckTimer = null;
 
