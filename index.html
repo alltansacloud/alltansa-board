@@ -1830,6 +1830,13 @@ function parseOrder(o){
   if(!o.calidad_doc||typeof o.calidad_doc!=='object'){try{o.calidad_doc=o.calidad_doc?JSON.parse(o.calidad_doc):null;}catch(e){o.calidad_doc=null;}}
   if(!o.calidad_doc||typeof o.calidad_doc!=='object')o.calidad_doc={tipo:sugerirTipoDoc(o),done:false,date:null,by:null};
   if(!o.calidad_doc.tipo)o.calidad_doc.tipo=sugerirTipoDoc(o);
+  // "Sin factura" (Dirección) — el Sheet lo guarda como texto JSON, igual que
+  // calidad_doc/stages/prod_stages. Sin este parseo, o.sin_factura llegaba
+  // como STRING después de recargar (loadAll), y o.sin_factura.done daba
+  // "undefined" en vez de leer el valor real — el dato SÍ se guardaba bien
+  // en el Sheet, pero se veía como si el botón no hubiera hecho nada
+  // (bug detectado ago 2026, caso OVSA).
+  if(o.sin_factura&&typeof o.sin_factura!=='object'){try{o.sin_factura=JSON.parse(o.sin_factura);}catch(e){o.sin_factura=null;}}
   // Historial de no-conformidades (rechazos de Calidad)
   if(!Array.isArray(o.calidad_no_conformidades)){try{o.calidad_no_conformidades=o.calidad_no_conformidades?JSON.parse(o.calidad_no_conformidades):[];}catch(e){o.calidad_no_conformidades=[];}}
   // Aprobación de Calidad por etapa — el Sheet lo guarda como texto JSON;
@@ -8320,7 +8327,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-18-1200';
+const APP_VERSION = '2026-08-18-1400';
 
 let _versionCheckTimer = null;
 
