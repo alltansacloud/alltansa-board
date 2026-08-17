@@ -1396,7 +1396,7 @@ textarea{resize:vertical;min-height:58px}
           <div>
             <h2 style="margin:0">📋 Cuentas por Cobrar</h2>
             <div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">
-              <strong>Este reporte tiene dos secciones separadas:</strong> arriba, lo pendiente por cobrar de lo que YA se tiene facturado (saldo real: facturado menos cobrado, según Contabilidad). Abajo, "Pendientes por facturar" — el remanente del pedido que todavía no se ha facturado (aunque ya tenga otra parte facturada y cobrada). Un mismo folio puede aparecer en ambas secciones si tiene una parte facturada pendiente de cobro Y otra parte todavía sin facturar. Fotografía de HOY: no depende del rango de fechas de arriba. Antigüedad contada desde la fecha de entrega comprometida. No incluye STK.
+              <strong>Este reporte tiene dos secciones separadas:</strong> arriba, lo pendiente por cobrar de lo que YA se tiene facturado (saldo real: facturado menos cobrado, según Contabilidad — <strong>IVA incluido</strong>, es la deuda real del cliente). Abajo, "Pendientes por facturar" — el remanente del pedido que todavía no se ha facturado (aunque ya tenga otra parte facturada y cobrada) — <strong>es venta, + IVA</strong>. Un mismo folio puede aparecer en ambas secciones si tiene una parte facturada pendiente de cobro Y otra parte todavía sin facturar. Fotografía de HOY: no depende del rango de fechas de arriba. Antigüedad contada desde la fecha de entrega comprometida. No incluye STK.
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
@@ -2617,10 +2617,7 @@ function renderAS(){
     const pedidosParaCarteraAdmin = orders.filter(o => o.tipo !== 'stk' && gSt(o) !== 'cancelado');
     let car = 0, porFacturarAdmin = 0;
     pedidosParaCarteraAdmin.forEach(o => {
-      const folio = o.folio||o.id;
-      const tieneActividad = (typeof ctFacturasDePedido==='function' && ctFacturasDePedido(folio).length>0) ||
-                              (typeof ctAbonosDePedido==='function' && ctAbonosDePedido(folio).length>0);
-      if (tieneActividad) car += Math.max(0, ctSaldoEfectivo(o));
+      car += (typeof ctSaldoCarteraReal==='function') ? ctSaldoCarteraReal(o) : 0;
       porFacturarAdmin += (typeof ctPorFacturar==='function') ? ctPorFacturar(o) : 0;
     });
     return {car, porFacturarAdmin};
@@ -2645,8 +2642,10 @@ function renderAS(){
   const depositadoPrev=depObjPrev.total;
   const depDelta=depositadoPrev>0?Math.round(((depositadoMes-depositadoPrev)/depositadoPrev)*100):null;
 
-  // Pendiente de cobrar del mes actual
-  const cartaMes=pedsMes.reduce((s,o)=>s+saldoPendiente(o),0);
+  // Pendiente de cobrar del mes actual — mismo criterio que 'car' (con IVA,
+  // solo actividad real), para que el sub-texto de la tarjeta no contradiga
+  // el número principal.
+  const cartaMes=pedsMes.reduce((s,o)=>s+((typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0),0);
 
   // Helper para mostrar delta vs mes anterior
   function deltaLabel(pct){
@@ -2664,25 +2663,24 @@ function renderAS(){
     // ── Fila 1: KPIs financieros del mes ──
     '<div class="kpi-row">'+
       '<div class="stat stat-mes">'+
-        '<div class="stat-label">Ventas '+mesNom+' <span style="font-size:9px;color:var(--muted)">antes IVA</span></div>'+
+        '<div class="stat-label">Ventas '+mesNom+' <span style="font-size:9px;color:var(--muted)">+ IVA</span></div>'+
         '<div class="stat-val sm">'+(ventasMes>0?fm(ventasMes):'—')+'</div>'+
         '<div class="stat-sub">'+(pedsMes.length)+' pedido'+(pedsMes.length!==1?'s':'')+' registrados</div>'+
         deltaLabel(ventasDelta)+
       '</div>'+
       '<div class="stat stat-dep">'+
-        '<div class="stat-label">Depositado '+mesNom+' <span style="font-size:9px;color:var(--muted)">antes IVA</span></div>'+
+        '<div class="stat-label">Depositado '+mesNom+' <span style="font-size:9px;color:var(--muted)">IVA incluido</span></div>'+
         '<div class="stat-val sm" style="color:#137333">'+(depositadoMes>0?fm(depositadoMes):'—')+'</div>'+
         '<div class="stat-sub">cobros reales (ledger de Contabilidad)</div>'+
-        (depObjMes.posibleIva?'<div style="font-size:9px;color:var(--muted);font-style:italic;margin-top:2px">* incluye abonos ligados a factura — su IVA no está restado de este monto</div>':'')+
         deltaLabel(depDelta)+
       '</div>'+
       '<div class="stat stat-porfact">'+
-        '<div class="stat-label">Por facturar <span style="font-size:9px;font-weight:400;color:#E37400">antes de IVA</span></div>'+
+        '<div class="stat-label">Por facturar <span style="font-size:9px;font-weight:400;color:#E37400">+ IVA</span></div>'+
         '<div class="stat-val sm" style="color:#E37400">'+(porFacturarAdmin>0?fm(porFacturarAdmin):'—')+'</div>'+
         '<div class="stat-sub">todos los pedidos activos</div>'+
         (porFacturarAdmin>0?'<div style="font-size:10px;color:var(--muted);margin-top:2px;font-style:italic">remanente sin facturar</div>':'')+'</div>'+
       '<div class="stat stat-car">'+
-        '<div class="stat-label">Cartera activa <span style="font-size:9px;font-weight:400;color:#E37400">antes de IVA</span></div>'+
+        '<div class="stat-label">Cartera activa <span style="font-size:9px;font-weight:400;color:#E37400">IVA incluido</span></div>'+
         '<div class="stat-val sm" style="color:#C0391B">'+(car>0?fm(car):'—')+'</div>'+
         '<div class="stat-sub">'+( cartaMes>0?fm(cartaMes)+' de '+mesNom:'todos los pedidos activos' )+'</div>'+
         (car>0?'<div style="font-size:10px;color:var(--muted);margin-top:2px;font-style:italic">saldo por cobrar</div>':'')+'</div>'+
@@ -2854,7 +2852,7 @@ function renderAMobile(fl){
         '<div class="m-card-field"><span class="m-card-label">Modelo</span><span class="m-card-val">'+(o.desc||'—')+'</span></div>'+
         (o.fluido||o.capacidad_litros||o.material?'<div class="m-card-field"><span class="m-card-label">Especificaciones</span><span class="m-card-val" style="font-size:11px">'+(o.fluido||'')+(o.capacidad_litros?' · '+o.capacidad_litros+'L':'')+(o.presion_psi?' · '+o.presion_psi+' psi':'')+(o.material?' · '+o.material:'')+(o.acabado?' · '+o.acabado:'')+'</span></div>':'')+
         '<div class="m-card-field"><span class="m-card-label">Cantidad</span><span class="m-card-val" style="font-weight:700;color:var(--navy)">'+(o.qty||1)+' uds</span>'+(tieneAlmacenAdmin?' <span class="badge" style="background:#E6F4EA;color:#137333;font-size:9px;display:inline-flex;white-space:nowrap">📦 '+o.qty_almacen+' almacén'+(parseInt(o.qty_produccion)>0?' / '+o.qty_produccion+' prod':'')+'</span>':'')+'</div>'+
-        '<div class="m-card-field"><span class="m-card-label">Total</span><span class="m-card-val">'+(isSTK?'—':fm(t))+'</span>'+(isSTK?'':'<span style="font-size:10px;color:var(--muted);font-style:italic">antes de IVA</span>')+'</div>'+
+        '<div class="m-card-field"><span class="m-card-label">Total</span><span class="m-card-val">'+(isSTK?'—':fm(t))+'</span>'+(isSTK?'':'<span style="font-size:10px;color:var(--muted);font-style:italic">+ IVA</span>')+'</div>'+
         '<div class="m-card-field"><span class="m-card-label">Entrega</span><span class="m-card-val">'+(o.deadline?fd(o.deadline):'—')+'</span></div>'+
         '<div class="m-card-field"><span class="m-card-label">Anticipo</span><span class="m-card-val">'+(isSTK?'N/A':(o.anticipo_status||'Pendiente'))+'</span></div>'+
         '<div class="m-card-field"><span class="m-card-label">Finiquito</span><span class="m-card-val">'+(isSTK?'N/A':(o.finiquito||'Pendiente'))+'</span></div>'+
@@ -4259,13 +4257,26 @@ function fmtPct(v,total){
 
 function calcReporte(pedidos){
   const total=pedidos.length;
-  const ventas=pedidos.reduce(function(s,o){return s+ct(o.qty,o.value);},0);
+  const ventas=pedidos.reduce(function(s,o){return s+ct(o.qty,o.value);},0); // venta, sin IVA
+  // Cobrado: dinero REAL cobrado (con IVA) — suma directa del ledger de
+  // abonos, igual que "Depositado" (Administración) y "Cobrado este mes"
+  // (Contabilidad). FIX (ago 2026, decisión de Alex): antes se derivaba como
+  // "ventas(sin IVA) - saldoPendiente(o)" — y saldoPendiente ya venía en
+  // base CON IVA para pedidos con factura, restando una base sin IVA menos
+  // una con IVA (número sin sentido real). Ahora es una suma directa, sin
+  // derivar de otra cifra en otra base.
   const cobrado=pedidos.reduce(function(s,o){
     if(o.tipo==='stk')return s;
-    const tot=ct(o.qty,o.value);
-    return s+Math.max(0,tot-saldoPendiente(o));
+    const folio=o.folio||o.id;
+    return s+((typeof ctTotalCobrado==='function')?ctTotalCobrado(folio):0);
   },0);
-  const cartera=Math.round(ventas-cobrado);
+  // Cartera: saldo real pendiente (con IVA), cálculo DIRECTO vía
+  // ctSaldoCarteraReal — misma fuente única que Contabilidad (Cartera
+  // vigente+vencida), Administración (Cartera activa) y Reportes (Total por
+  // cobrar). Ya NO se deriva de "ventas - cobrado" (bases distintas).
+  const cartera=Math.round(pedidos.reduce(function(s,o){
+    return s+((typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0);
+  },0));
   const clientes=[...new Set(pedidos.filter(function(o){return o.tipo!=='stk';}).map(function(o){return o.client||'';}).filter(Boolean))].length;
   const cerrados=pedidos.filter(function(o){return gSt(o)==='closed';}).length;
   const fluidos={};
@@ -4278,9 +4289,9 @@ function calcReporte(pedidos){
   pedidos.filter(function(o){return o.tipo!=='stk';}).forEach(function(o){
     const cli=(o.client||'Sin nombre').trim();
     if(!porCliente[cli])porCliente[cli]={ventas:0,cobrado:0};
-    const tot=ct(o.qty,o.value);
-    porCliente[cli].ventas+=tot;
-    porCliente[cli].cobrado+=Math.max(0,tot-saldoPendiente(o));
+    const folio=o.folio||o.id;
+    porCliente[cli].ventas+=ct(o.qty,o.value);
+    porCliente[cli].cobrado+=(typeof ctTotalCobrado==='function')?ctTotalCobrado(folio):0;
   });
   return{total,ventas,cobrado,cartera,clientes,cerrados,fluidos,porCliente};
 }
@@ -4296,15 +4307,19 @@ function calcPorMes(pedidos){
     }
     if(!d)return;
     const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    if(!meses[key])meses[key]={label:'',pedidos:0,ventas:0,cobrado:0};
+    if(!meses[key])meses[key]={label:'',pedidos:0,ventas:0,cobrado:0,cartera:0};
     const lbl=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     meses[key].label=lbl[d.getMonth()]+' '+d.getFullYear();
     meses[key].pedidos++;
+    const folio=o.folio||o.id;
     meses[key].ventas+=ct(o.qty,o.value);
-    meses[key].cobrado+=Math.max(0,ct(o.qty,o.value)-saldoPendiente(o));
+    // FIX (ago 2026): cobrado y cartera ahora se acumulan DIRECTO (mismo
+    // criterio que calcReporte de arriba), no se derivan de ventas-cobrado.
+    meses[key].cobrado+=(typeof ctTotalCobrado==='function')?ctTotalCobrado(folio):0;
+    meses[key].cartera+=(typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0;
   });
   return Object.entries(meses).sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(e){
-    return Object.assign({},e[1],{cartera:Math.round(e[1].ventas-e[1].cobrado),ventas:Math.round(e[1].ventas),cobrado:Math.round(e[1].cobrado)});
+    return Object.assign({},e[1],{cartera:Math.round(e[1].cartera),ventas:Math.round(e[1].ventas),cobrado:Math.round(e[1].cobrado)});
   });
 }
 
@@ -4478,7 +4493,7 @@ function renderCarteraGeneral(){
   const t=data.totales;
   document.getElementById('carteraTotales').innerHTML=
     '<div class="rpt-kpis">'+
-    '<div class="rpt-kpi red"><p class="rpt-kpi-label">Total por cobrar</p><p class="rpt-kpi-val red">'+fmtRpt(t.total)+'</p><p class="rpt-kpi-note">'+data.clientes.length+' clientes</p></div>'+
+    '<div class="rpt-kpi red"><p class="rpt-kpi-label">Total por cobrar</p><p class="rpt-kpi-val red">'+fmtRpt(t.total)+'</p><p class="rpt-kpi-note">IVA incluido &middot; '+data.clientes.length+' clientes</p></div>'+
     '<div class="rpt-kpi navy"><p class="rpt-kpi-label">0-30 días</p><p class="rpt-kpi-val">'+fmtRpt(t.b0_30)+'</p><p class="rpt-kpi-note">reciente</p></div>'+
     '<div class="rpt-kpi amber"><p class="rpt-kpi-label">31-60 días</p><p class="rpt-kpi-val amber">'+fmtRpt(t.b31_60)+'</p><p class="rpt-kpi-note">atención</p></div>'+
     '<div class="rpt-kpi amber"><p class="rpt-kpi-label">61-90 días</p><p class="rpt-kpi-val amber">'+fmtRpt(t.b61_90)+'</p><p class="rpt-kpi-note">urgente</p></div>'+
@@ -4540,7 +4555,7 @@ function renderCarteraGeneral(){
   if(data.sinFacturar.length){
     html+='<div style="margin-top:28px;padding-top:20px;border-top:2px dashed var(--border)">';
     html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">';
-    html+='<h3 style="margin:0;color:var(--navy)">📝 Pendientes por facturar</h3>';
+    html+='<h3 style="margin:0;color:var(--navy)">📝 Pendientes por facturar <span style="font-size:10px;font-weight:400;color:var(--muted)">+ IVA</span></h3>';
     html+='<span style="background:#FEF3CD;color:#854F0B;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700">'+fmtRpt(data.totalSinFacturar)+'</span>';
     html+='</div>';
     html+='<div style="font-size:11px;color:var(--muted);font-style:italic;margin-bottom:10px">Lo que le falta facturar a cada pedido — el valor total menos lo ya facturado, aunque ya tenga otra parte facturada y cobrada. En cuanto se facture ese remanente, deja de aparecer aquí.</div>';
@@ -4671,7 +4686,8 @@ async function renderReporte(){
   var porMes=calcPorMes(pedidos);
   var mostrarMeses=porMes.length>1;
   var ticketProm=d.total>0?d.ventas/d.total:0;
-  var pctCob=d.ventas>0?Math.round((d.cobrado/d.ventas)*100):0;
+  var pctCob=d.ventas>0?Math.min(100,Math.round((d.cobrado/d.ventas)*100)):0;
+  var pctCartera=d.ventas>0?Math.round((d.cartera/d.ventas)*100):0;
   function fmtD(s){
     if(!s)return'—';
     var p=s.split('-');
@@ -4689,11 +4705,11 @@ async function renderReporte(){
   html+='<div><div class="rpt-logo-txt">ALLTANSA</div><div class="rpt-logo-sub">S.A. de C.V. &middot; Pressure Vessels</div></div></div>';
   html+='<div class="rpt-meta"><strong>Reporte Ejecutivo de Ventas</strong>Per&iacute;odo: '+rangoLabel+'<br>Generado: '+fd(today())+' &middot; Direcci&oacute;n</div></div>';
   html+='<div class="rpt-sec">Indicadores del per&iacute;odo</div>';
-  html+='<div style="font-size:11px;color:var(--muted);font-style:italic;margin:-6px 0 10px 2px">"Cobrado" y "Cartera pendiente" reflejan el saldo real de Contabilidad (facturado menos cobrado) cuando el pedido ya tiene facturas o abonos registrados; si a&uacute;n no se ha facturado nada, se usa el estimado de anticipo/finiquito. Ambos consideran solo lo YA facturado &mdash; el monto que falta por facturar de un pedido no cuenta todav&iacute;a como cartera pendiente.</div>';
+  html+='<div style="font-size:11px;color:var(--muted);font-style:italic;margin:-6px 0 10px 2px">"Ventas totales" es el valor de venta sin IVA de los pedidos registrados en el período. "Cobrado" es el dinero real recibido (ledger de abonos de Contabilidad, IVA incluido) y "Cartera pendiente" es el saldo real que aún deben los clientes (IVA incluido) — ambos son mediciones directas, independientes entre sí, no un complemento matemático de "Ventas".</div>';
   html+='<div class="rpt-kpis">';
-  html+='<div class="rpt-kpi blue"><p class="rpt-kpi-label">Ventas totales</p><p class="rpt-kpi-val blue">'+fmtRpt(d.ventas)+'</p><p class="rpt-kpi-note">antes de IVA</p></div>';
-  html+='<div class="rpt-kpi green"><p class="rpt-kpi-label">Cobrado</p><p class="rpt-kpi-val green">'+fmtRpt(d.cobrado)+'</p><p class="rpt-kpi-note">'+pctCob+'% de las ventas</p></div>';
-  html+='<div class="rpt-kpi red"><p class="rpt-kpi-label">Cartera pendiente</p><p class="rpt-kpi-val red">'+fmtRpt(d.cartera)+'</p><p class="rpt-kpi-note">'+(100-pctCob)+'% por cobrar</p></div>';
+  html+='<div class="rpt-kpi blue"><p class="rpt-kpi-label">Ventas totales</p><p class="rpt-kpi-val blue">'+fmtRpt(d.ventas)+'</p><p class="rpt-kpi-note">+ IVA</p></div>';
+  html+='<div class="rpt-kpi green"><p class="rpt-kpi-label">Cobrado</p><p class="rpt-kpi-val green">'+fmtRpt(d.cobrado)+'</p><p class="rpt-kpi-note">IVA incluido &middot; '+pctCob+'% de ventas</p></div>';
+  html+='<div class="rpt-kpi red"><p class="rpt-kpi-label">Cartera pendiente</p><p class="rpt-kpi-val red">'+fmtRpt(d.cartera)+'</p><p class="rpt-kpi-note">IVA incluido &middot; '+pctCartera+'% de ventas</p></div>';
   html+='<div class="rpt-kpi navy"><p class="rpt-kpi-label">Pedidos</p><p class="rpt-kpi-val">'+d.total+'</p><p class="rpt-kpi-note">'+d.cerrados+' cerrados</p></div>';
   html+='<div class="rpt-kpi navy"><p class="rpt-kpi-label">Clientes</p><p class="rpt-kpi-val">'+d.clientes+'</p><p class="rpt-kpi-note">'+(d.total>0?(d.total/Math.max(1,d.clientes)).toFixed(1)+' ped/cliente':'—')+'</p></div>';
   html+='<div class="rpt-kpi amber"><p class="rpt-kpi-label">Ticket promedio</p><p class="rpt-kpi-val amber">'+(ticketProm>0?fmtRpt(ticketProm):'—')+'</p><p class="rpt-kpi-note">por pedido</p></div>';
@@ -4820,7 +4836,8 @@ async function exportarPDF(){
   const pedidos=orders.filter(function(o){return o.tipo!=='stk'&&gSt(o)!=='cancelado'&&enRango(o,parseFecha(desdeStr),parseFecha(hastaStr));});
   const d=calcReporte(pedidos);
   const porMes=calcPorMes(pedidos);
-  const pctCob=d.ventas>0?Math.round((d.cobrado/d.ventas)*100):0;
+  const pctCob=d.ventas>0?Math.min(100,Math.round((d.cobrado/d.ventas)*100)):0;
+  const pctCartera=d.ventas>0?Math.round((d.cartera/d.ventas)*100):0;
   const desdeD=parseFecha(desdeStr),hastaD=parseFecha(hastaStr);
   const prodPdf=calcProduccion(desdeD,hastaD);
   const modelosPdf=calcModelos(pedidos);
@@ -4854,7 +4871,7 @@ async function exportarPDF(){
   doc.setDrawColor(27,42,74);doc.setLineWidth(0.5);doc.line(M,y,W-M,y);y+=8;
   doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(27,42,74);
   doc.text('INDICADORES DEL PERÍODO',M,y);y+=7;
-  const kpis=[['Ventas totales',fmtRpt(d.ventas),'antes de IVA'],['Cobrado',fmtRpt(d.cobrado),pctCob+'% de ventas'],['Cartera pendiente',fmtRpt(d.cartera),(100-pctCob)+'% por cobrar'],['Pedidos',String(d.total),d.cerrados+' cerrados'],['Clientes',String(d.clientes),d.total>0?(d.total/Math.max(1,d.clientes)).toFixed(1)+' ped/cli':'—'],['Ticket promedio',d.total>0?fmtRpt(d.ventas/d.total):'—','por pedido']];
+  const kpis=[['Ventas totales',fmtRpt(d.ventas),'+ IVA'],['Cobrado',fmtRpt(d.cobrado),'IVA incluido · '+pctCob+'% de ventas'],['Cartera pendiente',fmtRpt(d.cartera),'IVA incluido · '+pctCartera+'% de ventas'],['Pedidos',String(d.total),d.cerrados+' cerrados'],['Clientes',String(d.clientes),d.total>0?(d.total/Math.max(1,d.clientes)).toFixed(1)+' ped/cli':'—'],['Ticket promedio',d.total>0?fmtRpt(d.ventas/d.total):'—','por pedido']];
   const kW=(W-M*2)/3;
   kpis.forEach(function(k,i){
     const col=i%3,row=Math.floor(i/3),kx=M+col*kW,ky=y+row*18;
@@ -5026,17 +5043,17 @@ function exportarExcel(){
   const pedidos=orders.filter(function(o){return o.tipo!=='stk'&&gSt(o)!=='cancelado'&&enRango(o,parseFecha(desdeStr),parseFecha(hastaStr));});
   const d=calcReporte(pedidos);
   const porMes=calcPorMes(pedidos);
-  const pctCob=d.ventas>0?Math.round((d.cobrado/d.ventas)*100):0;
+  const pctCob=d.ventas>0?Math.min(100,Math.round((d.cobrado/d.ventas)*100)):0;
   const wb=XLSX.utils.book_new();
-  const wsKpis=XLSX.utils.aoa_to_sheet([['ALLTANSA S.A. de C.V. - Reporte Ejecutivo de Ventas'],['Período:',desdeStr+' al '+hastaStr],[''],['INDICADORES DEL PERÍODO'],['Ventas totales (antes IVA)',d.ventas],['Cobrado',d.cobrado],['Cartera pendiente',d.cartera],['% Cobranza',pctCob/100],['Pedidos registrados',d.total],['Clientes distintos',d.clientes],['Ticket promedio',d.total>0?Math.round(d.ventas/d.total):0]]);
+  const wsKpis=XLSX.utils.aoa_to_sheet([['ALLTANSA S.A. de C.V. - Reporte Ejecutivo de Ventas'],['Período:',desdeStr+' al '+hastaStr],[''],['INDICADORES DEL PERÍODO'],['Ventas totales (+ IVA)',d.ventas],['Cobrado (IVA incluido)',d.cobrado],['Cartera pendiente (IVA incluido)',d.cartera],['% Cobranza',pctCob/100],['Pedidos registrados',d.total],['Clientes distintos',d.clientes],['Ticket promedio',d.total>0?Math.round(d.ventas/d.total):0]]);
   wsKpis['!cols']=[{wch:35},{wch:20}];
   XLSX.utils.book_append_sheet(wb,wsKpis,'Resumen');
   const fluidos=Object.entries(d.fluidos).sort(function(a,b){return b[1]-a[1];});
-  const wsProd=XLSX.utils.aoa_to_sheet([['VENTAS POR TIPO DE PRODUCTO'],['Período:',desdeStr+' al '+hastaStr],[''],['Tipo de producto','Ventas (antes IVA)','% del total'],...fluidos.map(function(f){return[f[0],f[1],f[1]/d.ventas];}),['TOTAL',d.ventas,1]]);
+  const wsProd=XLSX.utils.aoa_to_sheet([['VENTAS POR TIPO DE PRODUCTO'],['Período:',desdeStr+' al '+hastaStr],[''],['Tipo de producto','Ventas (+ IVA)','% del total'],...fluidos.map(function(f){return[f[0],f[1],f[1]/d.ventas];}),['TOTAL',d.ventas,1]]);
   wsProd['!cols']=[{wch:25},{wch:22},{wch:15}];
   XLSX.utils.book_append_sheet(wb,wsProd,'Por producto');
   const clientes=Object.entries(d.porCliente).sort(function(a,b){return b[1].ventas-a[1].ventas;});
-  const wsCli=XLSX.utils.aoa_to_sheet([['VENTAS POR CLIENTE'],['Período:',desdeStr+' al '+hastaStr],[''],['Cliente','Ventas (antes IVA)','% del total'],...clientes.map(function(e){return[e[0],e[1].ventas,e[1].ventas/d.ventas];}),['TOTAL',d.ventas,1]]);
+  const wsCli=XLSX.utils.aoa_to_sheet([['VENTAS POR CLIENTE'],['Período:',desdeStr+' al '+hastaStr],[''],['Cliente','Ventas (+ IVA)','% del total'],...clientes.map(function(e){return[e[0],e[1].ventas,e[1].ventas/d.ventas];}),['TOTAL',d.ventas,1]]);
   wsCli['!cols']=[{wch:35},{wch:22},{wch:15}];
   XLSX.utils.book_append_sheet(wb,wsCli,'Por cliente');
   const wsCol=XLSX.utils.aoa_to_sheet([['ESTADO DE COBRANZA POR CLIENTE'],['Período:',desdeStr+' al '+hastaStr],[''],['Cliente','Ventas','Cobrado','Pendiente','% Cobrado'],...clientes.map(function(e){const pend=e[1].ventas-e[1].cobrado,pct=e[1].ventas>0?e[1].cobrado/e[1].ventas:0;return[e[0],e[1].ventas,e[1].cobrado,pend,pct];}),['TOTAL',d.ventas,d.cobrado,d.cartera,d.ventas>0?d.cobrado/d.ventas:0]]);
@@ -7194,18 +7211,39 @@ function ctSaldo(folio) {
 }
 
 function ctSaldoEfectivo(o) {
-  // Si hay facturas: saldo = facturado - cobrado (normal)
-  // Si NO hay facturas pero sí abonos: saldo = valor pedido (con IVA si aplica) - cobrado
+  // Cartera representa una deuda REAL — SIEMPRE en base con IVA, tenga o no
+  // factura formal todavía.
+  // FIX (ago 2026, decisión de Alex): antes, cuando no había factura pero sí
+  // un abono, se comparaba contra el valor del pedido SIN IVA — mezclando
+  // bases dentro de la MISMA tarjeta de Cartera Vigente/Vencida: un pedido
+  // ya facturado se contaba con IVA (ctTotalFacturado ya lo incluye) y uno
+  // solo con abono se contaba sin IVA. Ahora ambas ramas son con IVA,
+  // usando la misma tasa (16%) que ya usa el resto del sistema (ctCalcIva,
+  // formulario de "Nueva factura").
   const folio = o.folio || o.id;
   const facts = ctFacturasDePedido(folio);
   const cobrado = ctTotalCobrado(folio);
   if (facts.length > 0) {
+    // ctTotalFacturado ya es con IVA (suma monto_total de las facturas)
     return ctTotalFacturado(folio) - cobrado;
   } else {
-    // Sin facturas: base es el valor del pedido sin IVA (cliente sin factura = sin IVA)
-    const valorPedido = ctValorPedido(o);
-    return Math.max(0, valorPedido - cobrado);
+    const valorPedidoConIva = ctValorPedido(o) * 1.16;
+    return Math.max(0, valorPedidoConIva - cobrado);
   }
+}
+
+// Cartera real: SOLO cuenta si hay actividad real en Contabilidad (al menos
+// una factura o un abono) — un pedido sin nada capturado no es una deuda
+// formal todavía (existe en "Por facturar", no en "Cartera"). Siempre en
+// base CON IVA (ctSaldoEfectivo ya lo garantiza tras el fix de arriba).
+// Fuente única usada por "Cartera activa"/cartaMes (Administración),
+// Cartera vigente/vencida (Contabilidad) y "Cartera" del Reporte Ejecutivo
+// (Reportes) — para que los 3 SIEMPRE coincidan en el número.
+function ctSaldoCarteraReal(o) {
+  if (o.tipo === 'stk') return 0;
+  const folio = o.folio || o.id;
+  const tieneActividad = ctFacturasDePedido(folio).length > 0 || ctAbonosDePedido(folio).length > 0;
+  return tieneActividad ? Math.max(0, ctSaldoEfectivo(o)) : 0;
 }
 
 // Fuente única de verdad para "cuánto le falta facturar a este pedido" —
@@ -7323,6 +7361,10 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
   // Facturado / Cobrado: cifra fiscal — TODOS los pedidos no-STK, sin importar
   // Buscar/Ver pedidos cerrados/Estatus (igual que ya hacía Cobrado antes; ahora
   // Facturado se vuelve consistente con ese mismo criterio). Filtra solo por mes.
+  // FIX (ago 2026, decisión de Alex): Facturado ahora es la VENTA (monto_sin_iva),
+  // no el total del CFDI (monto_total, que incluye IVA). El IVA no es ingreso
+  // de la empresa — es un pasivo trasladado al SAT — así que no debe inflar
+  // la cifra de ventas del mes. Cobrado sigue con IVA (es efectivo real).
   let facturadoMes = 0;
   orders.forEach(o => {
     if (o.tipo === 'stk') return;
@@ -7330,7 +7372,7 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
     ctFacturasDePedido(folio).forEach(f => {
       const df = f.fecha_factura ? new Date(f.fecha_factura) : null;
       if (df && df.getMonth()===mesSel && df.getFullYear()===anioSel) {
-        facturadoMes += parseFloat(f.monto_total)||0;
+        facturadoMes += parseFloat(f.monto_sin_iva)||0;
       }
     });
   });
@@ -7390,15 +7432,15 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
   });
 
   const kpis = [
-    {label: labelMes ? ('Facturado en '+labelMes) : 'Facturado este mes', val:ctFmt(facturadoMes), color:'var(--navy)', sub:'por fecha de emisión'},
-    {label: labelMes ? ('Cobrado en '+labelMes)   : 'Cobrado este mes',   val:ctFmt(cobradoMes),   color:'#34A853'},
-    {label:'Total por facturar', val:ctFmt(porFacturarTotal), color:'#E37400', sub:'todos los pedidos, todos los meses'},
-    {label:'Cartera vigente',    val:ctFmt(carteraVigente), color:'var(--navy)', sub:'todos los pedidos, todos los meses'},
-    {label:'Cartera vencida',    val:ctFmt(carteraVencida), color: carteraVencida>0?'#C0391B':'var(--muted)', sub:'todos los pedidos, todos los meses'},
+    {label: labelMes ? ('Facturado en '+labelMes) : 'Facturado este mes', val:ctFmt(facturadoMes), color:'var(--navy)', sub:'por fecha de emisión', ivaNote:'+ IVA'},
+    {label: labelMes ? ('Cobrado en '+labelMes)   : 'Cobrado este mes',   val:ctFmt(cobradoMes),   color:'#34A853', ivaNote:'IVA incluido'},
+    {label:'Total por facturar', val:ctFmt(porFacturarTotal), color:'#E37400', sub:'todos los pedidos, todos los meses', ivaNote:'+ IVA'},
+    {label:'Cartera vigente',    val:ctFmt(carteraVigente), color:'var(--navy)', sub:'todos los pedidos, todos los meses', ivaNote:'IVA incluido'},
+    {label:'Cartera vencida',    val:ctFmt(carteraVencida), color: carteraVencida>0?'#C0391B':'var(--muted)', sub:'todos los pedidos, todos los meses', ivaNote:'IVA incluido'},
   ];
   document.getElementById('ctKpis').innerHTML = kpis.map(k =>
     '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px">' +
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">'+k.label+'</div>' +
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">'+k.label+' <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">'+k.ivaNote+'</span></div>' +
     '<div style="font-size:20px;font-weight:700;color:'+k.color+'">'+k.val+'</div>' +
     (k.sub?'<div style="font-size:10px;color:var(--muted);margin-top:3px">'+k.sub+'</div>':'') +
     '</div>'
@@ -8345,7 +8387,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-18-1600';
+const APP_VERSION = '2026-08-18-1800';
 
 let _versionCheckTimer = null;
 
