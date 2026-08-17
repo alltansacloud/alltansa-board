@@ -1140,7 +1140,7 @@ textarea{resize:vertical;min-height:58px}
   <div id="ctC" class="hidden" style="padding:16px;max-width:1400px;margin:0 auto">
     <!-- KPIs sticky -->
     <div style="position:sticky;top:46px;z-index:9;background:#F0F2F5;padding:12px 0 8px;margin-bottom:4px">
-      <div id="ctKpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
+      <div id="ctKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px"></div>
     </div>
     <!-- Filtros: fila 1 dropdowns + buscador + checkbox en una sola línea -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;margin-top:4px">
@@ -7198,7 +7198,15 @@ function ctProximoVencimiento(folio) {
   return fechas.length ? fechas[0] : null;
 }
 
-function ctSemaforoVenc(folio) {
+function ctSemaforoVenc(folio, saldo) {
+  // FIX (ago 2026): antes esta función solo comparaba la fecha_vencimiento
+  // de la factura contra hoy, SIN checar si esa factura ya estaba pagada.
+  // Resultado: un pedido con saldo $0.00 (100% cobrado de lo facturado)
+  // podía salir marcado "● Vencido Nd" en rojo solo porque la fecha de
+  // vencimiento de esa factura ya había pasado — aunque no le debieras
+  // nada a ese cliente. El semáforo de vencimiento solo tiene sentido si
+  // todavía hay algo pendiente de cobrar; si no, no se muestra nada.
+  if (!(saldo > 0.01)) return '';
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const facts = ctFacturasDePedido(folio).filter(f => f.fecha_vencimiento);
   if (!facts.length) return '';
@@ -7263,23 +7271,41 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
     }
   });
 
-  // Cartera vigente/vencida: saldo vivo A HOY de los pedidos visibles (no del mes elegido).
-  let carteraVigente=0, carteraVencida=0;
+  // Cartera vigente/vencida + Por facturar: saldo vivo A HOY de los pedidos
+  // en pedidosParaCartera (ver renderContab: ya excluye STK/cancelados y
+  // SIEMPRE incluye cerrados — independiente del checkbox "Ver pedidos
+  // cerrados", que solo controla qué filas se ven en la tabla). No depende
+  // del mes elegido en el dropdown.
+  //
+  // FIX (ago 2026): antes se usaba ctSaldo(folio) = facturado - cobrado, que
+  // en un pedido con anticipo cobrado pero SIN factura formal todavía da un
+  // número NEGATIVO (facturado=0) y quedaba descartado del todo por el
+  // "if(saldo>0)" — ese dinero real pendiente desaparecía de las dos
+  // tarjetas. ctSaldoEfectivo(o) sí contempla ese caso (usa valor del
+  // pedido - cobrado cuando no hay facturas aún), igual que ya hacía el
+  // resto del sistema (tabla, modal, Reportes > Cuentas por Cobrar).
+  let carteraVigente=0, carteraVencida=0, porFacturarTotal=0;
   pedidosParaCartera.forEach(o => {
     const folio = o.folio||o.id;
-    const saldo = ctSaldo(folio);
+    const saldo = Math.max(0, ctSaldoEfectivo(o));
     if (saldo > 0) {
       const est = ctEstatusCartera(o);
       if (est === 'vencido') carteraVencida += saldo;
       else carteraVigente += saldo;
     }
+    // Por facturar — misma fórmula que ya usa calcCarteraGeneral() en
+    // Reportes > Cuentas por Cobrar, para que los dos módulos coincidan.
+    const valorPedido = ctValorPedido(o);
+    const sinIvaFact = ctTotalSinIvaFacturado(folio);
+    porFacturarTotal += Math.max(0, valorPedido - sinIvaFact);
   });
 
   const kpis = [
     {label: labelMes ? ('Facturado en '+labelMes) : 'Facturado este mes', val:ctFmt(facturadoMes), color:'var(--navy)', sub:'por fecha de emisión'},
     {label: labelMes ? ('Cobrado en '+labelMes)   : 'Cobrado este mes',   val:ctFmt(cobradoMes),   color:'#34A853'},
-    {label:'Cartera vigente',    val:ctFmt(carteraVigente), color:'var(--navy)'},
-    {label:'Cartera vencida',    val:ctFmt(carteraVencida), color: carteraVencida>0?'#C0391B':'var(--muted)'},
+    {label:'Total por facturar', val:ctFmt(porFacturarTotal), color:'#E37400', sub:'todos los pedidos, todos los meses'},
+    {label:'Cartera vigente',    val:ctFmt(carteraVigente), color:'var(--navy)', sub:'todos los pedidos, todos los meses'},
+    {label:'Cartera vencida',    val:ctFmt(carteraVencida), color: carteraVencida>0?'#C0391B':'var(--muted)', sub:'todos los pedidos, todos los meses'},
   ];
   document.getElementById('ctKpis').innerHTML = kpis.map(k =>
     '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px">' +
@@ -7291,16 +7317,31 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
 }
 
 // ── Render tabla ──────────────────────────────────
+// Predicado de búsqueda compartido — usado tanto para filtrar la tabla como
+// la base de Cartera, así los dos SIEMPRE aplican el mismo criterio.
+function ctCoincideBusqueda(o, s) {
+  // String(...) explícito en todos — o.num en particular a veces se guarda
+  // como NÚMERO puro en el Sheet (ej. "23", "439", sin letras), y (o.num||'')
+  // no lo convierte a texto: un número truthy pasa de largo el "||''" tal
+  // cual, y .toLowerCase() no existe en un número. Eso tronaba el filtro
+  // completo a medias en cuanto llegaba a un pedido así.
+  const folio = String(o.folio||o.id||'').toLowerCase();
+  const cliente = String(o.client||'').toLowerCase();
+  const numCliente = String(o.num||'').toLowerCase();
+  const facturas = ctFacturasDePedido(o.folio||o.id).map(f => String(f.num_factura||'').toLowerCase()).join(' ');
+  return folio.includes(s) || cliente.includes(s) || numCliente.includes(s) || facturas.includes(s);
+}
+
 function renderContab() {
   const s = (document.getElementById('ctSearch').value||'').toLowerCase().trim();
   const filtMes = document.getElementById('ctFiltroMes').value;
   const filtEst = document.getElementById('ctFiltroEstatus').value;
   const verCerrados = document.getElementById('ctVerCerrados').checked;
 
-  // Pedidos base: excluir STK. Ocultar cerrados/cancelados es conveniencia
-  // para no saturar la vista por default — pero si hay una búsqueda activa,
-  // se ignora: si estás buscando algo puntual, es porque lo quieres
-  // encontrar sin importar si ya se cerró.
+  // ── Base para la TABLA (comportamiento sin cambios): excluir STK. Ocultar
+  // cerrados/cancelados es conveniencia para no saturar la vista por
+  // default — pero si hay una búsqueda activa, se ignora: si estás buscando
+  // algo puntual, es porque lo quieres encontrar sin importar si ya se cerró.
   let pedidos = orders.filter(o => {
     if (o.tipo === 'stk') return false;
     if (s) return true;
@@ -7308,34 +7349,21 @@ function renderContab() {
     if (!verCerrados && (st === 'closed' || st === 'cancelado')) return false;
     return true;
   });
+  if (s) pedidos = pedidos.filter(o => ctCoincideBusqueda(o, s));
+  if (filtEst) pedidos = pedidos.filter(o => ctEstatusCartera(o) === filtEst);
 
-  // Filtro búsqueda
-  if (s) {
-    pedidos = pedidos.filter(o => {
-      // String(...) explícito en todos — o.num en particular a veces se
-      // guarda como NÚMERO puro en el Sheet (ej. "23", "439", sin letras),
-      // y (o.num||'') no lo convierte a texto: un número truthy pasa de
-      // largo el "||''" tal cual, y .toLowerCase() no existe en un número.
-      // Eso tronaba el filtro completo a medias en cuanto llegaba a un
-      // pedido así, dejando la tabla sin actualizar (parecía que la
-      // búsqueda "no hacía nada").
-      const folio = String(o.folio||o.id||'').toLowerCase();
-      const cliente = String(o.client||'').toLowerCase();
-      const numCliente = String(o.num||'').toLowerCase();
-      const facturas = ctFacturasDePedido(o.folio||o.id).map(f => String(f.num_factura||'').toLowerCase()).join(' ');
-      return folio.includes(s) || cliente.includes(s) || numCliente.includes(s) || facturas.includes(s);
-    });
-  }
-
-  // Filtro estatus
-  if (filtEst) {
-    pedidos = pedidos.filter(o => ctEstatusCartera(o) === filtEst);
-  }
-
-  // pedidosParaCartera: hasta aquí (Buscar + Ver pedidos cerrados + Estatus),
-  // SIN el filtro de mes — Cartera vigente/vencida es "lo que se debe hoy",
-  // no debe moverse según qué mes elijas en el dropdown.
-  const pedidosParaCartera = pedidos;
+  // ── Base para CARTERA (tarjetas KPI): independiente del checkbox "Ver
+  // pedidos cerrados" — Cartera es "cuánto me deben HOY", sin importar qué
+  // filas estés viendo en la tabla de abajo. Solo excluye STK (no genera
+  // cartera de cliente) y cancelados (no son deuda real; antes un cancelado
+  // con saldo residual se colaba a veces y sumaba por error a "Cartera
+  // vigente"). Si buscas algo o filtras por estatus, sí se respeta — para
+  // poder ver la cartera de un cliente o estatus puntual.
+  let pedidosParaCartera = orders.filter(o => o.tipo !== 'stk' && gSt(o) !== 'cancelado');
+  if (s) pedidosParaCartera = pedidosParaCartera.filter(o => ctCoincideBusqueda(o, s));
+  if (filtEst) pedidosParaCartera = pedidosParaCartera.filter(o => ctEstatusCartera(o) === filtEst);
+  // SIN el filtro de mes — Cartera vigente/vencida/por-facturar es "lo que
+  // se debe hoy", no debe moverse según qué mes elijas en el dropdown.
 
   // Filtro mes — aspecto FISCAL: un pedido entra si tiene al menos una
   // factura con fecha_factura dentro del mes elegido (no por fecha de
@@ -7379,7 +7407,7 @@ function renderContab() {
     const cobrado = ctTotalCobrado(folio);
     const saldo = ctSaldoEfectivo(o);
     const est = ctEstatusCartera(o);
-    const semaforo = est !== 'liquidado' && est !== 'sin_facturar' && est !== 'cancelado' ? ctSemaforoVenc(folio) : '';
+    const semaforo = est !== 'liquidado' && est !== 'sin_facturar' && est !== 'cancelado' ? ctSemaforoVenc(folio, saldo) : '';
     const numFacts = facts.length ? facts.map(f => f.num_factura||'—').join(', ') : '<span style="color:var(--muted)">—</span>';
     const vencTxt = (() => {
       const vd = ctProximoVencimiento(folio);
@@ -8122,7 +8150,7 @@ function ctBannerCancelado(o) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-08-1400';
+const APP_VERSION = '2026-08-17-1600';
 
 let _versionCheckTimer = null;
 
