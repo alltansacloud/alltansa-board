@@ -7211,22 +7211,28 @@ function ctSaldo(folio) {
 }
 
 function ctSaldoEfectivo(o) {
-  // Cartera representa una deuda REAL — SIEMPRE en base con IVA, tenga o no
-  // factura formal todavía.
-  // FIX (ago 2026, decisión de Alex): antes, cuando no había factura pero sí
-  // un abono, se comparaba contra el valor del pedido SIN IVA — mezclando
-  // bases dentro de la MISMA tarjeta de Cartera Vigente/Vencida: un pedido
-  // ya facturado se contaba con IVA (ctTotalFacturado ya lo incluye) y uno
-  // solo con abono se contaba sin IVA. Ahora ambas ramas son con IVA,
-  // usando la misma tasa (16%) que ya usa el resto del sistema (ctCalcIva,
-  // formulario de "Nueva factura").
+  // Cartera representa una deuda REAL — con IVA cuando algún día habrá
+  // factura de por medio, SIN IVA cuando el pedido está marcado "sin
+  // factura" (nunca habrá factura, nunca habrá IVA que cobrar — caso OVSA).
+  // FIX (ago 2026): antes, cuando no había factura pero sí un abono,
+  // SIEMPRE se comparaba contra el valor del pedido CON IVA (×1.16) — esto
+  // es correcto para un anticipo que espera una factura futura, pero NO
+  // para un pedido ya marcado "sin_factura" (nunca facturará; lo pactado
+  // con el cliente fue el valor del pedido tal cual, sin IVA de por medio).
+  // Sin esta distinción, un pedido "sin factura" ya completamente pagado
+  // seguía mostrando un saldo pendiente FANTASMA — exactamente el 16% de su
+  // valor — porque el sistema esperaba de más un IVA que nunca existió.
   const folio = o.folio || o.id;
   const facts = ctFacturasDePedido(folio);
   const cobrado = ctTotalCobrado(folio);
   if (facts.length > 0) {
     // ctTotalFacturado ya es con IVA (suma monto_total de las facturas)
     return ctTotalFacturado(folio) - cobrado;
+  } else if (o.sin_factura && o.sin_factura.done) {
+    // Nunca habrá factura — sin IVA, el valor pactado es el del pedido tal cual.
+    return Math.max(0, ctValorPedido(o) - cobrado);
   } else {
+    // Anticipo antes de una factura futura — sí se espera IVA eventualmente.
     const valorPedidoConIva = ctValorPedido(o) * 1.16;
     return Math.max(0, valorPedidoConIva - cobrado);
   }
@@ -8387,7 +8393,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-18-1800';
+const APP_VERSION = '2026-08-19-1000';
 
 let _versionCheckTimer = null;
 
