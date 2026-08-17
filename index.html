@@ -1160,7 +1160,7 @@ textarea{resize:vertical;min-height:58px}
         <input class="search-inp" id="ctSearch" placeholder="Buscar folio, cliente, pedido cliente, factura..." oninput="renderContab()" style="width:280px">
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="ctVerCerrados" onchange="renderContab()"> Ver pedidos cerrados
+        <input type="checkbox" id="ctVerCerrados" onchange="renderContab()"> Ver pedidos cerrados y liquidados
       </label>
     </div>
     <!-- Tabla -->
@@ -7300,17 +7300,36 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
   // tarjetas. ctSaldoEfectivo(o) sí contempla ese caso (usa valor del
   // pedido - cobrado cuando no hay facturas aún), igual que ya hacía el
   // resto del sistema (tabla, modal, Reportes > Cuentas por Cobrar).
+  // FIX #2 (ago 2026, decisión de Alex): antes se sumaba ctSaldoEfectivo(o)
+  // sin importar si el pedido tenía o no actividad real en Contabilidad. Un
+  // pedido "Sin facturar" con 0 facturas Y 0 abonos (ej. CYMAQ) cae en la
+  // rama "else" de ctSaldoEfectivo (valorPedido - cobrado = valorPedido
+  // completo, porque cobrado=0) — y ese mismo monto ya se estaba sumando
+  // también a "Total por facturar" (porFacturarTotal, abajo). Resultado:
+  // el mismo dinero contado DOS VECES en dos tarjetas que deben ser
+  // mutuamente excluyentes. Ahora solo entra a Cartera Vigente/Vencida si
+  // hay actividad real (al menos 1 factura o 1 abono capturado) — igual
+  // que ya hace calcCarteraGeneral() en Reportes > Cuentas por Cobrar
+  // ("tieneActividad"). Un pedido sin ninguna actividad SOLO cuenta en
+  // "Total por facturar", nunca en Cartera — no existe deuda formal
+  // todavía si no se le ha facturado ni cobrado nada.
   let carteraVigente=0, carteraVencida=0, porFacturarTotal=0;
   pedidosParaCartera.forEach(o => {
     const folio = o.folio||o.id;
-    const saldo = Math.max(0, ctSaldoEfectivo(o));
-    if (saldo > 0) {
-      const est = ctEstatusCartera(o);
-      if (est === 'vencido') carteraVencida += saldo;
-      else carteraVigente += saldo;
+    const tieneActividad = ctFacturasDePedido(folio).length>0 || ctAbonosDePedido(folio).length>0;
+    if (tieneActividad) {
+      const saldo = Math.max(0, ctSaldoEfectivo(o));
+      if (saldo > 0) {
+        const est = ctEstatusCartera(o);
+        if (est === 'vencido') carteraVencida += saldo;
+        else carteraVigente += saldo;
+      }
     }
     // Por facturar — misma fórmula que ya usa calcCarteraGeneral() en
     // Reportes > Cuentas por Cobrar, para que los dos módulos coincidan.
+    // Esta SÍ aplica siempre, tenga o no actividad — es lo opuesto a
+    // Cartera: "lo que falta facturar" existe independientemente de si ya
+    // se facturó algo antes.
     const valorPedido = ctValorPedido(o);
     const sinIvaFact = ctTotalSinIvaFacturado(folio);
     porFacturarTotal += Math.max(0, valorPedido - sinIvaFact);
@@ -7354,15 +7373,28 @@ function renderContab() {
   const filtEst = document.getElementById('ctFiltroEstatus').value;
   const verCerrados = document.getElementById('ctVerCerrados').checked;
 
-  // ── Base para la TABLA (comportamiento sin cambios): excluir STK. Ocultar
-  // cerrados/cancelados es conveniencia para no saturar la vista por
-  // default — pero si hay una búsqueda activa, se ignora: si estás buscando
-  // algo puntual, es porque lo quieres encontrar sin importar si ya se cerró.
+  // ── Base para la TABLA: excluir STK. Ocultar cerrados/cancelados/liquidados
+  // es conveniencia para no saturar la vista por default — pero si hay una
+  // búsqueda activa, se ignora: si estás buscando algo puntual, es porque lo
+  // quieres encontrar sin importar si ya se resolvió.
+  // FIX (ago 2026, decisión de Alex): se agregó 'liquidado' a la lista de
+  // exclusión. Antes solo se ocultaba por gSt(o)==='closed' (estatus
+  // OPERATIVO) — un pedido 100% facturado y 100% cobrado (estatus
+  // FINANCIERO 'liquidado') podía seguir apareciendo indefinidamente en la
+  // tabla si nadie lo marcaba 'Cerrado' operativamente, aunque ya no
+  // hubiera nada pendiente de cobrar. Ahora se oculta por cualquiera de los
+  // dos criterios — el checkbox revela ambos igual.
   let pedidos = orders.filter(o => {
     if (o.tipo === 'stk') return false;
     if (s) return true;
+    // Si hay un filtro de Estatus explícito activo (ej. seleccionaste
+    // "Liquidado" o "Cancelado" en el dropdown), no pre-excluir nada aquí —
+    // si no, el dropdown nunca podría mostrarlos sin also marcar el
+    // checkbox. El filtro de abajo (ctEstatusCartera(o) === filtEst) ya
+    // hace el trabajo preciso de mostrar solo esa categoría.
+    if (filtEst) return true;
     const st = gSt(o);
-    if (!verCerrados && (st === 'closed' || st === 'cancelado')) return false;
+    if (!verCerrados && (st === 'closed' || st === 'cancelado' || ctEstatusCartera(o) === 'liquidado')) return false;
     return true;
   });
   if (s) pedidos = pedidos.filter(o => ctCoincideBusqueda(o, s));
@@ -8166,7 +8198,7 @@ function ctBannerCancelado(o) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-17-1800';
+const APP_VERSION = '2026-08-17-2100';
 
 let _versionCheckTimer = null;
 
