@@ -306,6 +306,7 @@ textarea{resize:vertical;min-height:58px}
   .stat-sub.neg{color:#C0391B;font-style:normal;font-weight:600}
   .stat-sub.neu{color:#854F0B;font-style:normal;font-weight:600}
   .stat-mes{border-top-color:#1a73e8}
+  .stat-fact{border-top-color:var(--navy)}
   .stat-dep{border-top-color:#137333}
   .stat-car{border-top-color:#C0391B}
   .stat-porfact{border-top-color:#E37400}
@@ -2581,6 +2582,31 @@ function calcDepositadoMes(yymm){
   return{total:dep,posibleIva};
 }
 
+// Facturado real del mes (ago 2026, pedido de Alex) — misma fuente que
+// "Facturado este mes" en Contabilidad (ctRenderKpis): suma monto_sin_iva
+// de las facturas por fecha_factura real, sin importar de qué mes sea el
+// pedido original. Es la venta (sin IVA) reconocida fiscalmente ese mes —
+// un concepto DISTINTO de "Ventas del mes" (pedidosDelMes, por folio del
+// pedido, sin importar cuándo se facture). Un pedido puede registrarse en
+// un mes y facturarse -total o parcialmente- en otro. Excluye STK, igual
+// que el resto de estos KPIs.
+function calcFacturadoMes(yymm){
+  let fact=0;
+  (ctFacturas||[]).forEach(f=>{
+    const folio=f.folio_pedido;
+    if(!folio)return;
+    const o=orders.find(x=>(x.folio||x.id)===folio);
+    if(o&&o.tipo==='stk')return;
+    const df=cleanDate(f.fecha_factura);
+    if(!df)return;
+    const d=new Date(df);
+    const fYYMM=String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0');
+    if(fYYMM!==yymm)return;
+    fact+=parseFloat(f.monto_sin_iva)||0;
+  });
+  return fact;
+}
+
 function renderAS(){
   const s=computeOpsStats(orders); // stats globales — misma fuente de verdad que los botones
   const act=s.act,stks=s.stks,cer=s.cer,canc=s.canc,rie=s.rie,pfiniq=s.pfiniq,porEmbarcar=s.porEmbarcar;
@@ -2642,6 +2668,13 @@ function renderAS(){
   const depositadoPrev=depObjPrev.total;
   const depDelta=depositadoPrev>0?Math.round(((depositadoMes-depositadoPrev)/depositadoPrev)*100):null;
 
+  // Facturado real del mes (ago 2026, pedido de Alex) — misma fuente que
+  // "Facturado este mes" en Contabilidad. Distinto de "Ventas del mes":
+  // aquí cuenta por fecha_factura real, no por folio del pedido.
+  const facturadoMes=calcFacturadoMes(yymm);
+  const facturadoPrev=calcFacturadoMes(yymmPrev);
+  const facturadoDelta=facturadoPrev>0?Math.round(((facturadoMes-facturadoPrev)/facturadoPrev)*100):null;
+
   // Pendiente de cobrar del mes actual — mismo criterio que 'car' (con IVA,
   // solo actividad real), para que el sub-texto de la tarjeta no contradiga
   // el número principal.
@@ -2667,6 +2700,12 @@ function renderAS(){
         '<div class="stat-val sm">'+(ventasMes>0?fm(ventasMes):'—')+'</div>'+
         '<div class="stat-sub">'+(pedsMes.length)+' pedido'+(pedsMes.length!==1?'s':'')+' registrados</div>'+
         deltaLabel(ventasDelta)+
+      '</div>'+
+      '<div class="stat stat-fact">'+
+        '<div class="stat-label">Facturado '+mesNom+' <span style="font-size:9px;color:var(--muted)">+ IVA</span></div>'+
+        '<div class="stat-val sm">'+(facturadoMes>0?fm(facturadoMes):'—')+'</div>'+
+        '<div class="stat-sub">por fecha de factura real</div>'+
+        deltaLabel(facturadoDelta)+
       '</div>'+
       '<div class="stat stat-dep">'+
         '<div class="stat-label">Depositado '+mesNom+' <span style="font-size:9px;color:var(--muted)">IVA incluido</span></div>'+
@@ -4235,13 +4274,25 @@ function parseFecha(str){
   return isNaN(d.getTime())?null:d;
 }
 
-function enRango(o,desde,hasta){
-  let ref=o.received||'';
-  let d=parseFecha(ref);
-  if(!d&&o.folio){
-    const m=String(o.folio).match(/(?:A|STK)-(\d{2})(\d{2})-/);
-    if(m){d=new Date(2000+parseInt(m[1]),parseInt(m[2])-1,1);}
+// Fecha "oficial" de un pedido para efectos de Reportes — el folio
+// (A-YYMM-##) es el criterio principal: nunca falta (todo pedido lo tiene
+// por definición), es inmutable, y es el mismo criterio que ya usa
+// Administración en todos lados (pedidosDelMes, filtro Mes/Año). Si por
+// alguna razón no hay folio reconocible, se usa "Recibido" como respaldo.
+// FIX (ago 2026, decisión de Alex): antes se usaba o.received como
+// principal — un pedido con folio de un mes pero fecha de "Recibido"
+// capturada en otro mes se contaba distinto entre Administración y
+// Reportes ("Ventas"/"Pedidos del mes" no cuadraban).
+function fechaDelPedido(o){
+  const yymm=typeof folioYYMM==='function'?folioYYMM(o.folio):null;
+  if(yymm){
+    return new Date(2000+parseInt(yymm.substring(0,2)),parseInt(yymm.substring(2,4))-1,1);
   }
+  return parseFecha(o.received||'');
+}
+
+function enRango(o,desde,hasta){
+  const d=fechaDelPedido(o);
   if(!d)return false;
   return d>=desde&&d<=hasta;
 }
@@ -4255,20 +4306,31 @@ function fmtPct(v,total){
   return Math.round((v/total)*100)+'%';
 }
 
-function calcReporte(pedidos){
+function calcReporte(pedidos,desde,hasta){
   const total=pedidos.length;
   const ventas=pedidos.reduce(function(s,o){return s+ct(o.qty,o.value);},0); // venta, sin IVA
-  // Cobrado: dinero REAL cobrado (con IVA) — suma directa del ledger de
-  // abonos, igual que "Depositado" (Administración) y "Cobrado este mes"
-  // (Contabilidad). FIX (ago 2026, decisión de Alex): antes se derivaba como
-  // "ventas(sin IVA) - saldoPendiente(o)" — y saldoPendiente ya venía en
-  // base CON IVA para pedidos con factura, restando una base sin IVA menos
-  // una con IVA (número sin sentido real). Ahora es una suma directa, sin
-  // derivar de otra cifra en otra base.
-  const cobrado=pedidos.reduce(function(s,o){
-    if(o.tipo==='stk')return s;
-    const folio=o.folio||o.id;
-    return s+((typeof ctTotalCobrado==='function')?ctTotalCobrado(folio):0);
+  // Cobrado: dinero REAL cobrado EN EL RANGO seleccionado, agrupado por la
+  // fecha REAL de cada abono (fecha_abono) — igual que "Depositado"
+  // (Administración) y "Cobrado este mes" (Contabilidad).
+  // FIX (ago 2026, decisión de Alex): antes se sumaba ctTotalCobrado(folio)
+  // —el historial COMPLETO de abonos de cada pedido— atribuido al mes en
+  // que se RECIBIÓ el pedido, no al mes en que se pagó cada abono. Eso
+  // inflaba meses viejos (pedidos que siguieron cobrándose después,
+  // llegando incluso a >100% de "cobranza") y subestimaba meses recientes
+  // (pedidos nuevos apenas empezando a cobrarse), aunque el dinero real
+  // hubiera entrado ese mes. Ahora es una suma directa por fecha de abono,
+  // exactamente igual que Depositado — para que ambos SIEMPRE coincidan.
+  const cobrado=(ctAbonos||[]).reduce(function(s,a){
+    const folio=a.folio_pedido;
+    if(!folio)return s;
+    const o=orders.find(function(x){return (x.folio||x.id)===folio;});
+    if(o&&(o.tipo==='stk'||gSt(o)==='cancelado'))return s;
+    const fa=cleanDate(a.fecha_abono);
+    if(!fa)return s;
+    const d=new Date(fa);
+    if(desde&&d<desde)return s;
+    if(hasta&&d>hasta)return s;
+    return s+(parseFloat(a.monto)||0);
   },0);
   // Cartera: saldo real pendiente (con IVA), cálculo DIRECTO vía
   // ctSaldoCarteraReal — misma fuente única que Contabilidad (Cartera
@@ -4289,34 +4351,61 @@ function calcReporte(pedidos){
   pedidos.filter(function(o){return o.tipo!=='stk';}).forEach(function(o){
     const cli=(o.client||'Sin nombre').trim();
     if(!porCliente[cli])porCliente[cli]={ventas:0,cobrado:0};
-    const folio=o.folio||o.id;
     porCliente[cli].ventas+=ct(o.qty,o.value);
-    porCliente[cli].cobrado+=(typeof ctTotalCobrado==='function')?ctTotalCobrado(folio):0;
+  });
+  // Cobrado por cliente — mismo criterio (fecha real del abono, dentro del
+  // rango), mapeado a cliente vía el pedido asociado a cada abono.
+  (ctAbonos||[]).forEach(function(a){
+    const folio=a.folio_pedido;
+    if(!folio)return;
+    const o=orders.find(function(x){return (x.folio||x.id)===folio;});
+    if(!o||o.tipo==='stk'||gSt(o)==='cancelado')return;
+    const cli=(o.client||'Sin nombre').trim();
+    if(!porCliente[cli])return; // cliente sin pedidos en el rango seleccionado
+    const fa=cleanDate(a.fecha_abono);
+    if(!fa)return;
+    const d=new Date(fa);
+    if(desde&&d<desde)return;
+    if(hasta&&d>hasta)return;
+    porCliente[cli].cobrado+=parseFloat(a.monto)||0;
   });
   return{total,ventas,cobrado,cartera,clientes,cerrados,fluidos,porCliente};
 }
 
-function calcPorMes(pedidos){
+function calcPorMes(pedidos,desde,hasta){
   const meses={};
+  const lbl=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  function bucket(key,year,month){
+    if(!meses[key])meses[key]={label:lbl[month]+' '+year,pedidos:0,ventas:0,cobrado:0,cartera:0};
+    return meses[key];
+  }
+  // 1) Pedidos / Ventas / Cartera — por FOLIO (fechaDelPedido), mismo
+  // criterio que enRango y que Administración en todos lados.
   pedidos.forEach(function(o){
-    const ref=o.received||'';
-    var d=parseFecha(ref);
-    if(!d&&o.folio){
-      const mf=String(o.folio).match(/(?:A|STK)-(\d{2})(\d{2})-/);
-      if(mf){d=new Date(2000+parseInt(mf[1]),parseInt(mf[2])-1,1);}
-    }
+    const d=fechaDelPedido(o);
     if(!d)return;
     const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    if(!meses[key])meses[key]={label:'',pedidos:0,ventas:0,cobrado:0,cartera:0};
-    const lbl=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    meses[key].label=lbl[d.getMonth()]+' '+d.getFullYear();
-    meses[key].pedidos++;
-    const folio=o.folio||o.id;
-    meses[key].ventas+=ct(o.qty,o.value);
-    // FIX (ago 2026): cobrado y cartera ahora se acumulan DIRECTO (mismo
-    // criterio que calcReporte de arriba), no se derivan de ventas-cobrado.
-    meses[key].cobrado+=(typeof ctTotalCobrado==='function')?ctTotalCobrado(folio):0;
-    meses[key].cartera+=(typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0;
+    const b=bucket(key,d.getFullYear(),d.getMonth());
+    b.pedidos++;
+    b.ventas+=ct(o.qty,o.value);
+    b.cartera+=(typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0;
+  });
+  // 2) Cobrado — por la fecha REAL del abono (fecha_abono), igual que
+  // calcDepositadoMes en Administración — NO por el mes del pedido.
+  // FIX (ago 2026, decisión de Alex): ver nota completa en calcReporte().
+  (ctAbonos||[]).forEach(function(a){
+    const folio=a.folio_pedido;
+    if(!folio)return;
+    const o=orders.find(function(x){return (x.folio||x.id)===folio;});
+    if(o&&(o.tipo==='stk'||gSt(o)==='cancelado'))return;
+    const fa=cleanDate(a.fecha_abono);
+    if(!fa)return;
+    const d=new Date(fa);
+    if(desde&&d<desde)return;
+    if(hasta&&d>hasta)return;
+    const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const b=bucket(key,d.getFullYear(),d.getMonth());
+    b.cobrado+=parseFloat(a.monto)||0;
   });
   return Object.entries(meses).sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(e){
     return Object.assign({},e[1],{cartera:Math.round(e[1].cartera),ventas:Math.round(e[1].ventas),cobrado:Math.round(e[1].cobrado)});
@@ -4682,8 +4771,8 @@ async function renderReporte(){
   if(btnGen){btnGen.disabled=false;btnGen.textContent='Generar reporte';}
 
   var pedidos=orders.filter(function(o){return o.tipo!=='stk'&&gSt(o)!=='cancelado'&&enRango(o,desde,hasta);});
-  var d=calcReporte(pedidos);
-  var porMes=calcPorMes(pedidos);
+  var d=calcReporte(pedidos,desde,hasta);
+  var porMes=calcPorMes(pedidos,desde,hasta);
   var mostrarMeses=porMes.length>1;
   var ticketProm=d.total>0?d.ventas/d.total:0;
   var pctCob=d.ventas>0?Math.min(100,Math.round((d.cobrado/d.ventas)*100)):0;
@@ -4834,11 +4923,11 @@ async function exportarPDF(){
   const desdeStr=document.getElementById('rptDesde')?.value||'';
   const hastaStr=document.getElementById('rptHasta')?.value||'';
   const pedidos=orders.filter(function(o){return o.tipo!=='stk'&&gSt(o)!=='cancelado'&&enRango(o,parseFecha(desdeStr),parseFecha(hastaStr));});
-  const d=calcReporte(pedidos);
-  const porMes=calcPorMes(pedidos);
+  const desdeD=parseFecha(desdeStr),hastaD=parseFecha(hastaStr);
+  const d=calcReporte(pedidos,desdeD,hastaD);
+  const porMes=calcPorMes(pedidos,desdeD,hastaD);
   const pctCob=d.ventas>0?Math.min(100,Math.round((d.cobrado/d.ventas)*100)):0;
   const pctCartera=d.ventas>0?Math.round((d.cartera/d.ventas)*100):0;
-  const desdeD=parseFecha(desdeStr),hastaD=parseFecha(hastaStr);
   const prodPdf=calcProduccion(desdeD,hastaD);
   const modelosPdf=calcModelos(pedidos);
   const stkPdf=calcSTK(desdeD,hastaD);
@@ -5041,8 +5130,9 @@ function exportarExcel(){
   const desdeStr=document.getElementById('rptDesde')?.value||'';
   const hastaStr=document.getElementById('rptHasta')?.value||'';
   const pedidos=orders.filter(function(o){return o.tipo!=='stk'&&gSt(o)!=='cancelado'&&enRango(o,parseFecha(desdeStr),parseFecha(hastaStr));});
-  const d=calcReporte(pedidos);
-  const porMes=calcPorMes(pedidos);
+  const desdeD=parseFecha(desdeStr),hastaD=parseFecha(hastaStr);
+  const d=calcReporte(pedidos,desdeD,hastaD);
+  const porMes=calcPorMes(pedidos,desdeD,hastaD);
   const pctCob=d.ventas>0?Math.min(100,Math.round((d.cobrado/d.ventas)*100)):0;
   const wb=XLSX.utils.book_new();
   const wsKpis=XLSX.utils.aoa_to_sheet([['ALLTANSA S.A. de C.V. - Reporte Ejecutivo de Ventas'],['Período:',desdeStr+' al '+hastaStr],[''],['INDICADORES DEL PERÍODO'],['Ventas totales (+ IVA)',d.ventas],['Cobrado (IVA incluido)',d.cobrado],['Cartera pendiente (IVA incluido)',d.cartera],['% Cobranza',pctCob/100],['Pedidos registrados',d.total],['Clientes distintos',d.clientes],['Ticket promedio',d.total>0?Math.round(d.ventas/d.total):0]]);
@@ -8393,7 +8483,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-19-1000';
+const APP_VERSION = '2026-08-19-1600';
 
 let _versionCheckTimer = null;
 
