@@ -1139,7 +1139,7 @@ textarea{resize:vertical;min-height:58px}
     <button onclick="logout()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">Salir</button>
   </div>
   <div id="ctLB" class="loading-box"><div class="spinner"></div><p>Cargando contabilidad...</p></div>
-  <div id="ctC" class="hidden" style="padding:16px;max-width:1400px;margin:0 auto">
+  <div id="ctC" class="hidden" style="padding:16px;max-width:1800px;margin:0 auto">
     <!-- KPIs sticky -->
     <div style="position:sticky;top:46px;z-index:9;background:#F0F2F5;padding:12px 0 8px;margin-bottom:4px">
       <div id="ctKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px"></div>
@@ -1171,18 +1171,18 @@ textarea{resize:vertical;min-height:58px}
         <table style="width:100%;border-collapse:separate;border-spacing:0">
           <thead>
             <tr>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Folio</th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Cliente</th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Pedido cliente</th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Valor pedido<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#9aa">sin IVA</span></th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Factura(s)</th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Facturado<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#9aa">c/IVA · % fact.</span></th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Por facturar<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#9aa">sin IVA · % pend.</span></th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Cobrado<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#9aa">pagos recibidos · % cobrado</span></th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Saldo x cobrar<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#9aa">de lo facturado · % pend.</span></th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Vencimiento</th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Estatus</th>
-              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#F8F9FC;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2"></th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Folio</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Cliente</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Pedido cliente</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Valor pedido<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#B8C4E0">sin IVA</span></th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Factura(s)</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Facturado<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#B8C4E0">c/IVA · % fact.</span></th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Por facturar<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#B8C4E0">sin IVA · % pend.</span></th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Cobrado<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#B8C4E0">pagos recibidos · % cobrado</span></th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Saldo x cobrar<br><span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:#B8C4E0">de lo facturado · % pend.</span></th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Vencimiento</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2">Estatus</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.4px;background:#1B2A4A;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2"></th>
             </tr>
           </thead>
           <tbody id="ctBody"></tbody>
@@ -7675,7 +7675,7 @@ function renderContab() {
     const pctSaldoCobro = Math.max(0, 100 - pctCobrado);
 
     return '<tr style="cursor:pointer" data-folio="'+folio+'" onclick="openCTModal(this.dataset.folio)">' +
-      '<td><span style="font-weight:700;color:var(--navy);font-size:13px">'+folio+'</span></td>' +
+      '<td style="white-space:nowrap"><span style="font-weight:700;color:var(--navy);font-size:13px">'+folio+'</span></td>' +
       '<td style="font-size:13px">'+(o.client||'—')+'</td>' +
       '<td style="font-size:12px;color:var(--muted)">'+(o.num||'—')+'</td>' +
       '<td style="font-size:13px;font-weight:600">'+ctFmt(valorPedido)+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">sin IVA</span></td>' +
@@ -8483,7 +8483,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-19-1600';
+const APP_VERSION = '2026-08-19-1800';
 
 let _versionCheckTimer = null;
 
