@@ -7362,6 +7362,38 @@ function ctPorFacturar(o) {
   return Math.max(0, valorPedido - sinIvaFact);
 }
 
+// Aplica los abonos de un pedido a sus facturas en orden FIFO (la más
+// antigua primero, por fecha_factura) — el sistema no liga cada abono a una
+// factura en particular (los abonos son del pedido completo), así que esto
+// es la mejor inferencia posible de "cuál factura sigue realmente sin
+// pagarse", igual que cualquier sistema contable hace cuando no existe
+// conciliación factura-por-factura. Caso BUMA (ago 2026): un pedido con 2
+// facturas (anticipo 70% ya pagado, finiquito 30% recién emitido) se
+// marcaba "Vencido 21d" usando la fecha de vencimiento de la factura VIEJA
+// —que ya estaba completamente pagada—, en vez de la factura NUEVA que es
+// la que realmente sigue debiéndose. Devuelve las mismas facturas (en orden
+// FIFO), cada una con un campo _saldoFifo agregado: cuánto de ESA factura
+// en particular sigue pendiente de cobro.
+function ctFacturasConSaldoFIFO(folio) {
+  const facts = ctFacturasDePedido(folio).slice().sort((a,b) => {
+    const da = new Date(a.fecha_factura||0);
+    const db = new Date(b.fecha_factura||0);
+    return da - db;
+  });
+  let pool = ctTotalCobrado(folio);
+  facts.forEach(f => {
+    const monto = parseFloat(f.monto_total)||0;
+    if (pool >= monto) {
+      f._saldoFifo = 0;
+      pool -= monto;
+    } else {
+      f._saldoFifo = Math.max(0, monto - pool);
+      pool = 0;
+    }
+  });
+  return facts;
+}
+
 function ctEstatusCartera(o) {
   // Un pedido cancelado se marca así SIEMPRE, sin importar si tiene o no
   // facturas/abonos previos — para que Contabilidad lo vea de inmediato y no
@@ -7381,12 +7413,13 @@ function ctEstatusCartera(o) {
   }
   // Liquidado: SOLO si no queda nada por facturar Y nada por cobrar
   if (porFacturar <= 0.01 && saldo <= 0.01) return 'liquidado';
-  // Checar vencidos (hay saldo por cobrar y la fecha ya pasó)
+  // Checar vencidos (hay una factura con saldo FIFO real y su fecha ya pasó)
   const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const vencida = facts.some(f => {
+  const vencida = ctFacturasConSaldoFIFO(folio).some(f => {
     if (!f.fecha_vencimiento) return false;
+    if (f._saldoFifo <= 0.01) return false; // esta factura en particular ya está pagada (FIFO)
     const vd = new Date(f.fecha_vencimiento);
-    return vd < hoy && saldo > 0;
+    return vd < hoy;
   });
   if (vencida) return 'vencido';
   // Facturado completo pero pendiente de cobro
@@ -7395,11 +7428,18 @@ function ctEstatusCartera(o) {
 }
 
 function ctProximoVencimiento(folio) {
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const fechas = ctFacturasDePedido(folio)
-    .filter(f => f.fecha_vencimiento)
+  // FIX (ago 2026, caso BUMA): antes tomaba la fecha de vencimiento más
+  // próxima entre TODAS las facturas del pedido sin checar si ya estaban
+  // pagadas, y solo consideraba fechas futuras — una factura ya pagada con
+  // vencimiento futuro podía tapar que una factura más vieja, ya vencida,
+  // seguía sin pagarse. Ahora usa el mismo criterio FIFO que
+  // ctEstatusCartera/ctSemaforoVenc: solo mira facturas que, después de
+  // aplicar los abonos en orden (más antigua primero), siguen con saldo
+  // real pendiente — y toma la más próxima a vencer entre esas (puede ser
+  // pasada o futura; si ya venció, el badge/semáforo rojo lo indica aparte).
+  const fechas = ctFacturasConSaldoFIFO(folio)
+    .filter(f => f.fecha_vencimiento && f._saldoFifo > 0.01)
     .map(f => new Date(f.fecha_vencimiento))
-    .filter(d => d >= hoy)
     .sort((a,b) => a-b);
   return fechas.length ? fechas[0] : null;
 }
@@ -7414,7 +7454,13 @@ function ctSemaforoVenc(folio, saldo) {
   // todavía hay algo pendiente de cobrar; si no, no se muestra nada.
   if (!(saldo > 0.01)) return '';
   const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const facts = ctFacturasDePedido(folio).filter(f => f.fecha_vencimiento);
+  // FIX #2 (ago 2026, caso BUMA): con 2+ facturas (ej. anticipo + finiquito),
+  // si la primera ya se pagó pero su fecha de vencimiento quedó atrás, el
+  // pedido se marcaba "Vencido Nd" usando los días de la factura YA PAGADA.
+  // Ahora se aplican los abonos en orden FIFO (ver ctFacturasConSaldoFIFO)
+  // y solo cuentan las fechas de las facturas que, después de aplicar los
+  // pagos en ese orden, siguen con saldo real pendiente.
+  const facts = ctFacturasConSaldoFIFO(folio).filter(f => f.fecha_vencimiento && f._saldoFifo > 0.01);
   if (!facts.length) return '';
   let minDiff = Infinity;
   facts.forEach(f => {
@@ -8483,7 +8529,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-19-1800';
+const APP_VERSION = '2026-08-19-2000';
 
 let _versionCheckTimer = null;
 
