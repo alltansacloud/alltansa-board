@@ -108,8 +108,8 @@
   .col-oc        { width: 6%; }
   .col-fecha     { width: 7%; }
   .col-factura   { width: 7%; }
-  .col-comentarios { width: 15%; }
-  .col-del       { width: 3%; text-align: center; }
+  .col-comentarios { width: 12%; }
+  .col-acciones  { width: 8%; text-align: center; }
 
   .col-derivada {
     display: block; font-size: 12px; color: var(--text); padding: 4px 2px;
@@ -145,6 +145,18 @@
 
   .btn-icon { background: none; border: none; cursor: pointer; font-size: 15px; padding: 2px 5px; border-radius: 4px; }
   .btn-icon:hover { background: #e9ecef; }
+  .btn-icon:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-icon:disabled:hover { background: none; }
+  .acciones-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .acciones-botones { display: flex; gap: 2px; justify-content: center; }
+  .fecha-cierre-tag { font-size: 9.5px; color: var(--muted); white-space: nowrap; }
+
+  .chk-completados {
+    display: flex; align-items: center; gap: 6px; font-size: 13px;
+    color: var(--text); white-space: nowrap; cursor: pointer; user-select: none;
+    padding: 0 4px;
+  }
+  .chk-completados input { cursor: pointer; width: 15px; height: 15px; }
 
   /* Loading */
   .loading-overlay {
@@ -227,9 +239,13 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <input type="text" class="search-input" id="buscador" placeholder="🔍 Buscar por folio, cliente, proveedor, OC, factura o comentario..." oninput="renderMaquilaList()"/>
+        <label class="chk-completados">
+          <input type="checkbox" id="chkVerCompletados" onchange="toggleVerCompletados()"/>
+          <span id="lblVerCompletados">Ver completados (0)</span>
+        </label>
       </div>
       <div class="toolbar-right">
-        <button class="btn btn-primary" onclick="agregarEnvio()">＋ Agregar envío</button>
+        <button class="btn btn-primary" id="btnAgregarEnvio" onclick="agregarEnvio()">＋ Agregar envío</button>
       </div>
     </div>
 
@@ -249,7 +265,7 @@
             <th class="col-factura">Factura</th>
             <th class="col-fecha">Pago</th>
             <th class="col-comentarios">Comentarios</th>
-            <th class="col-del"></th>
+            <th class="col-acciones">Acciones</th>
           </tr>
         </thead>
         <tbody id="maquilaTbody">
@@ -276,6 +292,7 @@ let currentUser = null;
 let allMaquila = [];
 let editingCell = null; // { id, field } — celda tipo pastilla actualmente en edición
 let foliosCache = [];   // [{folio, cliente}] — vía getFoliosLigero, no carga pedidos completos
+let verCompletados = false; // toggle de la vista: pendientes (default) vs completados/archivados
 
 /* ═══════════════════════════════════════════
    INICIO — sin login: el acceso se controla entrando desde el botón
@@ -377,6 +394,68 @@ async function eliminarEnvio(id) {
 }
 
 /* ═══════════════════════════════════════════
+   CERRAR / REABRIR — archiva un envío a "Completados" cuando las 4 etapas
+   (Enviado/Recogido/Factura/Pago) ya están en verde. No se elimina el
+   registro, solo se marca `cerrado` para sacarlo de la vista activa y de
+   los contadores del resumen. `reabrirEnvio` revierte el marcado.
+═══════════════════════════════════════════ */
+function maquilaCompleta(m) {
+  return !!(m.fecha_envio && m.fecha_recogido && m.factura && m.fecha_pago);
+}
+
+async function cerrarEnvio(id) {
+  const item = allMaquila.find(m => String(m.id) === String(id));
+  if (!item || !maquilaCompleta(item)) return; // el botón ya debería estar deshabilitado en este caso
+  if (!confirm('¿Cerrar este pedido de maquila? Pasará a la pestaña de completados.')) return;
+  const fecha = todayStr();
+  setLoading(true);
+  try {
+    const body = new FormData();
+    body.append('action', 'saveMaquila');
+    body.append('data', JSON.stringify({ id, cerrado: true, fecha_cierre: fecha }));
+    body.append('_tk', API_TOKEN);
+    await fetch(API, { method: 'POST', body });
+    item.cerrado = true;
+    item.fecha_cierre = fecha;
+    setLoading(false);
+    renderMaquilaList();
+    showToast('Pedido cerrado y archivado.', 'success');
+  } catch(e) {
+    setLoading(false);
+    showToast('No se pudo cerrar el pedido. Intenta de nuevo.', 'error');
+  }
+}
+
+async function reabrirEnvio(id) {
+  const item = allMaquila.find(m => String(m.id) === String(id));
+  if (!item) return;
+  if (!confirm('¿Reabrir este pedido? Volverá a la lista de pendientes.')) return;
+  setLoading(true);
+  try {
+    const body = new FormData();
+    body.append('action', 'saveMaquila');
+    body.append('data', JSON.stringify({ id, cerrado: false, fecha_cierre: '' }));
+    body.append('_tk', API_TOKEN);
+    await fetch(API, { method: 'POST', body });
+    item.cerrado = false;
+    item.fecha_cierre = '';
+    setLoading(false);
+    renderMaquilaList();
+    showToast('Pedido reabierto.', 'success');
+  } catch(e) {
+    setLoading(false);
+    showToast('No se pudo reabrir el pedido. Intenta de nuevo.', 'error');
+  }
+}
+
+function toggleVerCompletados() {
+  verCompletados = document.getElementById('chkVerCompletados').checked;
+  const btnAdd = document.getElementById('btnAgregarEnvio');
+  if (btnAdd) btnAdd.style.display = verCompletados ? 'none' : '';
+  renderMaquilaList();
+}
+
+/* ═══════════════════════════════════════════
    EDICIÓN INLINE
 ═══════════════════════════════════════════ */
 function updateCampoTexto(id, field, value) {
@@ -441,7 +520,9 @@ function renderMaquilaList() {
   const tbody = document.getElementById('maquilaTbody');
   const q = (document.getElementById('buscador').value || '').trim().toLowerCase();
 
-  let items = allMaquila.slice();
+  // Vista activa: solo pendientes por cerrar (default) o solo completados/archivados.
+  const base = allMaquila.filter(m => verCompletados ? !!m.cerrado : !m.cerrado);
+  let items = base.slice();
   if (q) {
     items = items.filter(m => {
       const info = obtenerInfoFolio(m.folio_pedido);
@@ -464,7 +545,10 @@ function renderMaquilaList() {
   actualizarResumen();
 
   if (!items.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">${allMaquila.length ? 'Sin resultados para tu búsqueda' : 'Sin envíos registrados — usa "＋ Agregar envío"'}</td></tr>`;
+    const msg = verCompletados
+      ? 'Sin pedidos completados todavía'
+      : (base.length ? 'Sin resultados para tu búsqueda' : 'Sin envíos registrados — usa "＋ Agregar envío"');
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">${msg}</td></tr>`;
     return;
   }
 
@@ -491,7 +575,7 @@ function renderMaquilaList() {
       <td>${celdaFecha(m, 'fecha_pago')}</td>
       <td><textarea class="cell-textarea" placeholder="Ej. Proveedor pide anticipo / entrega con material incluido..."
           onchange="updateCampoTexto('${m.id}','comentarios',this.value)">${escHtml(m.comentarios||'')}</textarea></td>
-      <td class="col-del"><button class="btn-icon" title="Eliminar" onclick="eliminarEnvio('${m.id}')">🗑️</button></td>
+      <td class="col-acciones">${accionesCell(m)}</td>
     </tr>`;
   }).join('');
 }
@@ -529,20 +613,48 @@ function celdaFactura(m) {
   return `<div class="pill pill-ok" onclick="abrirEdicionPastilla('${m.id}','factura')">${escHtml(val)}</div>`;
 }
 
+// Celda de acciones: en la vista activa ofrece "Cerrar" (deshabilitado hasta
+// que Enviado/Recogido/Factura/Pago estén los 4 en verde) + "Eliminar"; en la
+// vista de completados ofrece "Reabrir" + "Eliminar", y muestra la fecha de cierre.
+function accionesCell(m) {
+  if (m.cerrado) {
+    return `<div class="acciones-cell">
+      <div class="acciones-botones">
+        <button class="btn-icon" title="Reabrir pedido" onclick="reabrirEnvio('${m.id}')">↩️</button>
+        <button class="btn-icon" title="Eliminar" onclick="eliminarEnvio('${m.id}')">🗑️</button>
+      </div>
+      ${m.fecha_cierre ? `<span class="fecha-cierre-tag">Cerrado ${fmtFechaCorta(m.fecha_cierre)}</span>` : ''}
+    </div>`;
+  }
+  const completo = maquilaCompleta(m);
+  const btnCerrar = completo
+    ? `<button class="btn-icon" title="Cerrar pedido (pasa a Completados)" onclick="cerrarEnvio('${m.id}')">🔒</button>`
+    : `<button class="btn-icon" disabled title="Completa Enviado, Recogido, Factura y Pago para poder cerrar este pedido">🔒</button>`;
+  return `<div class="acciones-botones">
+    ${btnCerrar}
+    <button class="btn-icon" title="Eliminar" onclick="eliminarEnvio('${m.id}')">🗑️</button>
+  </div>`;
+}
+
 function actualizarResumen() {
-  const total = allMaquila.length;
-  const sinEnviar = allMaquila.filter(m => !m.fecha_envio).length;
-  const sinRegresar = allMaquila.filter(m => m.fecha_envio && !m.fecha_recogido).length;
-  const alerta = allMaquila.filter(m => {
+  const activos = allMaquila.filter(m => !m.cerrado);
+  const total = activos.length;
+  const sinEnviar = activos.filter(m => !m.fecha_envio).length;
+  const sinRegresar = activos.filter(m => m.fecha_envio && !m.fecha_recogido).length;
+  const alerta = activos.filter(m => {
     const d = diasSinRegreso(m);
     return !m.fecha_recogido && d !== null && d > DIAS_ALERTA_SIN_REGRESAR;
   }).length;
-  const sinPagar = allMaquila.filter(m => !m.fecha_pago).length;
+  const sinPagar = activos.filter(m => !m.fecha_pago).length;
   document.getElementById('sumTotal').textContent = total;
   document.getElementById('sumSinEnviar').textContent = sinEnviar;
   document.getElementById('sumSinRegresar').textContent = sinRegresar;
   document.getElementById('sumAlerta').textContent = alerta;
   document.getElementById('sumSinPagar').textContent = sinPagar;
+  // Contador de completados junto al checkbox de la barra de herramientas
+  const completadosCount = allMaquila.length - total;
+  const lbl = document.getElementById('lblVerCompletados');
+  if (lbl) lbl.textContent = `Ver completados (${completadosCount})`;
 }
 
 /* ═══════════════════════════════════════════
@@ -610,7 +722,7 @@ function setLoading(v) {
    CHEQUEO DE VERSIÓN — version.json comparte llaves con
    index.html / cotizaciones.html; este módulo usa la llave "maquila".
 ═══════════════════════════════════════════ */
-const APP_VERSION = '2026-08-08-0900';
+const APP_VERSION = '2026-08-18-1230';
 let _versionCheckTimer = null;
 
 function _mostrarTagVersion(){
