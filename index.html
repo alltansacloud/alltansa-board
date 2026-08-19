@@ -3195,8 +3195,20 @@ async function aplicarJaleAlmacen(order,qty,client,by){
     order.qty_prod_real=aProd;
   }
 
-  // Descontar del inventario y registrar historial — verificar stock en
-  // tiempo real antes de descontar.
+  // Descontar del inventario — verificar stock en tiempo real antes de
+  // descontar. Esta parte SÍ debe pasar de inmediato (evita sobreventa si
+  // dos personas crean pedidos casi al mismo tiempo).
+  // FIX (ago 2026, caso reportado por Alex): antes, aquí mismo se escribía
+  // el historial_salidas del inventario Y se registraba el movimiento de
+  // "Salida" en Contabilidad/Almacén con order.folio — pero para un PEDIDO
+  // NUEVO, en este punto el folio todavía NO existe (lo asigna el backend
+  // vía LockService hasta que el pedido se guarda con apiSave, más
+  // adelante en saveOrder()). Resultado: todo jale de almacén de un pedido
+  // nuevo quedaba con folio VACÍO para siempre en "Historial de
+  // movimientos" — imposible saber después qué pedido se llevó cada
+  // unidad. Ahora esta función SOLO descuenta el stock; el historial y el
+  // registro del movimiento se completan en completarJaleAlmacenPostSave(),
+  // llamada una vez que el folio real ya se conoce (ver saveOrder()).
   const invActual=inventory.find(i=>i.id===fromStockData.id);
   const stockRealDisp=parseInt(invActual?invActual.stock_actual:fromStockData.stock_actual)||0;
   if(stockRealDisp<delAlmacen){
@@ -3205,27 +3217,43 @@ async function aplicarJaleAlmacen(order,qty,client,by){
     order.qty_produccion=qty-stockRealDisp;
   }
   const nuevoStock=Math.max(0,stockRealDisp-order.qty_almacen);
-  let historial=[];
-  try{if((invActual||fromStockData).historial_salidas)historial=JSON.parse((invActual||fromStockData).historial_salidas);}catch(e){}
-  historial.push({folio:order.folio,qty:order.qty_almacen,fecha:today(),cliente:client});
-  if(historial.length>50)historial=historial.slice(-50);
   const invItem={
     ...(invActual||fromStockData),
     stock_actual:nuevoStock,
-    ultima_salida:today(),
-    historial_salidas:JSON.stringify(historial)
+    ultima_salida:today()
   };
   const invResult=await apiSaveInv(invItem);
   if(!invResult||invResult.error){
     showAlert('⚠ Error al actualizar el almacén: '+(invResult&&invResult.error?invResult.error:'sin respuesta')+'\nEl pedido se guardó pero debes actualizar el stock manualmente en el Sheet.');
-  } else {
-    await apiLogMov({fecha:nowFechaHora(),tipo:'Salida',modelo:(invActual||fromStockData).modelo,qty:order.qty_almacen,folio:order.folio,usuario:by});
-    const idx=inventory.findIndex(i=>i.id===invItem.id);
-    if(idx>=0)inventory[idx]=invItem;
-    if(nuevoStock===0)toast('⚠ Almacén: '+fromStockData.modelo+' sin stock');
-    else if(nuevoStock<(parseInt(fromStockData.stock_minimo)||1))toast('⚠ Almacén: '+fromStockData.modelo+' por debajo del mínimo ('+nuevoStock+' uds)');
+    return {delAlmacen,aProd,invId:null};
   }
-  return {delAlmacen,aProd};
+  const idx=inventory.findIndex(i=>i.id===invItem.id);
+  if(idx>=0)inventory[idx]=invItem;
+  if(nuevoStock===0)toast('⚠ Almacén: '+fromStockData.modelo+' sin stock');
+  else if(nuevoStock<(parseInt(fromStockData.stock_minimo)||1))toast('⚠ Almacén: '+fromStockData.modelo+' por debajo del mínimo ('+nuevoStock+' uds)');
+  return {delAlmacen,aProd,invId:invItem.id};
+}
+
+// Completa la trazabilidad del jale de almacén (historial_salidas del
+// inventario + registro de "Salida" en Movimientos) una vez que el folio
+// REAL del pedido ya se conoce. Ver nota completa en aplicarJaleAlmacen().
+async function completarJaleAlmacenPostSave(invId,folio,qtyAlmacen,client,by){
+  if(!invId)return;
+  const invItem=inventory.find(i=>i.id===invId);
+  if(!invItem)return;
+  let historial=[];
+  try{if(invItem.historial_salidas)historial=JSON.parse(invItem.historial_salidas);}catch(e){}
+  historial.push({folio,qty:qtyAlmacen,fecha:today(),cliente:client});
+  if(historial.length>50)historial=historial.slice(-50);
+  const updatedInv={...invItem,historial_salidas:JSON.stringify(historial)};
+  try{
+    await apiSaveInv(updatedInv);
+    const idx=inventory.findIndex(i=>i.id===invId);
+    if(idx>=0)inventory[idx]=updatedInv;
+    await apiLogMov({fecha:nowFechaHora(),tipo:'Salida',modelo:invItem.modelo,qty:qtyAlmacen,folio,usuario:by});
+  }catch(e){
+    console.error('Error completando trazabilidad del jale de almacén (historial/movimiento):',e);
+  }
 }
 
 async function saveOrder(){
@@ -3284,6 +3312,7 @@ async function saveOrder(){
   const val=isStk?null:(parseFloat(document.getElementById('fVal').value)||null);
   const pctAntic=isStk?0:(parseInt(document.getElementById('fPctAntic').value)||0);
   const useFromStock=!!(fromStockData&&!isStk&&!editId);
+  let jaleInvId=null; // capturado si useFromStock, para completar historial/movimiento tras guardar (ver completarJaleAlmacenPostSave)
 
   let order;
   if(!editId){
@@ -3333,8 +3362,9 @@ async function saveOrder(){
 
     // Si se tomó del almacén (parcial o total)
     if(useFromStock){
-      const {delAlmacen,aProd}=await aplicarJaleAlmacen(order,qty,client,by);
+      const {delAlmacen,aProd,invId}=await aplicarJaleAlmacen(order,qty,client,by);
       order.log[0].msg+=' — '+delAlmacen+' uds del almacén'+(aProd>0?', '+aProd+' uds a producir':'');
+      jaleInvId=invId; // se completa el historial/movimiento MÁS ABAJO, ya con el folio real
     } // fin if(useFromStock)
 
   }else{
@@ -3412,16 +3442,27 @@ async function saveOrder(){
     // misma lógica que un pedido nuevo. Esto es lo que permite corregir un
     // pedido con el modelo equivocado sin tener que borrarlo y recrearlo.
     if(fromStockData&&!isStk){
-      const {delAlmacen,aProd}=await aplicarJaleAlmacen(order,qty,client,by);
+      const {delAlmacen,aProd,invId}=await aplicarJaleAlmacen(order,qty,client,by);
       const msgJale='Se jaló del almacén: '+delAlmacen+' uds de '+fromStockData.modelo+(aProd>0?', '+aProd+' uds a producir':'');
       order.log=[...order.log,{by,msg:msgJale,ts}];
       toast('📦 '+msgJale);
+      // Aquí order.folio YA es el folio real (pedido existente en edición),
+      // así que la trazabilidad se completa de inmediato — sin cambios de
+      // comportamiento respecto a antes para este caso.
+      await completarJaleAlmacenPostSave(invId,order.folio,order.qty_almacen,client,by);
     }
   }
 
   try{
     const res=await apiSave(order);
     if(res&&res.folio&&(!order.folio||order.folio===''))order.folio=res.folio;
+    // Pedido nuevo con jale de almacén: recién AHORA order.folio es el folio
+    // real (antes de esto era '' — ver nota en aplicarJaleAlmacen). Se
+    // completa el historial_salidas del inventario y el registro de
+    // "Salida" en Movimientos con el folio correcto.
+    if(jaleInvId){
+      await completarJaleAlmacenPostSave(jaleInvId,order.folio,order.qty_almacen,client,by);
+    }
     // Actualizar copia local: reemplaza si ya existía (edición), agrega si es nuevo
     const idx=orders.findIndex(x=>x.id===order.id);
     if(idx>=0)orders[idx]=order; else orders.push(order);
@@ -8529,7 +8570,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-19-2000';
+const APP_VERSION = '2026-08-19-2200';
 
 let _versionCheckTimer = null;
 
