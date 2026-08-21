@@ -2762,6 +2762,10 @@ const NORMA_POR_CATEGORIA    = { 'Aire': 'ASME SECCIÓN VIII DIV I', 'Diesel': '
 const ORIENTACION_POR_CATEGORIA = { 'Estacionarios': 'Horizontal', 'Carburación': 'Horizontal', 'Gasolina': 'Horizontal' };
 const FLUIDO_POR_CATEGORIA = { 'Aire': 'Aire', 'Diesel': 'Diesel', 'Estacionarios': 'Gas LP', 'Carburación': 'Gas LP', 'Gasolina': 'Gasolina' };
 
+// Fuente única de la tasa de IVA para el PDF de cotización (solo representación —
+// el monto guardado internamente sigue siendo sin IVA, sin cambios de lógica).
+const IVA_RATE_COTIZACION = 0.16;
+
 // Categoría base para lógica compartida (material/norma/descripción del PDF) —
 // las listas exclusivas de cliente (Aire — BUMA, Aire/Gasolina — Cleveland)
 // usan los mismos defaults que su categoría real, solo cambia el precio.
@@ -3112,8 +3116,8 @@ function generarPDFCotizacion(datos) {
   const hayServiciosExtra = serviciosExtra.length > 0;
 
   const footRow = [
-    { content: hayServiciosExtra ? 'SUBTOTAL TANQUES' : 'TOTAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
-    { content: fmtMonto(total, moneda), styles: { halign: 'right', fontStyle: 'bold', textColor: [19,115,51] } }
+    { content: hayServiciosExtra ? 'SUBTOTAL TANQUES' : 'SUBTOTAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtMonto(total, moneda), styles: { halign: 'right', fontStyle: 'bold', textColor: [27,42,74] } }
   ];
 
   // PARTIDA se lleva la mayor parte del ancho; CANT/P.UNIT/SUBTOTAL van compactos
@@ -3189,12 +3193,28 @@ function generarPDFCotizacion(datos) {
       margin: { left: M, right: M }
     });
     yy = doc.lastAutoTable.finalY + 8;
-
-    if (yy > doc.internal.pageSize.height - 25) { doc.addPage(); yy = 20; }
-    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(19,115,51);
-    doc.text('TOTAL GENERAL: ' + fmtMonto(total + totalServiciosExtra, moneda), W - M, yy, { align: 'right' });
-    yy += 10;
   }
+
+  // ── Resumen de totales: SUBTOTAL + IVA + TOTAL CON IVA INCLUIDO ─────────
+  // Se muestra SIEMPRE (haya o no accesorios/flete) para que el cliente vea
+  // el monto final que realmente paga en el mismo número grande — antes esto
+  // solo se comunicaba con la leyenda "PRECIO: EN MXN MAS IVA." en notas
+  // comerciales y varios clientes la pasaban por alto. El monto guardado en
+  // el sistema (mMonto, Sheet) sigue siendo sin IVA — este desglose es solo
+  // representación en el PDF.
+  const subtotalGeneral = total + totalServiciosExtra;
+  const ivaGeneral      = subtotalGeneral * IVA_RATE_COTIZACION;
+  const totalConIva     = subtotalGeneral + ivaGeneral;
+
+  if (yy > doc.internal.pageSize.height - 40) { doc.addPage(); yy = 20; }
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(80,90,110);
+  doc.text('SUBTOTAL: ' + fmtMonto(subtotalGeneral, moneda), W - M, yy, { align: 'right' }); yy += 6;
+  doc.text(`IVA (${Math.round(IVA_RATE_COTIZACION * 100)}%): ` + fmtMonto(ivaGeneral, moneda), W - M, yy, { align: 'right' }); yy += 8;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(19,115,51);
+  doc.text('TOTAL (IVA INCLUIDO): ' + fmtMonto(totalConIva, moneda), W - M, yy, { align: 'right' });
+  yy += 10;
 
   // ── Incluye / No incluye ─────────────────────────────────────────
   const incluyeTxt   = (datos.incluye   || 'MATERIALES, MANO DE OBRA Y FLETE').toUpperCase();
@@ -3894,7 +3914,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-08-08-1300';
+const APP_VERSION = '2026-08-21-1200';
 
 let _versionCheckTimer = null;
 
