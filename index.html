@@ -1186,6 +1186,7 @@ textarea{resize:vertical;min-height:58px}
             </tr>
           </thead>
           <tbody id="ctBody"></tbody>
+          <tfoot id="ctFootTotales"></tfoot>
         </table>
       </div>
     </div>
@@ -7713,6 +7714,7 @@ function renderContab() {
   const tbody = document.getElementById('ctBody');
   if (!pedidos.length) {
     tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">No hay pedidos que mostrar</td></tr>';
+    ctRenderTotalesFiltrados(pedidos);
     return;
   }
 
@@ -7776,6 +7778,46 @@ function renderContab() {
       '<td><button data-folio="'+folio+'" onclick="event.stopPropagation();openCTModal(this.dataset.folio)" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">Abrir</button></td>' +
       '</tr>';
   }).join('');
+
+  ctRenderTotalesFiltrados(pedidos);
+}
+
+// ── Fila de totales de la tabla ───────────────────
+// Suma SOLO lo que quedó visible en "pedidos" tras aplicar buscador, filtro
+// de mes, filtro de estatus y el checkbox "Ver cerrados" — a diferencia de
+// las tarjetas KPI de arriba, que son fijas (mes actual / todos los pedidos,
+// todos los meses) y NO se mueven con estos filtros. Reutiliza las mismas
+// funciones fuente de cada celda (ctValorPedido, ctTotalFacturado,
+// ctPorFacturar, ctTotalCobrado, ctSaldoEfectivo) para que el total nunca
+// se desalinee de lo que muestra cada renglón.
+function ctRenderTotalesFiltrados(pedidos) {
+  const foot = document.getElementById('ctFootTotales');
+  if (!foot) return;
+  if (!pedidos.length) { foot.innerHTML = ''; return; }
+
+  let sumValor = 0, sumFact = 0, sumPorFact = 0, sumCobrado = 0, sumSaldo = 0;
+  pedidos.forEach(o => {
+    const folio = o.folio || o.id;
+    sumValor   += ctValorPedido(o);
+    sumFact    += ctTotalFacturado(folio);
+    sumPorFact += ctPorFacturar(o);
+    sumCobrado += ctTotalCobrado(folio);
+    sumSaldo   += Math.max(0, ctSaldoEfectivo(o));
+  });
+  const n = pedidos.length;
+  const etiqueta = 'TOTAL — ' + n + ' pedido' + (n===1?'':'s') + ' filtrado' + (n===1?'':'s');
+
+  foot.innerHTML =
+    '<tr style="background:#EEF1F7;border-top:2px solid var(--navy)">' +
+      '<td colspan="3" style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--navy);text-align:right;white-space:nowrap">'+etiqueta+'</td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap">'+ctFmt(sumValor)+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">sin IVA</span></td>' +
+      '<td></td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap">'+ctFmt(sumFact)+'</td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumPorFact>0?'#E37400':'#34A853')+'">'+ctFmt(sumPorFact)+'</td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:#34A853;white-space:nowrap">'+ctFmt(sumCobrado)+'</td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumSaldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(sumSaldo)+'</td>' +
+      '<td></td><td></td><td></td>' +
+    '</tr>';
 }
 
 // ── Filtro de meses ───────────────────────────────
@@ -8570,7 +8612,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-19-2200';
+const APP_VERSION = '2026-08-21-1400';
 
 let _versionCheckTimer = null;
 
