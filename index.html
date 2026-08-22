@@ -7714,7 +7714,7 @@ function renderContab() {
   const tbody = document.getElementById('ctBody');
   if (!pedidos.length) {
     tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">No hay pedidos que mostrar</td></tr>';
-    ctRenderTotalesFiltrados(pedidos);
+    ctRenderTotalesFiltrados(pedidos, filtMes);
     return;
   }
 
@@ -7779,42 +7779,78 @@ function renderContab() {
       '</tr>';
   }).join('');
 
-  ctRenderTotalesFiltrados(pedidos);
+  ctRenderTotalesFiltrados(pedidos, filtMes);
 }
 
 // ── Fila de totales de la tabla ───────────────────
 // Suma SOLO lo que quedó visible en "pedidos" tras aplicar buscador, filtro
-// de mes, filtro de estatus y el checkbox "Ver cerrados" — a diferencia de
-// las tarjetas KPI de arriba, que son fijas (mes actual / todos los pedidos,
-// todos los meses) y NO se mueven con estos filtros. Reutiliza las mismas
-// funciones fuente de cada celda (ctValorPedido, ctTotalFacturado,
-// ctPorFacturar, ctTotalCobrado, ctSaldoEfectivo) para que el total nunca
-// se desalinee de lo que muestra cada renglón.
-function ctRenderTotalesFiltrados(pedidos) {
+// de mes, filtro de estatus y el checkbox "Ver cerrados".
+//
+// Facturado / Cobrado: cuando hay un MES seleccionado, usan el MISMO
+// criterio que las tarjetas KPI ("Facturado en [mes]" / "Cobrado en
+// [mes]") — solo cuenta facturas/abonos con fecha DENTRO de ese mes, y
+// Facturado en base sin IVA (igual decisión de Alex, ago 2026: el IVA no
+// es venta). Así este total SÍ reconcilia con el KPI de arriba cuando los
+// filtros de estatus/checkbox coinciden. Sin mes seleccionado no hay
+// ventana de tiempo con la que alinearse, así que se usa el histórico
+// completo de cada pedido (ctTotalFacturado/ctTotalCobrado), igual que
+// antes.
+//
+// Por facturar / Saldo x cobrar: SIEMPRE saldo vivo a hoy, sin importar el
+// mes — igual que "Total por facturar" y "Cartera vigente/vencida" en las
+// tarjetas KPI, que explícitamente ignoran el mes ("todos los pedidos,
+// todos los meses").
+function ctRenderTotalesFiltrados(pedidos, filtMes) {
   const foot = document.getElementById('ctFootTotales');
   if (!foot) return;
   if (!pedidos.length) { foot.innerHTML = ''; return; }
+
+  let mesSel, anioSel, labelMesCorto = '';
+  if (filtMes) {
+    const [y, m] = filtMes.split('-');
+    anioSel = parseInt(y); mesSel = parseInt(m) - 1;
+    labelMesCorto = new Date(anioSel, mesSel, 1).toLocaleDateString('es-MX',{month:'short',year:'numeric'});
+  }
 
   let sumValor = 0, sumFact = 0, sumPorFact = 0, sumCobrado = 0, sumSaldo = 0;
   pedidos.forEach(o => {
     const folio = o.folio || o.id;
     sumValor   += ctValorPedido(o);
-    sumFact    += ctTotalFacturado(folio);
     sumPorFact += ctPorFacturar(o);
-    sumCobrado += ctTotalCobrado(folio);
     sumSaldo   += Math.max(0, ctSaldoEfectivo(o));
+
+    if (filtMes) {
+      ctFacturasDePedido(folio).forEach(f => {
+        const df = f.fecha_factura ? new Date(f.fecha_factura) : null;
+        if (df && df.getMonth()===mesSel && df.getFullYear()===anioSel) {
+          sumFact += parseFloat(f.monto_sin_iva)||0;
+        }
+      });
+      ctAbonosDePedido(folio).forEach(a => {
+        const da = a.fecha_abono ? new Date(a.fecha_abono) : null;
+        if (da && da.getMonth()===mesSel && da.getFullYear()===anioSel) {
+          sumCobrado += parseFloat(a.monto)||0;
+        }
+      });
+    } else {
+      sumFact    += ctTotalFacturado(folio);
+      sumCobrado += ctTotalCobrado(folio);
+    }
   });
+
   const n = pedidos.length;
   const etiqueta = 'TOTAL — ' + n + ' pedido' + (n===1?'':'s') + ' filtrado' + (n===1?'':'s');
+  const subFact    = filtMes ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)">sin IVA · '+labelMesCorto+'</span>' : '';
+  const subCobrado = filtMes ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+labelMesCorto+'</span>' : '';
 
   foot.innerHTML =
     '<tr style="background:#EEF1F7;border-top:2px solid var(--navy)">' +
       '<td colspan="3" style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--navy);text-align:right;white-space:nowrap">'+etiqueta+'</td>' +
       '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap">'+ctFmt(sumValor)+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">sin IVA</span></td>' +
       '<td></td>' +
-      '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap">'+ctFmt(sumFact)+'</td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap">'+ctFmt(sumFact)+subFact+'</td>' +
       '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumPorFact>0?'#E37400':'#34A853')+'">'+ctFmt(sumPorFact)+'</td>' +
-      '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:#34A853;white-space:nowrap">'+ctFmt(sumCobrado)+'</td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:#34A853;white-space:nowrap">'+ctFmt(sumCobrado)+subCobrado+'</td>' +
       '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumSaldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(sumSaldo)+'</td>' +
       '<td></td><td></td><td></td>' +
     '</tr>';
@@ -8612,7 +8648,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-21-1400';
+const APP_VERSION = '2026-08-21-1600';
 
 let _versionCheckTimer = null;
 
