@@ -3043,7 +3043,7 @@ function generarPDFCotizacion(datos) {
   doc.text(`ATENCIÓN: ${(contacto || '—').toUpperCase()}`, M, y); y += 6;
   doc.text((cliente || '—').toUpperCase(), M, y); y += 6;
   doc.setTextColor(192,57,27); doc.setFont('helvetica','bold');
-  doc.text(`FOLIO: ${folio}${revision > 0 ? ' · REV. ' + revision : ''}`, M, y); y += 8;
+  doc.text(`FOLIO: ${folio}${revision > 0 ? ' · REV. ' + revision : ''}`, M, y); y += 5;
 
   // ── Tabla de partidas ────────────────────────────────────────────
   // Descripción por partida:
@@ -3162,7 +3162,7 @@ function generarPDFCotizacion(datos) {
     margin: { left: M, right: M }
   });
 
-  let yy = doc.lastAutoTable.finalY + 10;
+  let yy = doc.lastAutoTable.finalY + 6;
 
   // ── Resumen de totales: IVA + TOTAL CON IVA INCLUIDO ────────────────────
   // El SUBTOTAL ya se muestra una sola vez, en el pie de la tabla de arriba —
@@ -3176,11 +3176,11 @@ function generarPDFCotizacion(datos) {
   if (yy > doc.internal.pageSize.height - 30) { doc.addPage(); yy = 20; }
 
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(80,90,110);
-  doc.text(`IVA (${Math.round(IVA_RATE_COTIZACION * 100)}%): ` + fmtMonto(ivaGeneral, moneda), W - M, yy, { align: 'right' }); yy += 7;
+  doc.text(`IVA (${Math.round(IVA_RATE_COTIZACION * 100)}%): ` + fmtMonto(ivaGeneral, moneda), W - M, yy, { align: 'right' }); yy += 6;
 
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(19,115,51);
   doc.text('TOTAL (IVA INCLUIDO): ' + fmtMonto(totalConIva, moneda), W - M, yy, { align: 'right' });
-  yy += 10;
+  yy += 6;
 
   // ── Contenido de las secciones inferiores ─────────────────────────
   // Se arma ANTES de dibujar nada, para poder medir cuánto ocupa cada
@@ -3195,27 +3195,28 @@ function generarPDFCotizacion(datos) {
   // Si a tamaño normal (9.5pt) no cabe todo en lo que resta de la página, se
   // reduce SOLO el cuerpo del texto en dos pasos (8.5pt, luego 7.5pt como
   // piso — más chico ya no se lee bien impreso). Los encabezados en
-  // negritas ("NOTAS COMERCIALES:", etc.) NO cambian de tamaño, para que las
-  // secciones se sigan distinguiendo a simple vista. Si ni con el piso cabe
-  // todo (cotización con muchísimas notas), se deja pasar a una página
-  // adicional — preferible a forzar una letra ilegible.
+  // negritas ("NOTAS COMERCIALES:", etc.) se recortaron 1pt (ver abajo) pero
+  // NO se comprimen más allá de eso, para que las secciones se sigan
+  // distinguiendo a simple vista. Si ni con el piso cabe todo (cotización
+  // con muchísimas notas), se deja pasar a una página adicional —
+  // preferible a forzar una letra ilegible.
   const NOTA_TIERS = [{ fs: 9.5, lh: 5 }, { fs: 8.5, lh: 4.4 }, { fs: 7.5, lh: 3.8 }];
   function medirAlturaNotas(lh) {
     let h = 0;
-    h += 6 + doc.splitTextToSize(incluyeTxt,   W - 2*M - 6).length * lh;
-    h += 6 + doc.splitTextToSize(noIncluyeTxt, W - 2*M - 6).length * lh + 4;
-    h += 6; // header "NOTAS COMERCIALES:" (siempre se dibuja)
+    h += 5 + doc.splitTextToSize(incluyeTxt,   W - 2*M - 6).length * lh;
+    h += 5 + doc.splitTextToSize(noIncluyeTxt, W - 2*M - 6).length * lh + 4;
+    h += 5; // header "NOTAS COMERCIALES:" (siempre se dibuja)
     notasComerciales.forEach((nota, i) => {
       const letra = String.fromCharCode(65 + i);
       h += doc.splitTextToSize(`${letra}) ${nota}`.toUpperCase(), W - 2*M - 6).length * lh;
     });
     h += 4;
     if (especTecnicas.length) {
-      h += 6;
+      h += 5;
       especTecnicas.forEach(linea => { h += doc.splitTextToSize(linea.toUpperCase(), W - 2*M - 6).length * lh; });
       h += 4;
     }
-    h += 6; // header "NOTAS ESPECIALES:" (siempre se dibuja)
+    h += 5; // header "NOTAS ESPECIALES:" (siempre se dibuja)
     notasEspecialesLineas.forEach(nota => { h += doc.splitTextToSize(`•  ${nota}`.toUpperCase(), W - 2*M - 6).length * lh; });
     return h;
   }
@@ -3229,19 +3230,19 @@ function generarPDFCotizacion(datos) {
 
   // ── Incluye / No incluye ─────────────────────────────────────────
   doc.setTextColor(20,20,20);
-  doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
-  doc.text('INCLUYE:', M, yy); yy += 6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+  doc.text('INCLUYE:', M, yy); yy += 5;
   doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
   doc.splitTextToSize(incluyeTxt, W - 2*M - 6).forEach(l => { doc.text(l, M + 4, yy); yy += notaLH; });
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
-  doc.text('NO INCLUYE:', M, yy); yy += 6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+  doc.text('NO INCLUYE:', M, yy); yy += 5;
   doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
   doc.splitTextToSize(noIncluyeTxt, W - 2*M - 6).forEach(l => { doc.text(l, M + 4, yy); yy += notaLH; });
   yy += 4;
 
   // ── Notas comerciales ────────────────────────────────────────────
-  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('NOTAS COMERCIALES:', M, yy); yy += 6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('NOTAS COMERCIALES:', M, yy); yy += 5;
   doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
 
   notasComerciales.forEach((nota, i) => {
@@ -3258,7 +3259,7 @@ function generarPDFCotizacion(datos) {
 
   // ── Especificaciones técnicas (sin letras, una línea tal cual) ────
   if (especTecnicas.length) {
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('ESPECIFICACIONES TÉCNICAS:', M, yy); yy += 6;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('ESPECIFICACIONES TÉCNICAS:', M, yy); yy += 5;
     doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
     especTecnicas.forEach(linea => {
       const lineas = doc.splitTextToSize(linea.toUpperCase(), W - 2*M - 6);
@@ -3271,7 +3272,7 @@ function generarPDFCotizacion(datos) {
   }
 
   if (yy > doc.internal.pageSize.height - 30) { doc.addPage(); yy = 20; }
-  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('NOTAS ESPECIALES:', M, yy); yy += 6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text('NOTAS ESPECIALES:', M, yy); yy += 5;
   doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
   notasEspecialesLineas.forEach(nota => {
     const lineas = doc.splitTextToSize(`•  ${nota}`.toUpperCase(), W - 2*M - 6);
@@ -3922,7 +3923,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-08-24-1400';
+const APP_VERSION = '2026-08-24-1600';
 
 let _versionCheckTimer = null;
 
