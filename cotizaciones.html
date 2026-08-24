@@ -3115,9 +3115,31 @@ function generarPDFCotizacion(datos) {
   const serviciosExtra = (datos.serviciosExtra || []).filter(s => s.descripcion || (s.cantidad||1)*(s.precio_unit||0) > 0);
   const hayServiciosExtra = serviciosExtra.length > 0;
 
+  // ── Accesorios, flete y otros cargos — MISMA tabla que los tanques ──────
+  // Antes esto abría una segunda tabla con su propio encabezado (y su propio
+  // subtotal parcial), lo que alargaba la cotización de más. Ahora se agregan
+  // como renglones adicionales de la tabla de partidas, separados solo por
+  // una fila divisora ligera (sin repetir la barra de encabezado ni columnas).
+  let totalServiciosExtra = 0;
+  if (hayServiciosExtra) {
+    rows.push([{
+      content: 'ACCESORIOS, FLETE Y OTROS CARGOS',
+      colSpan: 4,
+      styles: { fontStyle: 'bold', fontSize: 7.5, textColor: [95,94,90], fillColor: [241,239,232], cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } }
+    }]);
+    serviciosExtra.forEach(s => {
+      const cant = Number(s.cantidad) || 1;
+      const punit = Number(s.precio_unit) || 0;
+      const subtotal = cant * punit;
+      totalServiciosExtra += subtotal;
+      const cat = ['Flete','Accesorios','Otro'].includes(s.categoria) ? s.categoria : 'Otro';
+      rows.push([cat.toUpperCase() + ' — ' + (s.descripcion||'').toUpperCase(), String(cant), fmtSinDivisa(punit), fmtSinDivisa(subtotal)]);
+    });
+  }
+
   const footRow = [
-    { content: hayServiciosExtra ? 'SUBTOTAL TANQUES' : 'SUBTOTAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
-    { content: fmtMonto(total, moneda), styles: { halign: 'right', fontStyle: 'bold', textColor: [27,42,74] } }
+    { content: 'SUBTOTAL', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+    { content: fmtMonto(total + totalServiciosExtra, moneda), styles: { halign: 'right', fontStyle: 'bold', textColor: [27,42,74] } }
   ];
 
   // PARTIDA se lleva la mayor parte del ancho; CANT/P.UNIT/SUBTOTAL van compactos
@@ -3142,104 +3164,92 @@ function generarPDFCotizacion(datos) {
 
   let yy = doc.lastAutoTable.finalY + 10;
 
-  // ── Accesorios, flete y otros cargos — tabla separada de los tanques ────
-  let totalServiciosExtra = 0;
-  if (hayServiciosExtra) {
-    const headServ = [[
-      { content: 'CATEGORÍA' },
-      { content: 'DESCRIPCIÓN' },
-      { content: 'CANT',     styles: { halign: 'center' } },
-      { content: 'P. UNIT',  styles: { halign: 'right' } },
-      { content: 'SUBTOTAL', styles: { halign: 'right' } }
-    ]];
-    const subtotalesCat = { Flete: 0, Accesorios: 0, Otro: 0 };
-    const rowsServ = serviciosExtra.map(s => {
-      const cant = Number(s.cantidad) || 1;
-      const punit = Number(s.precio_unit) || 0;
-      const subtotal = cant * punit;
-      totalServiciosExtra += subtotal;
-      const cat = ['Flete','Accesorios','Otro'].includes(s.categoria) ? s.categoria : 'Otro';
-      subtotalesCat[cat] += subtotal;
-      return [cat.toUpperCase(), (s.descripcion||'').toUpperCase(), String(cant), fmtSinDivisa(punit), fmtSinDivisa(subtotal)];
-    });
-    const footRowsServ = [];
-    ['Flete','Accesorios','Otro'].forEach(cat => {
-      if (subtotalesCat[cat] > 0) {
-        footRowsServ.push([
-          { content: 'SUBTOTAL ' + cat.toUpperCase(), colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', fontSize: 8 } },
-          { content: fmtSinDivisa(subtotalesCat[cat]), styles: { halign: 'right', fontStyle: 'bold', fontSize: 8 } }
-        ]);
-      }
-    });
-
-    if (yy > doc.internal.pageSize.height - 50) { doc.addPage(); yy = 20; }
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(27,42,74);
-    doc.text('ACCESORIOS, FLETE Y OTROS CARGOS', M, yy); yy += 5;
-
-    doc.autoTable({
-      startY: yy,
-      head: headServ, body: rowsServ, foot: footRowsServ,
-      styles: { fontSize: 8.5, cellPadding: 3, font: 'helvetica', textColor: [27,42,74] },
-      headStyles: { fillColor: [27,42,74], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8.5 },
-      footStyles: { fillColor: [255,255,255], textColor: [27,42,74], lineWidth: 0.1 },
-      alternateRowStyles: { fillColor: [248,249,252] },
-      columnStyles: {
-        0: { cellWidth: 30 },
-        1: { cellWidth: 86.9 },
-        2: { halign: 'center', cellWidth: 15 },
-        3: { halign: 'right', cellWidth: 26 },
-        4: { halign: 'right', cellWidth: 30 }
-      },
-      margin: { left: M, right: M }
-    });
-    yy = doc.lastAutoTable.finalY + 8;
-  }
-
-  // ── Resumen de totales: SUBTOTAL + IVA + TOTAL CON IVA INCLUIDO ─────────
-  // Se muestra SIEMPRE (haya o no accesorios/flete) para que el cliente vea
-  // el monto final que realmente paga en el mismo número grande — antes esto
-  // solo se comunicaba con la leyenda "PRECIO: EN MXN MAS IVA." en notas
-  // comerciales y varios clientes la pasaban por alto. El monto guardado en
-  // el sistema (mMonto, Sheet) sigue siendo sin IVA — este desglose es solo
+  // ── Resumen de totales: IVA + TOTAL CON IVA INCLUIDO ────────────────────
+  // El SUBTOTAL ya se muestra una sola vez, en el pie de la tabla de arriba —
+  // aquí solo se agrega IVA y el total final, sin repetirlo. El monto guardado
+  // en el sistema (mMonto, Sheet) sigue siendo sin IVA — este desglose es solo
   // representación en el PDF.
   const subtotalGeneral = total + totalServiciosExtra;
   const ivaGeneral      = subtotalGeneral * IVA_RATE_COTIZACION;
   const totalConIva     = subtotalGeneral + ivaGeneral;
 
-  if (yy > doc.internal.pageSize.height - 40) { doc.addPage(); yy = 20; }
+  if (yy > doc.internal.pageSize.height - 30) { doc.addPage(); yy = 20; }
 
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(80,90,110);
-  doc.text('SUBTOTAL: ' + fmtMonto(subtotalGeneral, moneda), W - M, yy, { align: 'right' }); yy += 6;
-  doc.text(`IVA (${Math.round(IVA_RATE_COTIZACION * 100)}%): ` + fmtMonto(ivaGeneral, moneda), W - M, yy, { align: 'right' }); yy += 8;
+  doc.text(`IVA (${Math.round(IVA_RATE_COTIZACION * 100)}%): ` + fmtMonto(ivaGeneral, moneda), W - M, yy, { align: 'right' }); yy += 7;
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(19,115,51);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(19,115,51);
   doc.text('TOTAL (IVA INCLUIDO): ' + fmtMonto(totalConIva, moneda), W - M, yy, { align: 'right' });
   yy += 10;
 
-  // ── Incluye / No incluye ─────────────────────────────────────────
+  // ── Contenido de las secciones inferiores ─────────────────────────
+  // Se arma ANTES de dibujar nada, para poder medir cuánto ocupa cada
+  // sección a distintos tamaños de letra antes de decidir cuál usar.
   const incluyeTxt   = (datos.incluye   || 'MATERIALES, MANO DE OBRA Y FLETE').toUpperCase();
   const noIncluyeTxt = (datos.noIncluye || 'INSTALACIÓN EN SITIO').toUpperCase();
-  doc.setFontSize(9.5); doc.setTextColor(20,20,20);
-  doc.setFont('helvetica','bold'); doc.text('INCLUYE:', M, yy);
-  doc.setFont('helvetica','normal');
-  doc.splitTextToSize(incluyeTxt, W - 2*M - 22).forEach((l, i) => { doc.text(l, M + 22, yy + i*5); });
-  yy += 6 * doc.splitTextToSize(incluyeTxt, W - 2*M - 22).length;
-  doc.setFont('helvetica','bold'); doc.text('NO INCLUYE:', M, yy);
-  doc.setFont('helvetica','normal');
-  doc.splitTextToSize(noIncluyeTxt, W - 2*M - 26).forEach((l, i) => { doc.text(l, M + 26, yy + i*5); });
-  yy += 6 * doc.splitTextToSize(noIncluyeTxt, W - 2*M - 26).length + 4;
+  const notasComerciales = datos.notasComerciales || construirNotasComercialesDefault(partidas, condPago);
+  const especTecnicas = notasTecnicas || construirEspecificacionesTecnicasDefault(partidas);
+  const notasEspecialesLineas = (notasEsp || '').split('\n').map(l => l.trim()).filter(Boolean);
+
+  // ── Ajuste automático de tamaño — Incluye/No incluye + Notas ────────────
+  // Si a tamaño normal (9.5pt) no cabe todo en lo que resta de la página, se
+  // reduce SOLO el cuerpo del texto en dos pasos (8.5pt, luego 7.5pt como
+  // piso — más chico ya no se lee bien impreso). Los encabezados en
+  // negritas ("NOTAS COMERCIALES:", etc.) NO cambian de tamaño, para que las
+  // secciones se sigan distinguiendo a simple vista. Si ni con el piso cabe
+  // todo (cotización con muchísimas notas), se deja pasar a una página
+  // adicional — preferible a forzar una letra ilegible.
+  const NOTA_TIERS = [{ fs: 9.5, lh: 5 }, { fs: 8.5, lh: 4.4 }, { fs: 7.5, lh: 3.8 }];
+  function medirAlturaNotas(lh) {
+    let h = 0;
+    h += 6 + doc.splitTextToSize(incluyeTxt,   W - 2*M - 6).length * lh;
+    h += 6 + doc.splitTextToSize(noIncluyeTxt, W - 2*M - 6).length * lh + 4;
+    h += 6; // header "NOTAS COMERCIALES:" (siempre se dibuja)
+    notasComerciales.forEach((nota, i) => {
+      const letra = String.fromCharCode(65 + i);
+      h += doc.splitTextToSize(`${letra}) ${nota}`.toUpperCase(), W - 2*M - 6).length * lh;
+    });
+    h += 4;
+    if (especTecnicas.length) {
+      h += 6;
+      especTecnicas.forEach(linea => { h += doc.splitTextToSize(linea.toUpperCase(), W - 2*M - 6).length * lh; });
+      h += 4;
+    }
+    h += 6; // header "NOTAS ESPECIALES:" (siempre se dibuja)
+    notasEspecialesLineas.forEach(nota => { h += doc.splitTextToSize(`•  ${nota}`.toUpperCase(), W - 2*M - 6).length * lh; });
+    return h;
+  }
+  const espacioDisponible = doc.internal.pageSize.height - 30 - yy;
+  let notaTier = NOTA_TIERS[NOTA_TIERS.length - 1];
+  for (const t of NOTA_TIERS) {
+    doc.setFontSize(t.fs);
+    if (medirAlturaNotas(t.lh) <= espacioDisponible) { notaTier = t; break; }
+  }
+  const notaFS = notaTier.fs, notaLH = notaTier.lh;
+
+  // ── Incluye / No incluye ─────────────────────────────────────────
+  doc.setTextColor(20,20,20);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
+  doc.text('INCLUYE:', M, yy); yy += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
+  doc.splitTextToSize(incluyeTxt, W - 2*M - 6).forEach(l => { doc.text(l, M + 4, yy); yy += notaLH; });
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
+  doc.text('NO INCLUYE:', M, yy); yy += 6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
+  doc.splitTextToSize(noIncluyeTxt, W - 2*M - 6).forEach(l => { doc.text(l, M + 4, yy); yy += notaLH; });
+  yy += 4;
 
   // ── Notas comerciales ────────────────────────────────────────────
   doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('NOTAS COMERCIALES:', M, yy); yy += 6;
-  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
 
-  const notasComerciales = datos.notasComerciales || construirNotasComercialesDefault(partidas, condPago);
   notasComerciales.forEach((nota, i) => {
     const letra  = String.fromCharCode(65 + i);
     const lineas = doc.splitTextToSize(`${letra}) ${nota}`.toUpperCase(), W - 2*M - 6);
     lineas.forEach(l => {
       if (yy > doc.internal.pageSize.height - 25) { doc.addPage(); yy = 20; }
-      doc.text(l, M + 4, yy); yy += 5;
+      doc.text(l, M + 4, yy); yy += notaLH;
     });
   });
 
@@ -3247,15 +3257,14 @@ function generarPDFCotizacion(datos) {
   if (yy > doc.internal.pageSize.height - 30) { doc.addPage(); yy = 20; }
 
   // ── Especificaciones técnicas (sin letras, una línea tal cual) ────
-  const especTecnicas = notasTecnicas || construirEspecificacionesTecnicasDefault(partidas);
   if (especTecnicas.length) {
     doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('ESPECIFICACIONES TÉCNICAS:', M, yy); yy += 6;
-    doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
     especTecnicas.forEach(linea => {
       const lineas = doc.splitTextToSize(linea.toUpperCase(), W - 2*M - 6);
       lineas.forEach(l => {
         if (yy > doc.internal.pageSize.height - 25) { doc.addPage(); yy = 20; }
-        doc.text(l, M + 4, yy); yy += 5;
+        doc.text(l, M + 4, yy); yy += notaLH;
       });
     });
     yy += 4;
@@ -3263,13 +3272,12 @@ function generarPDFCotizacion(datos) {
 
   if (yy > doc.internal.pageSize.height - 30) { doc.addPage(); yy = 20; }
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('NOTAS ESPECIALES:', M, yy); yy += 6;
-  doc.setFont('helvetica','normal');
-  const notasEspecialesLineas = (notasEsp || '').split('\n').map(l => l.trim()).filter(Boolean);
+  doc.setFont('helvetica','normal'); doc.setFontSize(notaFS);
   notasEspecialesLineas.forEach(nota => {
     const lineas = doc.splitTextToSize(`•  ${nota}`.toUpperCase(), W - 2*M - 6);
     lineas.forEach(l => {
       if (yy > doc.internal.pageSize.height - 25) { doc.addPage(); yy = 20; }
-      doc.text(l, M + 4, yy); yy += 5;
+      doc.text(l, M + 4, yy); yy += notaLH;
     });
   });
 
@@ -3914,7 +3922,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-08-21-1200';
+const APP_VERSION = '2026-08-24-1400';
 
 let _versionCheckTimer = null;
 
