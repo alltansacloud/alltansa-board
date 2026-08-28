@@ -164,7 +164,7 @@ textarea{resize:vertical;min-height:58px}
 .log-by{font-weight:700;color:var(--navy)}
 .log-ts{float:right;color:#aaa}
 .mfooter{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
-.modal.mdx{padding:0;max-width:560px}
+.modal.mdx{padding:0;max-width:660px}
 .mdx-head{background:var(--navy);padding:18px 22px;display:flex;justify-content:space-between;align-items:flex-start;border-radius:12px 12px 0 0;gap:10px}
 .mdx-head h2{color:#fff;font-size:16px;font-weight:700;margin:0}
 .mdx-head .mfolio{color:#9AA6C2;font-size:11px;margin:2px 0 0}
@@ -793,9 +793,9 @@ textarea{resize:vertical;min-height:58px}
     <div class="mdx-sec">Producto / servicio</div>
     <div class="fg2">
       <div class="fg full"><label id="fDescLabel">Modelo / descripción del equipo</label><input id="fDesc" type="text" placeholder="Ej. Tanque de aire vertical 500L 150 PSI"></div>
-      <div class="fg" id="fQtyWrap"><label>Cantidad de tanques</label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input id="fQty" type="number" min="1" value="1" oninput="updT();recalcDesglose()" style="flex:1">
+      <div class="fg full" id="fQtyWrap"><label>Cantidad de tanques</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="fQty" type="number" min="1" value="1" oninput="updT();recalcDesglose()" style="width:90px;min-width:70px;flex-shrink:0">
           <button type="button" id="btnVerAlmacen" class="tbtn-white" onclick="abrirStockPanel()" style="font-size:11px;padding:5px 10px;white-space:nowrap;display:none">📦 Ver almacén</button>
           <button type="button" class="tbtn-white" onclick="abrirListaPrecios(true)" style="font-size:11px;padding:5px 10px;white-space:nowrap">💲 Lista de precios</button>
         </div>
@@ -6583,7 +6583,7 @@ function renderSF(){
   const fl=[{k:'todos',l:'Todos'},{k:'sin_stock',l:'🚫 Sin stock'},{k:'bajo',l:'⚠ Stock bajo'},{k:'ok',l:'✅ Stock OK'}];
   document.getElementById('sFR').innerHTML=fl.map(f=>'<button class="chip'+(sFilter===f.k?' active':'')+'" onclick="setSF(\''+f.k+'\')">'+f.l+'</button>').join('')+
     (isDir()?'&nbsp;<button class="tbtn-white" onclick="openInvModal(null)" style="font-size:12px;padding:5px 12px">+ Agregar modelo</button>':'');
-  const tl=[{k:'todos',l:'Todos los tipos'},{k:'Aire',l:'Aire'},{k:'Diésel',l:'Diésel'},{k:'Estacionario',l:'Estacionario'},{k:'Carburación',l:'Carburación'}];
+  const tl=[{k:'todos',l:'Todos los tipos'},{k:'Aire',l:'Aire'},{k:'Diésel',l:'Diésel'},{k:'Estacionario',l:'Estacionario'},{k:'Carburación',l:'Carburación'},{k:'Accesorios',l:'Accesorios'}];
   const elTipo=document.getElementById('sFRTipo');
   if(elTipo)elTipo.innerHTML=tl.map(f=>'<button class="chip'+(sTipoFilter===f.k?' active':'')+'" onclick="setSTipoF(\''+f.k+'\')">'+f.l+'</button>').join('');
 }
@@ -8803,7 +8803,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-28-1400';
+const APP_VERSION = '2026-08-28-1600';
 
 let _versionCheckTimer = null;
 
