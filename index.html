@@ -2831,10 +2831,18 @@ function renderAF(){
 function setAF(k){aFilter=k;renderAF();renderAT();}
 
 function folioSortKey(o){
-  // Extrae YYMM-#### del folio para poder ordenar cronológicamente
-  // aun en pedidos sin createdAt (folios anteriores a este campo)
+  // Extrae YYMM-#### del folio para poder ordenar cronológicamente aun en
+  // pedidos sin createdAt (folios anteriores a este campo). A-/AC-/FLE-/STK-
+  // tienen CADA UNO su propio contador independiente, así que dos folios de
+  // series distintas pueden compartir el mismo YYMM-#### (ej. A-2608-01 y
+  // FLE-2608-01) — se desempata con la marca de tiempo real de creación
+  // (del id 'ord_<epoch>'), para que "más reciente" siempre sea el que de
+  // verdad se creó después, sin importar de qué serie de folio venga.
   const m=String(o.folio||'').match(/-(\d{4})-(\d+)/);
-  return m?m[1]+'-'+m[2].padStart(4,'0'):'0000-0000';
+  const yymmSeq=m?m[1]+'-'+m[2].padStart(4,'0'):'0000-0000';
+  const idm=String(o.id||'').match(/^ord_(\d+)$/);
+  const ts=idm?idm[1].padStart(14,'0'):'00000000000000';
+  return yymmSeq+'-'+ts;
 }
 
 function renderAT(){
@@ -3042,6 +3050,8 @@ function _aplicarVisibilidadPorTipo(){
   document.getElementById('fCiudadWrap').style.display=esFle?'':'none';
   const labels={pedido:'Modelo / descripción del equipo',accesorios:'Descripción de los accesorios',flete:'Descripción del servicio'};
   document.getElementById('fDescLabel').textContent=labels[isStk?'pedido':tipoPedido]||labels.pedido;
+  const placeholders={pedido:'Ej. Tanque de aire vertical 500L 150 PSI',accesorios:'Ej. Kit de válvulas y conexiones para tanque diésel',flete:'Ej. Entrega e instalación de 2 tanques en Saltillo, Coah.'};
+  document.getElementById('fDesc').placeholder=placeholders[isStk?'pedido':tipoPedido]||placeholders.pedido;
   const tb=document.getElementById('tipoBanner');
   if(esAcc){
     tb.classList.remove('hidden');
@@ -8791,7 +8801,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-28-1000';
+const APP_VERSION = '2026-08-28-1300';
 
 let _versionCheckTimer = null;
 
