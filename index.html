@@ -22,6 +22,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .badge-comp{background:#8430CE;color:#fff}
 .badge-stk{background:var(--stk);color:#fff}
 .tbtn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;color:#fff;white-space:nowrap}
+.nuevo-dd-item{display:block;width:100%;text-align:left;padding:9px 14px;border:none;border-left:3px solid transparent;background:#fff;font-size:12px;font-weight:600;color:var(--navy);cursor:pointer}
+.nuevo-dd-item:hover{background:var(--navy-pale)}
 .tbtn:hover{background:rgba(255,255,255,.2)}
 .tbtn-red{background:var(--red);border-color:var(--red)}
 .tbtn-white{background:#fff;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
@@ -162,6 +164,17 @@ textarea{resize:vertical;min-height:58px}
 .log-by{font-weight:700;color:var(--navy)}
 .log-ts{float:right;color:#aaa}
 .mfooter{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.modal.mdx{padding:0;max-width:560px}
+.mdx-head{background:var(--navy);padding:18px 22px;display:flex;justify-content:space-between;align-items:flex-start;border-radius:12px 12px 0 0;gap:10px}
+.mdx-head h2{color:#fff;font-size:16px;font-weight:700;margin:0}
+.mdx-head .mfolio{color:#9AA6C2;font-size:11px;margin:2px 0 0}
+.mdx-badge{color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.3px;white-space:nowrap;flex-shrink:0}
+.mdx-body{padding:20px 22px}
+.mdx-sec{font-size:10px;font-weight:700;color:var(--red);letter-spacing:.5px;text-transform:uppercase;margin:18px 0 10px;padding-left:10px;border-left:3px solid var(--red)}
+.mdx-sec:first-child{margin-top:0}
+.mdx-resumen{background:#F8F9FC;border-radius:10px;padding:12px 16px}
+.mdx-resumen .mdx-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.mdx-foot{padding:14px 22px;background:#F8F9FC;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 12px 12px;margin-top:0;border-top:1px solid var(--border)}
 .psi{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px}
 .psi.done{background:#E6F4EA;border-color:#34A853}
 .psi.locked{background:#FEF3CD;border-color:#F9AB00}
@@ -532,10 +545,15 @@ textarea{resize:vertical;min-height:58px}
     </div>
     <div style="display:flex;gap:5px;align-items:center;flex-wrap:nowrap;overflow-x:auto;flex:1;justify-content:flex-end">
       <button class="tbtn" onclick="loadAll(true);toast('Actualizando...')" title="Actualizar" style="padding:5px 9px;font-size:13px">↻</button>
-      <button class="tbtn tbtn-red" id="aNuevoBtn" onclick="openNew()" style="font-size:12px;padding:5px 10px">+ Nuevo</button>
-      <button class="tbtn" id="aNuevoStkBtn" onclick="openNewStk()" style="background:var(--stk);border-color:var(--stk);font-size:12px;padding:5px 10px">+ STK</button>
-      <button class="tbtn" id="aNuevoAccBtn" onclick="openNewAccesorios()" style="background:var(--acc);border-color:var(--acc);font-size:12px;padding:5px 10px">+ Accesorios</button>
-      <button class="tbtn" id="aNuevoFleBtn" onclick="openNewFlete()" style="background:var(--fle);border-color:var(--fle);font-size:12px;padding:5px 10px">+ Flete</button>
+      <div style="position:relative;display:inline-block" id="aNuevoDropdownWrap">
+        <button class="tbtn tbtn-red" id="aNuevoBtn" onclick="toggleNuevoDropdown()" style="font-size:12px;padding:5px 10px">+ Pedido ▾</button>
+        <div id="aNuevoDropdownMenu" class="hidden" style="position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:100;min-width:170px;overflow:hidden">
+          <button class="nuevo-dd-item" onclick="openNew();closeNuevoDropdown()" style="border-left-color:var(--red)">🛢️ Tanque</button>
+          <button class="nuevo-dd-item" id="aNuevoAccOpt" onclick="openNewAccesorios();closeNuevoDropdown()" style="border-left-color:var(--acc)">🔧 Accesorios</button>
+          <button class="nuevo-dd-item" id="aNuevoFleOpt" onclick="openNewFlete();closeNuevoDropdown()" style="border-left-color:var(--fle)">🚚 Flete</button>
+          <button class="nuevo-dd-item" id="aNuevoStkOpt" onclick="openNewStk();closeNuevoDropdown()" style="border-left-color:var(--stk)">📦 STK</button>
+        </div>
+      </div>
       <div id="aNavBtns" style="display:contents"></div>
       <a href="mantenimiento.html" target="_blank" class="tbtn" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);font-size:11px;padding:5px 9px;text-decoration:none;white-space:nowrap">🔧 Mant.</a>
       <a href="cotizaciones.html" target="_blank" class="tbtn" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);font-size:11px;padding:5px 9px;text-decoration:none;white-space:nowrap">📋 Cotiz.</a>
@@ -731,9 +749,15 @@ textarea{resize:vertical;min-height:58px}
 
 <!-- ===== MODAL ADMIN / STK ===== -->
 <div id="aModal" class="overlay hidden">
-  <div class="modal">
-    <h2 id="aModalT">Nuevo pedido</h2>
-    <div class="mfolio" id="aModalF"></div>
+  <div class="modal mdx">
+    <div class="mdx-head">
+      <div>
+        <h2 id="aModalT">Nuevo pedido</h2>
+        <div class="mfolio" id="aModalF"></div>
+      </div>
+      <span class="mdx-badge" id="modalTipoBadge" style="background:var(--red)">TANQUE</span>
+    </div>
+    <div class="mdx-body">
     <!-- Panel de almacén: selección explícita -->
     <div id="stockAlertBox" class="hidden" style="background:#F0F7FF;border:2px solid #1a73e8;border-radius:10px;padding:14px 16px;margin-bottom:16px">
       <div style="font-weight:700;color:#1a73e8;font-size:13px;margin-bottom:10px">📦 Disponible en almacén — selecciona un modelo</div>
@@ -746,6 +770,8 @@ textarea{resize:vertical;min-height:58px}
     </div>
     <div id="stkBanner" class="hidden" style="background:var(--stk-bg);border:1px solid var(--stk);border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:12px;color:var(--stk);font-weight:600">📦 ORDEN DE ALMACÉN (STK) — Producción interna, sin cliente asignado</div>
     <div id="tipoBanner" class="hidden" style="border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:12px;font-weight:600;border:1px solid"></div>
+
+    <div class="mdx-sec">Datos del pedido</div>
     <div class="fg2">
       <div class="fg"><label>Folio interno</label><input id="fFolio" type="text" disabled></div>
       <div class="fg" id="fNumWrap"><label>No. de pedido (cliente)</label><input id="fNum" type="text" placeholder="Ej. OC-12345"></div>
@@ -761,6 +787,11 @@ textarea{resize:vertical;min-height:58px}
       </div>
       <div class="fg" id="fDLWrap"><label>Fecha compromiso de entrega</label><input id="fDL" type="date"></div>
       <div class="fg" id="fCiudadWrap"><label>Ciudad destino</label><input id="fCiudad" type="text" placeholder="Ej. Saltillo, Coah."></div>
+      <div class="fg"><label>Fecha de recepción</label><input id="fDate" type="date"></div>
+    </div>
+
+    <div class="mdx-sec">Producto / servicio</div>
+    <div class="fg2">
       <div class="fg full"><label id="fDescLabel">Modelo / descripción del equipo</label><input id="fDesc" type="text" placeholder="Ej. Tanque de aire vertical 500L 150 PSI"></div>
       <div class="fg" id="fQtyWrap"><label>Cantidad de tanques</label>
         <div style="display:flex;gap:6px;align-items:center">
@@ -772,13 +803,19 @@ textarea{resize:vertical;min-height:58px}
       <div class="fg" id="fValWrap"><label>Precio unitario (MXN)</label><input id="fVal" type="number" min="0" placeholder="0.00" oninput="updT()"></div>
       <div class="fg" id="fPctWrap"><label>% Anticipo <span style="font-weight:400;color:var(--muted)">(0 = contado contra entrega)</span></label><input id="fPctAntic" type="number" min="0" max="100" value="0" placeholder="0" oninput="updT()"></div>
       <div class="fg full" id="fTotalWrap">
-        <div class="tprev"><span>Monto total <span style="font-weight:400;font-style:italic;font-size:11px">(antes de IVA)</span></span><span id="tPrev">$0</span></div>
-        <div id="tPrevDesglose" style="display:none;margin-top:6px;font-size:12px;padding:4px 10px;background:#F8F9FC;border-radius:6px"></div>
+        <div class="mdx-resumen">
+          <div class="mdx-row"><span>Monto total <span style="font-weight:400;font-style:italic;font-size:11px">(antes de IVA)</span></span><span id="tPrev" style="font-size:16px;font-weight:700;color:var(--navy)">$0</span></div>
+          <div id="tPrevDesglose" style="display:none;margin-top:6px;font-size:12px"></div>
+        </div>
       </div>
-      <div class="fg"><label>Fecha de recepción</label><input id="fDate" type="date"></div>
-      <div class="fg full"><label>Notas</label><textarea id="fNotes" placeholder="Observaciones..."></textarea></div>
     </div>
-    <div class="sec-t" id="fEspecSecT">Especificaciones técnicas</div>
+
+    <div class="mdx-sec">Notas</div>
+    <div class="fg2">
+      <div class="fg full"><textarea id="fNotes" placeholder="Observaciones..."></textarea></div>
+    </div>
+
+    <div class="mdx-sec" id="fEspecSecT">Especificaciones técnicas</div>
     <div class="fg2" id="fEspecWrap">
       <div class="fg">
         <label>Fluido</label>
@@ -820,8 +857,9 @@ textarea{resize:vertical;min-height:58px}
       </div>
       <div id="fEspecReadOnly" class="hidden" style="grid-column:1/-1;font-size:12px;color:var(--muted);font-style:italic;padding:4px 0">Solo lectura — editable por Ventas / Dirección</div>
     </div>
-    <div id="aLS" class="hidden"><div class="sec-t">Historial</div><div id="aLL"></div></div>
-    <div class="mfooter">
+    <div id="aLS" class="hidden"><div class="mdx-sec">Historial</div><div id="aLL"></div></div>
+    </div>
+    <div class="mdx-foot">
       <button class="tbtn-white" onclick="closeAModal()">Cancelar</button>
       <button class="tbtn tbtn-red" id="aSaveBtn" onclick="saveOrder()">Guardar</button>
     </div>
@@ -2928,6 +2966,17 @@ function renderAMobile(fl){
 }
 
 // ===== MODAL ADMIN =====
+function toggleNuevoDropdown(){
+  document.getElementById('aNuevoDropdownMenu').classList.toggle('hidden');
+}
+function closeNuevoDropdown(){
+  document.getElementById('aNuevoDropdownMenu').classList.add('hidden');
+}
+document.addEventListener('click',function(e){
+  const wrap=document.getElementById('aNuevoDropdownWrap');
+  if(wrap&&!wrap.contains(e.target))closeNuevoDropdown();
+});
+
 function openNew(){
   if(!canNuevo()){showAlert('No tienes permiso para crear pedidos.','🚫');return;}
   isStk=false;tipoPedido='pedido';fromStockData=null;
@@ -2972,6 +3021,11 @@ function _labelTipo(tipo){
 function _aplicarVisibilidadPorTipo(){
   const esAcc=!isStk&&tipoPedido==='accesorios';
   const esFle=!isStk&&tipoPedido==='flete';
+  const badge=document.getElementById('modalTipoBadge');
+  if(isStk){badge.textContent='STK';badge.style.background='var(--stk)';}
+  else if(esAcc){badge.textContent='ACCESORIOS';badge.style.background='var(--acc)';}
+  else if(esFle){badge.textContent='FLETE';badge.style.background='var(--fle)';}
+  else{badge.textContent='TANQUE';badge.style.background='var(--red)';}
   document.getElementById('fEspecSecT').style.display=(esAcc||esFle)?'none':'';
   document.getElementById('fEspecWrap').style.display=(esAcc||esFle)?'none':'';
   document.getElementById('fQtyWrap').style.display=(esAcc||esFle)?'none':'';
@@ -7153,8 +7207,10 @@ function showAdmin(){
   document.getElementById('aUBar').style.display='none';
   const _chip=document.getElementById('topbarUserChip');
   if(_chip){_chip.style.display='flex';_chip.innerHTML='<div class="avatar" style="width:22px;height:22px;font-size:9px;background:rgba(255,255,255,.2);color:#fff">'+ini(CU.name)+'</div><span style="font-weight:600">'+CU.name+'</span><span style="opacity:.6;margin:0 2px">·</span><span style="opacity:.7">'+CU.area+'</span>';}
-  document.getElementById('aNuevoBtn').style.display=canNuevo()?'':'none';
-  document.getElementById('aNuevoStkBtn').style.display=canNuevoStk()?'':'none';
+  document.getElementById('aNuevoDropdownWrap').style.display=(canNuevo()||canNuevoStk())?'':'none';
+  document.getElementById('aNuevoAccOpt').style.display=canNuevo()?'':'none';
+  document.getElementById('aNuevoFleOpt').style.display=canNuevo()?'':'none';
+  document.getElementById('aNuevoStkOpt').style.display=canNuevoStk()?'':'none';
   document.getElementById('aNavBtns').innerHTML=buildNavBtns('admin');
   // Mostrar/ocultar tabs según permisos
   updateMobTabs();
@@ -8725,7 +8781,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-25-1200';
+const APP_VERSION = '2026-08-27-1400';
 
 let _versionCheckTimer = null;
 
