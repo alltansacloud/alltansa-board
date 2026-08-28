@@ -2831,18 +2831,20 @@ function renderAF(){
 function setAF(k){aFilter=k;renderAF();renderAT();}
 
 function folioSortKey(o){
-  // Extrae YYMM-#### del folio para poder ordenar cronológicamente aun en
-  // pedidos sin createdAt (folios anteriores a este campo). A-/AC-/FLE-/STK-
-  // tienen CADA UNO su propio contador independiente, así que dos folios de
-  // series distintas pueden compartir el mismo YYMM-#### (ej. A-2608-01 y
-  // FLE-2608-01) — se desempata con la marca de tiempo real de creación
-  // (del id 'ord_<epoch>'), para que "más reciente" siempre sea el que de
-  // verdad se creó después, sin importar de qué serie de folio venga.
+  // La marca de tiempo real de creación (del id 'ord_<epoch>') es el criterio
+  // PRINCIPAL — el número de folio por sí solo NO sirve para comparar entre
+  // series distintas: A-/AC-/FLE-/STK- tienen CADA UNO su propio contador
+  // independiente, así que un AC-...-01 puede haberse creado después de un
+  // A-...-33 sin ningún problema; comparar solo el número los ordenaría mal
+  // aunque haya timestamp de por medio. El folio (YYMM-####) solo se usa
+  // como respaldo para pedidos sin id con ese formato (registros anteriores
+  // a este esquema) — se marcan aparte para que nunca compitan de tú a tú
+  // contra un id real y terminen intercalados de forma arbitraria.
+  const idm=String(o.id||'').match(/^ord_(\d+)$/);
+  if(idm)return '1-'+idm[1].padStart(14,'0');
   const m=String(o.folio||'').match(/-(\d{4})-(\d+)/);
   const yymmSeq=m?m[1]+'-'+m[2].padStart(4,'0'):'0000-0000';
-  const idm=String(o.id||'').match(/^ord_(\d+)$/);
-  const ts=idm?idm[1].padStart(14,'0'):'00000000000000';
-  return yymmSeq+'-'+ts;
+  return '0-'+yymmSeq;
 }
 
 function renderAT(){
@@ -8801,7 +8803,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-28-1300';
+const APP_VERSION = '2026-08-28-1400';
 
 let _versionCheckTimer = null;
 
