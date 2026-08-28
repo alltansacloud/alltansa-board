@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ALLTANSA - Board v11</title>
 <style>
-:root{--navy:#1B2A4A;--red:#C0391B;--navy-pale:#EEF1F7;--gray-bg:#F4F5F7;--border:#DDE1EA;--text:#1B2A4A;--muted:#6B7A99;--stk:#E65100;--stk-bg:#FFF3E0}
+:root{--navy:#1B2A4A;--red:#C0391B;--navy-pale:#EEF1F7;--gray-bg:#F4F5F7;--border:#DDE1EA;--text:#1B2A4A;--muted:#6B7A99;--stk:#E65100;--stk-bg:#FFF3E0;--acc:#8430CE;--acc-bg:#F3E8FD;--fle:#1a73e8;--fle-bg:#E8F0FE}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--gray-bg);color:var(--text);font-size:14px}
 
@@ -534,6 +534,8 @@ textarea{resize:vertical;min-height:58px}
       <button class="tbtn" onclick="loadAll(true);toast('Actualizando...')" title="Actualizar" style="padding:5px 9px;font-size:13px">↻</button>
       <button class="tbtn tbtn-red" id="aNuevoBtn" onclick="openNew()" style="font-size:12px;padding:5px 10px">+ Nuevo</button>
       <button class="tbtn" id="aNuevoStkBtn" onclick="openNewStk()" style="background:var(--stk);border-color:var(--stk);font-size:12px;padding:5px 10px">+ STK</button>
+      <button class="tbtn" id="aNuevoAccBtn" onclick="openNewAccesorios()" style="background:var(--acc);border-color:var(--acc);font-size:12px;padding:5px 10px">+ Accesorios</button>
+      <button class="tbtn" id="aNuevoFleBtn" onclick="openNewFlete()" style="background:var(--fle);border-color:var(--fle);font-size:12px;padding:5px 10px">+ Flete</button>
       <div id="aNavBtns" style="display:contents"></div>
       <a href="mantenimiento.html" target="_blank" class="tbtn" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);font-size:11px;padding:5px 9px;text-decoration:none;white-space:nowrap">🔧 Mant.</a>
       <a href="cotizaciones.html" target="_blank" class="tbtn" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);font-size:11px;padding:5px 9px;text-decoration:none;white-space:nowrap">📋 Cotiz.</a>
@@ -743,6 +745,7 @@ textarea{resize:vertical;min-height:58px}
       </div>
     </div>
     <div id="stkBanner" class="hidden" style="background:var(--stk-bg);border:1px solid var(--stk);border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:12px;color:var(--stk);font-weight:600">📦 ORDEN DE ALMACÉN (STK) — Producción interna, sin cliente asignado</div>
+    <div id="tipoBanner" class="hidden" style="border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:12px;font-weight:600;border:1px solid"></div>
     <div class="fg2">
       <div class="fg"><label>Folio interno</label><input id="fFolio" type="text" disabled></div>
       <div class="fg" id="fNumWrap"><label>No. de pedido (cliente)</label><input id="fNum" type="text" placeholder="Ej. OC-12345"></div>
@@ -757,8 +760,9 @@ textarea{resize:vertical;min-height:58px}
         <select id="fCond"><option value="Contado">Contado</option><option value="Crédito">Crédito</option></select>
       </div>
       <div class="fg" id="fDLWrap"><label>Fecha compromiso de entrega</label><input id="fDL" type="date"></div>
-      <div class="fg full"><label>Modelo / descripción del equipo</label><input id="fDesc" type="text" placeholder="Ej. Tanque de aire vertical 500L 150 PSI"></div>
-      <div class="fg"><label>Cantidad de tanques</label>
+      <div class="fg" id="fCiudadWrap"><label>Ciudad destino</label><input id="fCiudad" type="text" placeholder="Ej. Saltillo, Coah."></div>
+      <div class="fg full"><label id="fDescLabel">Modelo / descripción del equipo</label><input id="fDesc" type="text" placeholder="Ej. Tanque de aire vertical 500L 150 PSI"></div>
+      <div class="fg" id="fQtyWrap"><label>Cantidad de tanques</label>
         <div style="display:flex;gap:6px;align-items:center">
           <input id="fQty" type="number" min="1" value="1" oninput="updT();recalcDesglose()" style="flex:1">
           <button type="button" id="btnVerAlmacen" class="tbtn-white" onclick="abrirStockPanel()" style="font-size:11px;padding:5px 10px;white-space:nowrap;display:none">📦 Ver almacén</button>
@@ -774,7 +778,7 @@ textarea{resize:vertical;min-height:58px}
       <div class="fg"><label>Fecha de recepción</label><input id="fDate" type="date"></div>
       <div class="fg full"><label>Notas</label><textarea id="fNotes" placeholder="Observaciones..."></textarea></div>
     </div>
-    <div class="sec-t">Especificaciones técnicas</div>
+    <div class="sec-t" id="fEspecSecT">Especificaciones técnicas</div>
     <div class="fg2" id="fEspecWrap">
       <div class="fg">
         <label>Fluido</label>
@@ -920,6 +924,7 @@ textarea{resize:vertical;min-height:58px}
           <option value="Diésel">Diésel</option>
           <option value="Estacionario">Estacionario</option>
           <option value="Carburación">Carburación</option>
+          <option value="Accesorios">Accesorios</option>
         </select>
       </div>
       <div class="fg"><label>Stock actual</label><input id="invStock" type="number" min="0" value="0"></div>
@@ -1462,6 +1467,7 @@ const COMPRAS_OPTS=['Pendiente','Pedido','Recibido'];
 let CU=null,orders=[],inventory=[],editId=null,pEditId=null,invEditId=null;
 let allClientes=[]; // catálogo de clientes (compartido con Cotizaciones)
 let isStk=false,fromStockData=null;
+let tipoPedido='pedido'; // 'pedido' | 'accesorios' | 'flete' — independiente de isStk (STK sigue su propio flag)
 let aFilter='todos',pFilter='wip',cFilter='pend',sFilter='todos';
 let aSearch='',pSearch='',cSearch='',sSearch='';
 
@@ -2050,6 +2056,16 @@ function embarqueHabilitado(o){
     if(cal!=='liberado')return{ok:false,msg:'Pendiente liberación de Calidad'};
     return{ok:true,msg:''};
   }
+  // Accesorios / Flete: no son recipientes a presión — sin Calidad ni Certificado/Dossier.
+  // Flete además no tiene nada que fabricar ni comprar: solo requiere el pago (o crédito
+  // autorizado) para poder confirmar el viaje/entrega.
+  if(o.tipo==='accesorios'||o.tipo==='flete'){
+    const fin=o.finiquito||'Pendiente';
+    const cond=o.condicion_pago||'Contado';
+    if(fin==='Pagado'||fin==='Crédito autorizado'||fin==='Cartera vencida')return{ok:true,msg:''};
+    if(cond==='Crédito')return{ok:false,msg:'Pendiente autorización de Contabilidad'};
+    return{ok:false,msg:'Pendiente pago'};
+  }
   // From_stock 100% almacén: no hay producción ni calidad — solo requiere pago o crédito autorizado
   if(o.from_stock&&(parseInt(o.qty_produccion)||0)===0){
     const fin=o.finiquito||'Pendiente';
@@ -2492,18 +2508,20 @@ function getMesPasado(){
 }
 
 function pedidosDelMes(yymm){
-  // Pedidos cuyo folio es A-YYMM-## — excluye STK y cancelados
+  // Pedidos del mes por folio (A-/AC-/FLE-) — excluye STK y cancelados. Reutiliza
+  // folioYYMM() como fuente única en vez de un startsWith('A-'+yymm) hardcodeado,
+  // para no desalinearse si se agrega un prefijo de folio nuevo más adelante.
   return orders.filter(o=>
     o.tipo!=='stk'&&
     gSt(o)!=='cancelado'&&
-    o.folio&&o.folio.startsWith('A-'+yymm+'-')
+    folioYYMM(o.folio)===yymm
   );
 }
 
 function folioYYMM(folio){
-  // Extrae YYMM del folio A-YYMM-## o STK-YYMM-##
+  // Extrae YYMM del folio: A-YYMM-##, STK-YYMM-##, AC-YYMM-## (accesorios) o FLE-YYMM-## (flete)
   if(!folio)return null;
-  const m=folio.match(/(?:A|STK)-(\d{4})-/);
+  const m=folio.match(/(?:STK|FLE|AC|A)-(\d{4})-/);
   return m?m[1]:null;
 }
 
@@ -2912,18 +2930,66 @@ function renderAMobile(fl){
 // ===== MODAL ADMIN =====
 function openNew(){
   if(!canNuevo()){showAlert('No tienes permiso para crear pedidos.','🚫');return;}
-  isStk=false;fromStockData=null;
+  isStk=false;tipoPedido='pedido';fromStockData=null;
   editId=null;tSt=initSt();
   _prepModal('','Nuevo pedido','Folio: (auto)',false);
 }
 
 function openNewStk(){
   if(!canNuevoStk()){showAlert('No tienes permiso para crear órdenes STK.','🚫');return;}
-  isStk=true;fromStockData=null;
+  isStk=true;tipoPedido='pedido';fromStockData=null;
   editId=null;tSt=initSt();
   // STK: anticipo automáticamente N/A (sin anticipo)
   tSt.anticipo={done:false,date:null,by:null};
   _prepModal('','Nueva orden STK','Folio: (auto)',true);
+}
+
+function openNewAccesorios(){
+  if(!canNuevo()){showAlert('No tienes permiso para crear pedidos.','🚫');return;}
+  isStk=false;tipoPedido='accesorios';fromStockData=null;
+  editId=null;tSt=initSt();
+  _prepModal('','Nuevo pedido de accesorios','Folio: (auto)',false);
+}
+
+function openNewFlete(){
+  if(!canNuevo()){showAlert('No tienes permiso para crear pedidos.','🚫');return;}
+  isStk=false;tipoPedido='flete';fromStockData=null;
+  editId=null;tSt=initSt();
+  _prepModal('','Nuevo servicio de flete','Folio: (auto)',false);
+}
+
+// Etiqueta legible del tipo de pedido — usada en títulos de modal y mensajes de log
+function _labelTipo(tipo){
+  if(tipo==='stk')return'orden STK';
+  if(tipo==='accesorios')return'pedido de accesorios';
+  if(tipo==='flete')return'servicio de flete';
+  return'pedido';
+}
+
+// Aplica los campos que solo dependen del tipo NUEVO (Accesorios/Flete) — separado de la
+// lógica ya existente de stkMode para no tocarla. Se llama desde _prepModal (alta) y
+// openEdit (edición), siempre DESPUÉS de que isStk/tipoPedido ya estén fijados.
+function _aplicarVisibilidadPorTipo(){
+  const esAcc=!isStk&&tipoPedido==='accesorios';
+  const esFle=!isStk&&tipoPedido==='flete';
+  document.getElementById('fEspecSecT').style.display=(esAcc||esFle)?'none':'';
+  document.getElementById('fEspecWrap').style.display=(esAcc||esFle)?'none':'';
+  document.getElementById('fQtyWrap').style.display=(esAcc||esFle)?'none':'';
+  document.getElementById('fCiudadWrap').style.display=esFle?'':'none';
+  const labels={pedido:'Modelo / descripción del equipo',accesorios:'Descripción de los accesorios',flete:'Descripción del servicio'};
+  document.getElementById('fDescLabel').textContent=labels[isStk?'pedido':tipoPedido]||labels.pedido;
+  const tb=document.getElementById('tipoBanner');
+  if(esAcc){
+    tb.classList.remove('hidden');
+    tb.style.background='var(--acc-bg)';tb.style.borderColor='var(--acc)';tb.style.color='var(--acc)';
+    tb.textContent='🔧 PEDIDO DE ACCESORIOS — No pasa por Producción; folio AC-YYMM-##';
+  }else if(esFle){
+    tb.classList.remove('hidden');
+    tb.style.background='var(--fle-bg)';tb.style.borderColor='var(--fle)';tb.style.color='var(--fle)';
+    tb.textContent='🚚 SERVICIO DE FLETE — Entrega de tanques del cliente, no fabricación; folio FLE-YYMM-##';
+  }else{
+    tb.classList.add('hidden');
+  }
 }
 
 function _prepModal(folio,title,subtitle,stkMode){
@@ -2940,6 +3006,7 @@ function _prepModal(folio,title,subtitle,stkMode){
   document.getElementById('fDate').value=today();
   document.getElementById('fDate').disabled=false;
   document.getElementById('fDL').value='';
+  document.getElementById('fCiudad').value='';
   document.getElementById('tPrev').textContent='$0';
   const elD=document.getElementById('tPrevDesglose');if(elD)elD.style.display='none';
   document.getElementById('stockAlertBox').classList.add('hidden');
@@ -2965,6 +3032,7 @@ function _prepModal(folio,title,subtitle,stkMode){
   document.getElementById('fValWrap').style.display=stkMode?'none':'';
   document.getElementById('fPctWrap').style.display=stkMode?'none':'';
   document.getElementById('fTotalWrap').style.display=stkMode?'none':'';
+  _aplicarVisibilidadPorTipo();
   // Botón ver almacén: solo en pedidos nuevos de cliente
   setTimeout(()=>checkStockBtn(),0);
 
@@ -2975,6 +3043,7 @@ function openEdit(id){
   const o=orders.find(x=>x.id===id);if(!o)return;
   editId=id;
   isStk=o.tipo==='stk';
+  tipoPedido=(o.tipo==='accesorios'||o.tipo==='flete')?o.tipo:'pedido';
   fromStockData=null;
   tSt=JSON.parse(JSON.stringify(o.stages||initSt()));
   // Cargar datos de Contabilidad en tiempo real para badges de anticipo/finiquito
@@ -2987,7 +3056,7 @@ function openEdit(id){
   }).catch(()=>{});
   // Ingeniería de ventas: solo puede ver y activar casillas de ing/req, no editar datos del pedido
   const soloIngenieria=CU&&CU.area==='Ingeniería de ventas';
-  document.getElementById('aModalT').textContent=soloIngenieria?'Autorizar etapas — '+(isStk?'STK':'pedido'):(isStk?'Editar orden STK':'Editar pedido');
+  document.getElementById('aModalT').textContent=soloIngenieria?'Autorizar etapas — '+_labelTipo(o.tipo):'Editar '+_labelTipo(o.tipo);
   document.getElementById('aModalF').textContent='Folio: '+(o.folio||'—');
   document.getElementById('fFolio').value=o.folio||'';
   document.getElementById('fNum').value=o.num||'';
@@ -3005,6 +3074,7 @@ function openEdit(id){
   document.getElementById('fDate').value=rv;
   document.getElementById('fDate').disabled=!!rv||soloIngenieria;
   document.getElementById('fDL').value=normDate(o.deadline);
+  document.getElementById('fCiudad').value=o.ciudad_destino||'';
   document.getElementById('fNotes').value=o.notes||'';
   document.getElementById('stockAlertBox').classList.add('hidden');
   // Cargar campos técnicos
@@ -3035,6 +3105,7 @@ function openEdit(id){
   document.getElementById('fValWrap').style.display=soloIngenieria?'none':(isStk?'none':'');
   document.getElementById('fPctWrap').style.display=soloIngenieria?'none':(isStk?'none':'');
   document.getElementById('fTotalWrap').style.display=soloIngenieria?'none':(isStk?'none':'');
+  _aplicarVisibilidadPorTipo();
 
   const ls=document.getElementById('aLS');
   if(o.log&&o.log.length){
@@ -3050,7 +3121,7 @@ function canNuevoPedidoConStock(){return CU&&(CU.area==='Ventas / Embarques'||CU
 
 // Mostrar botón "Ver almacén" al abrir modal (nuevo pedido o edición)
 function checkStockBtn(){
-  if(isStk||!canNuevoPedidoConStock()){
+  if(isStk||tipoPedido!=='pedido'||!canNuevoPedidoConStock()){
     document.getElementById('btnVerAlmacen').style.display='none';
     return;
   }
@@ -3271,8 +3342,9 @@ async function saveOrder(){
       if(!was&&is)ch.push('"'+STAGES.find(s=>s.key===k).label+'" autorizado');
       if(was&&!is)ch.push('"'+STAGES.find(s=>s.key===k).label+'" desmarcado');
     });
-    // Auto-activar orden de producción si ambas están done
-    if(tSt.ingenieria&&tSt.ingenieria.done&&tSt.requisicion&&tSt.requisicion.done&&!tSt.orden_prod.done){
+    // Auto-activar orden de producción si ambas están done — no aplica a Accesorios/Flete,
+    // que nunca pasan por Producción (no hay nada que fabricar).
+    if(o.tipo!=='accesorios'&&o.tipo!=='flete'&&tSt.ingenieria&&tSt.ingenieria.done&&tSt.requisicion&&tSt.requisicion.done&&!tSt.orden_prod.done){
       tSt.orden_prod={done:true,date:today(),by:'Sistema (auto)'};
       ch.push('Orden de producción generada automáticamente');
     }
@@ -3312,6 +3384,7 @@ async function saveOrder(){
   const qty=parseInt(document.getElementById('fQty').value)||1;
   const val=isStk?null:(parseFloat(document.getElementById('fVal').value)||null);
   const pctAntic=isStk?0:(parseInt(document.getElementById('fPctAntic').value)||0);
+  const ciudadDestino=tipoPedido==='flete'?document.getElementById('fCiudad').value.trim():'';
   const useFromStock=!!(fromStockData&&!isStk&&!editId);
   let jaleInvId=null; // capturado si useFromStock, para completar historial/movimiento tras guardar (ver completarJaleAlmacenPostSave)
 
@@ -3327,7 +3400,8 @@ async function saveOrder(){
       cerrado:{done:false,date:null,by:null}
     }:tSt;
 
-    if(initStages.ingenieria.done&&initStages.requisicion.done&&!initStages.orden_prod.done){
+    // Auto-activar orden de producción si ambas están done — no aplica a Accesorios/Flete
+    if(tipoPedido!=='accesorios'&&tipoPedido!=='flete'&&initStages.ingenieria.done&&initStages.requisicion.done&&!initStages.orden_prod.done){
       initStages.orden_prod={done:true,date:today(),by:'Sistema (auto'+(isStk?' STK':'')+')'};
     }
 
@@ -3340,10 +3414,11 @@ async function saveOrder(){
       qty,value:val,
       received:rec,
       deadline:document.getElementById('fDL').value,
+      ciudad_destino:ciudadDestino,
       notes:document.getElementById('fNotes').value.trim(),
       stages:initStages,
       prod_stages:initPS(),
-      tipo:isStk?'stk':'pedido',
+      tipo:isStk?'stk':tipoPedido,
       from_stock:useFromStock,
       stock_modelo_ref:useFromStock?fromStockData.modelo:'',
       anticipo_status:isStk?'N/A':'Pendiente',
@@ -3383,7 +3458,8 @@ async function saveOrder(){
     const modeloCambio=o.desc!==desc;
     if(modeloCambio)ch.push('Modelo actualizado');
     if(!isStk&&normDate(o.deadline)!==document.getElementById('fDL').value)ch.push('Fecha compromiso actualizada');
-    if(tSt.ingenieria&&tSt.ingenieria.done&&tSt.requisicion&&tSt.requisicion.done&&!tSt.orden_prod.done){
+    // Auto-activar orden de producción si ambas están done — no aplica a Accesorios/Flete
+    if(o.tipo!=='accesorios'&&o.tipo!=='flete'&&tSt.ingenieria&&tSt.ingenieria.done&&tSt.requisicion&&tSt.requisicion.done&&!tSt.orden_prod.done){
       tSt.orden_prod={done:true,date:today(),by:'Sistema (auto'+(isStk?' STK':'')+')'};
       ch.push('Orden de producción generada automáticamente');
     }
@@ -3421,6 +3497,7 @@ async function saveOrder(){
       desc,condicion_pago:cond,qty,value:val,pct_anticipo:pctAntic,
       received:rec,
       deadline:isStk?o.deadline:document.getElementById('fDL').value,
+      ciudad_destino:tipoPedido==='flete'?ciudadDestino:o.ciudad_destino,
       notes:document.getElementById('fNotes').value.trim(),
       stages:tSt,
       // Si se devolvió stock por cambio de modelo, este pedido deja de estar
@@ -8648,7 +8725,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-21-1600';
+const APP_VERSION = '2026-08-25-1200';
 
 let _versionCheckTimer = null;
 
