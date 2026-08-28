@@ -547,18 +547,18 @@ textarea{resize:vertical;min-height:58px}
       <button class="tbtn" onclick="loadAll(true);toast('Actualizando...')" title="Actualizar" style="padding:5px 9px;font-size:13px">↻</button>
       <div style="position:relative;display:inline-block" id="aNuevoDropdownWrap">
         <button class="tbtn tbtn-red" id="aNuevoBtn" onclick="toggleNuevoDropdown()" style="font-size:12px;padding:5px 10px">+ Pedido ▾</button>
-        <div id="aNuevoDropdownMenu" class="hidden" style="position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:100;min-width:170px;overflow:hidden">
-          <button class="nuevo-dd-item" onclick="openNew();closeNuevoDropdown()" style="border-left-color:var(--red)">🛢️ Tanque</button>
-          <button class="nuevo-dd-item" id="aNuevoAccOpt" onclick="openNewAccesorios();closeNuevoDropdown()" style="border-left-color:var(--acc)">🔧 Accesorios</button>
-          <button class="nuevo-dd-item" id="aNuevoFleOpt" onclick="openNewFlete();closeNuevoDropdown()" style="border-left-color:var(--fle)">🚚 Flete</button>
-          <button class="nuevo-dd-item" id="aNuevoStkOpt" onclick="openNewStk();closeNuevoDropdown()" style="border-left-color:var(--stk)">📦 STK</button>
-        </div>
       </div>
       <div id="aNavBtns" style="display:contents"></div>
       <a href="mantenimiento.html" target="_blank" class="tbtn" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);font-size:11px;padding:5px 9px;text-decoration:none;white-space:nowrap">🔧 Mant.</a>
       <a href="cotizaciones.html" target="_blank" class="tbtn" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);font-size:11px;padding:5px 9px;text-decoration:none;white-space:nowrap">📋 Cotiz.</a>
       <button class="tbtn" onclick="doLogout()" style="padding:5px 9px;font-size:13px">✕</button>
     </div>
+  </div>
+  <div id="aNuevoDropdownMenu" class="hidden" style="position:fixed;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:1000;min-width:170px;overflow:hidden">
+    <button class="nuevo-dd-item" onclick="openNew();closeNuevoDropdown()" style="border-left-color:var(--red)">🛢️ Tanque</button>
+    <button class="nuevo-dd-item" id="aNuevoAccOpt" onclick="openNewAccesorios();closeNuevoDropdown()" style="border-left-color:var(--acc)">🔧 Accesorios</button>
+    <button class="nuevo-dd-item" id="aNuevoFleOpt" onclick="openNewFlete();closeNuevoDropdown()" style="border-left-color:var(--fle)">🚚 Flete</button>
+    <button class="nuevo-dd-item" id="aNuevoStkOpt" onclick="openNewStk();closeNuevoDropdown()" style="border-left-color:var(--stk)">📦 STK</button>
   </div>
   <div class="main">
     <div id="aUBar" class="user-bar"></div>
@@ -2967,15 +2967,25 @@ function renderAMobile(fl){
 
 // ===== MODAL ADMIN =====
 function toggleNuevoDropdown(){
-  document.getElementById('aNuevoDropdownMenu').classList.toggle('hidden');
+  const menu=document.getElementById('aNuevoDropdownMenu');
+  const abriendo=menu.classList.contains('hidden');
+  if(abriendo){
+    const r=document.getElementById('aNuevoBtn').getBoundingClientRect();
+    menu.style.top=(r.bottom+4)+'px';
+    menu.style.left=r.left+'px';
+  }
+  menu.classList.toggle('hidden');
 }
 function closeNuevoDropdown(){
   document.getElementById('aNuevoDropdownMenu').classList.add('hidden');
 }
 document.addEventListener('click',function(e){
   const wrap=document.getElementById('aNuevoDropdownWrap');
-  if(wrap&&!wrap.contains(e.target))closeNuevoDropdown();
+  const menu=document.getElementById('aNuevoDropdownMenu');
+  if(wrap&&menu&&!wrap.contains(e.target)&&!menu.contains(e.target))closeNuevoDropdown();
 });
+window.addEventListener('scroll',closeNuevoDropdown,true);
+window.addEventListener('resize',closeNuevoDropdown);
 
 function openNew(){
   if(!canNuevo()){showAlert('No tienes permiso para crear pedidos.','🚫');return;}
@@ -8781,7 +8791,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-27-1400';
+const APP_VERSION = '2026-08-28-1000';
 
 let _versionCheckTimer = null;
 
