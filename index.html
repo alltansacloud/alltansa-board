@@ -777,9 +777,12 @@ textarea{resize:vertical;min-height:58px}
       <div class="fg" id="fNumWrap"><label>No. de pedido (cliente)</label><input id="fNum" type="text" placeholder="Ej. OC-12345"></div>
       <div class="fg" id="fClientWrap" style="position:relative">
         <label>Cliente</label>
-        <input id="fClient" type="text" placeholder="Nombre del cliente" autocomplete="off"
-          oninput="onClienteFormInput()" onfocus="onClienteFormInput()"
-          onblur="setTimeout(function(){var d=document.getElementById('fClienteDropdown');if(d)d.classList.add('hidden');},150)">
+        <div style="display:flex;gap:6px">
+          <input id="fClient" type="text" placeholder="Nombre del cliente" autocomplete="off" style="flex:1"
+            oninput="onClienteFormInput()" onfocus="onClienteFormInput()"
+            onblur="setTimeout(function(){var d=document.getElementById('fClienteDropdown');if(d)d.classList.add('hidden');},150)">
+          <button type="button" class="tbtn-white" onclick="openNuevoClienteModal()" style="font-size:11px;padding:5px 10px;white-space:nowrap;flex-shrink:0">+ Nuevo</button>
+        </div>
         <div id="fClienteDropdown" class="hidden" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.15);margin-top:2px"></div>
       </div>
       <div class="fg" id="fCondWrap"><label>Condición de pago</label>
@@ -862,6 +865,49 @@ textarea{resize:vertical;min-height:58px}
     <div class="mdx-foot">
       <button class="tbtn-white" onclick="closeAModal()">Cancelar</button>
       <button class="tbtn tbtn-red" id="aSaveBtn" onclick="saveOrder()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL NUEVO CLIENTE (alta rápida desde Pedidos) ===== -->
+<div id="nuevoClienteModal" class="overlay hidden">
+  <div class="modal mdx" style="max-width:480px">
+    <div class="mdx-head">
+      <div><h2>Nuevo cliente</h2></div>
+    </div>
+    <div class="mdx-body">
+      <div class="mdx-sec">Datos de la empresa</div>
+      <div class="fg2">
+        <div class="fg full"><label>Empresa *</label><input id="ncEmpresa" type="text" placeholder="Nombre de la empresa"></div>
+        <div class="fg"><label>Contacto</label><input id="ncContacto" type="text"></div>
+        <div class="fg"><label>Ciudad</label><input id="ncCiudad" type="text" placeholder="Monterrey, NL"></div>
+        <div class="fg"><label>Correo</label><input id="ncEmail" type="email"></div>
+        <div class="fg"><label>Teléfono</label><input id="ncTelefono" type="text"></div>
+        <div class="fg"><label>Estatus</label>
+          <select id="ncEstatus">
+            <option value="Prospecto">Prospecto</option>
+            <option value="Cliente activo">Cliente activo</option>
+            <option value="Cliente inactivo">Cliente inactivo</option>
+            <option value="Suspendido">Suspendido</option>
+          </select>
+        </div>
+        <div class="fg"><label>Origen del lead</label>
+          <select id="ncOrigen">
+            <option value="Llamada entrante">Llamada entrante</option>
+            <option value="Referido">Referido</option>
+            <option value="Visita directa">Visita directa</option>
+            <option value="Redes sociales">Redes sociales</option>
+            <option value="Google">Google</option>
+            <option value="Licitación">Licitación</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="fg full"><label>Notas</label><textarea id="ncNotas" rows="2"></textarea></div>
+      </div>
+    </div>
+    <div class="mdx-foot">
+      <button class="tbtn-white" onclick="closeNuevoClienteModal()">Cancelar</button>
+      <button class="tbtn tbtn-red" onclick="guardarNuevoCliente()">Guardar cliente</button>
     </div>
   </div>
 </div>
@@ -3674,6 +3720,48 @@ function escHtml(s){
 // ── Autocompletado de Cliente en Nuevo/Editar pedido — mismo catálogo que
 // usa el módulo de Cotizaciones (hoja "Clientes"), cargado junto con
 // getBootstrap para no necesitar una llamada aparte al servidor.
+function openNuevoClienteModal(){
+  ['ncEmpresa','ncContacto','ncCiudad','ncEmail','ncTelefono','ncNotas'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ncEstatus').value='Prospecto';
+  document.getElementById('ncOrigen').value='Llamada entrante';
+  document.getElementById('nuevoClienteModal').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('ncEmpresa').focus(),50);
+}
+function closeNuevoClienteModal(){
+  document.getElementById('nuevoClienteModal').classList.add('hidden');
+}
+async function guardarNuevoCliente(){
+  const empresa=document.getElementById('ncEmpresa').value.trim();
+  if(!empresa){showAlert('El nombre de la empresa es obligatorio.','⚠️');return;}
+  const cliente={
+    id:'',
+    empresa,
+    contacto:document.getElementById('ncContacto').value.trim(),
+    ciudad:document.getElementById('ncCiudad').value.trim(),
+    email:document.getElementById('ncEmail').value.trim(),
+    telefono:document.getElementById('ncTelefono').value.trim(),
+    estatus:document.getElementById('ncEstatus').value,
+    origen:document.getElementById('ncOrigen').value,
+    notas:document.getElementById('ncNotas').value.trim(),
+    creado:today(),
+    modificado_por:CU?CU.area:''
+  };
+  try{
+    const r=await apiPost({action:'saveCliente',data:cliente});
+    if(r&&r.ok){
+      cliente.id=r.id||cliente.id;
+      allClientes.push(cliente);
+      document.getElementById('fClient').value=empresa;
+      closeNuevoClienteModal();
+      toast('✓ Cliente creado: '+empresa);
+    }else{
+      showAlert('Error al guardar: '+((r&&r.error)||'desconocido'),'⚠️');
+    }
+  }catch(e){
+    showAlert('Error de conexión al guardar el cliente.','⚠️');
+  }
+}
+
 function onClienteFormInput(){
   const inp=document.getElementById('fClient');
   const dd=document.getElementById('fClienteDropdown');
@@ -8803,7 +8891,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-28-1600';
+const APP_VERSION = '2026-08-28-1800';
 
 let _versionCheckTimer = null;
 
