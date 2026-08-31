@@ -1736,7 +1736,7 @@ function daysSince(d){
 
 function fm(v){if(!v&&v!==0)return '—';return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:0}).format(v);}
 function ct(q,u){return(parseFloat(q)||0)*(parseFloat(u)||0);}
-function intentarCierreAutomatico(nSt,fin,by,prodStages){
+function intentarCierreAutomatico(nSt,fin,by,prodStages,tipo){
   // Cierra el pedido si el finiquito ya está pagado Y Calidad ya lo liberó —
   // usada por updFiniq, confirmarEmbarqueNormal, confirmarEmbarqueStock y saveProd.
   // Antes solo revisaba el pago; un pedido podía quedar Cerrado/Embarcado sin
@@ -1744,9 +1744,13 @@ function intentarCierreAutomatico(nSt,fin,by,prodStages){
   // en ese momento (puede ser el ya guardado o uno recién actualizado en el
   // mismo flujo) — de ahí se checa lib_calidad, que vive en prod_stages, no
   // en "stages" (nSt).
+  // Accesorios/Flete no son recipientes a presión: no pasan por Calidad (ver
+  // embarqueHabilitado, que ya los exenta) — exigirles lib_calidad.done aquí
+  // los dejaría embarcados para siempre sin poder cerrarse jamás.
   // Devuelve true si cerró (para que el llamador agregue su propio mensaje de log).
   nSt.cerrado=nSt.cerrado||{done:false,date:null,by:null};
-  const calidadOk=!!(prodStages&&prodStages.lib_calidad&&prodStages.lib_calidad.done);
+  const sinCalidad=tipo==='accesorios'||tipo==='flete';
+  const calidadOk=sinCalidad||!!(prodStages&&prodStages.lib_calidad&&prodStages.lib_calidad.done);
   if(fin==='Pagado'&&calidadOk&&!nSt.cerrado.done){
     nSt.cerrado={done:true,date:today(),by};
     return true;
@@ -2105,6 +2109,10 @@ function gDias(o){
 }
 
 function comprasHabilitado(o){
+  // Flete no tiene nada que comprar jamás (ver embarqueHabilitado, mismo criterio).
+  // Accesorios SÍ puede requerir compra real (el accesorio en sí) — se deja tal
+  // cual hasta que exista el gate de Ingeniería + catálogo SKU de Fase 2.
+  if(o.tipo==='flete')return false;
   // Si el pedido se cubrió 100% del almacén, no hay nada que comprar
   if(o.from_stock&&(parseInt(o.qty_produccion)||0)===0)return false;
   if(o.tipo==='stk'){
@@ -2345,6 +2353,25 @@ function estasBadge(o){
       '<div style="font-size:10px;color:#C0391B;margin-top:2px">💰 Pend. cobro</div>';
   }
 
+  // Accesorios / Flete: no tienen proceso de producción (nunca hay prod_stages
+  // de soldadura/sandblast/etc.), así que gEtapa() se queda en "Sin iniciar"
+  // para siempre y el flujo de abajo (línea ~2370) nunca los deja avanzar —
+  // se quedan pegados en "🔔 Nueva orden" eternamente. Igual que from_stock,
+  // se salta directo a embarqueHabilitado() en cuanto corresponde.
+  if(o.tipo==='accesorios'||o.tipo==='flete'){
+    if(ps.embarque&&ps.embarque.done){
+      return'<span class="badge b-emb">🚚 Embarcado '+fd(ps.embarque.date)+'</span>';
+    }
+    const emb=embarqueHabilitado(o);
+    if(emb.ok){
+      if(canEmbarque()){
+        return'<button class="badge" style="background:#E6F4EA;color:#137333;border:1px solid #34A853;cursor:pointer;text-align:left;font-family:inherit" data-oid="'+o.id+'" onclick="confirmarEmbarqueStock(this.dataset.oid)">🚚 Listo — confirmar embarque</button>';
+      }
+      return'<span class="badge" style="background:#E6F4EA;color:#137333">🚚 Listo — confirmar embarque</span>';
+    }
+    return'<span class="badge b-pend">⏳ '+emb.msg+'</span>';
+  }
+
   // From_stock 100% almacén: estado según pago
   if(o.from_stock&&(parseInt(o.qty_produccion)||0)===0){
     const fin=o.finiquito||'Pendiente';
@@ -2436,7 +2463,7 @@ async function updFiniq(oid,val){
   const nSt=JSON.parse(JSON.stringify(o.stages));
   nSt.cerrado=nSt.cerrado||{done:false,date:null,by:null};
   let extraLog='';
-  if(embDone&&intentarCierreAutomatico(nSt,val,by,o.prod_stages))extraLog=' — Pedido cerrado automáticamente';
+  if(embDone&&intentarCierreAutomatico(nSt,val,by,o.prod_stages,o.tipo))extraLog=' — Pedido cerrado automáticamente';
   // Registrar fecha solo cuando se confirma el pago — no al cambiar a otros estados
   const finiqFecha=val==='Pagado'?(o.finiquito_date||today()):o.finiquito_date||'';
 
@@ -2520,7 +2547,7 @@ async function confirmarEmbarqueNormal(oid){
   let logMsg='Embarque confirmado';
   // Cierre automático SOLO si el finiquito está efectivamente pagado
   // Crédito autorizado y Cartera vencida NO cierran — siguen pendientes de cobro
-  if(intentarCierreAutomatico(nSt,fin,by,nPS)){
+  if(intentarCierreAutomatico(nSt,fin,by,nPS,o.tipo)){
     logMsg+=' — Pedido cerrado automáticamente';
   }
   const upd={...o,prod_stages:nPS,stages:nSt,lastProdUpdate:today(),
@@ -2544,7 +2571,7 @@ async function confirmarEmbarqueStock(oid){
   const fin=o.finiquito||'Pendiente';
   let logMsg='Embarque confirmado (Stock)';
   // Cierre automático si ya está pagado
-  if(intentarCierreAutomatico(nSt,fin,by,nPS)){
+  if(intentarCierreAutomatico(nSt,fin,by,nPS,o.tipo)){
     logMsg+=' — Pedido cerrado automáticamente';
   }
   const upd={...o,prod_stages:nPS,stages:nSt,lastProdUpdate:today(),
@@ -3979,11 +4006,14 @@ async function autorizarEtapa(orderId, etapa){
 
   stages[etapa]={done:true,date:today(),by};
 
-  // Auto-activar orden de producción si ambas etapas están autorizadas
+  // Auto-activar orden de producción si ambas etapas están autorizadas.
+  // Accesorios/Flete quedan fuera: no fabrican nada, nunca debe generarse una
+  // orden de producción para ellos (mismo guard que ya existe en los otros 3
+  // lugares del código donde se auto-activa este mismo stage).
   const ingOk=!!(stages.ingenieria&&stages.ingenieria.done);
   const reqOk=!!(stages.requisicion&&stages.requisicion.done);
   let extraLog='';
-  if(ingOk&&reqOk&&!(stages.orden_prod&&stages.orden_prod.done)){
+  if(o.tipo!=='accesorios'&&o.tipo!=='flete'&&ingOk&&reqOk&&!(stages.orden_prod&&stages.orden_prod.done)){
     stages.orden_prod={done:true,date:today(),by:'Sistema (auto)'};
     extraLog=' + Orden de producción generada automáticamente';
   }
@@ -5447,6 +5477,12 @@ function exportarExcel(){
 
 
 // ===== PRODUCCIÓN VIEW =====
+// Accesorios y Flete no fabrican nada — no tiene caso que aparezcan en ningún
+// conteo, filtro o listado del módulo de Producción (ni siquiera en "Todos"),
+// a diferencia de from_stock (que sigue siendo un pedido de tanque, solo que
+// ya cubierto por almacén). Se excluyen por completo, en todas las vistas.
+function sinProduccion(o){return o.tipo==='accesorios'||o.tipo==='flete';}
+
 function renderProd(){
   renderPS();renderPF();renderPT();
   document.getElementById('pLB').classList.add('hidden');
@@ -5457,7 +5493,7 @@ function renderPS(){
   // Pedidos cliente (no STK) con orden activa — se excluyen los que ya llegaron
   // a etapa "Terminado" aunque su estatus formal no se haya cerrado todavía,
   // para que no cuenten aquí Y en "Completados" al mismo tiempo.
-  const act=orders.filter(o=>o.tipo!=='stk'&&o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done&&!['closed','cancelado'].includes(gSt(o))&&gEtapa(o).lbl!=='Terminado'&&!(o.from_stock&&(parseInt(o.qty_produccion)||0)===0));
+  const act=orders.filter(o=>o.tipo!=='stk'&&!sinProduccion(o)&&o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done&&!['closed','cancelado'].includes(gSt(o))&&gEtapa(o).lbl!=='Terminado'&&!(o.from_stock&&(parseInt(o.qty_produccion)||0)===0));
   // STK activos en producción — mismo criterio: fuera si ya está Terminado.
   const stks=orders.filter(o=>o.tipo==='stk'&&o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done&&!['closed','stk_done','cancelado'].includes(gSt(o))&&gEtapa(o).lbl!=='Terminado');
   // Activas TOTALES (cliente + STK) — misma definición que "base" en renderPT().
@@ -5465,8 +5501,8 @@ function renderPS(){
   // porque al hacer clic en esos mismos filtros la tabla mezcla cliente y STK.
   // Antes solo se calculaban sobre "act" (cliente), por eso el número no
   // coincidía con lo que realmente se veía en la tabla filtrada.
-  const activasTodas=orders.filter(o=>o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done&&!['closed','cancelado'].includes(gSt(o))&&gSt(o)!=='stk_done'&&!(o.from_stock&&(parseInt(o.qty_produccion)||0)===0));
-  const comp=orders.filter(o=>gSt(o)==='closed'||gSt(o)==='stk_done'||gEtapa(o).lbl==='Terminado');
+  const activasTodas=orders.filter(o=>!sinProduccion(o)&&o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done&&!['closed','cancelado'].includes(gSt(o))&&gSt(o)!=='stk_done'&&!(o.from_stock&&(parseInt(o.qty_produccion)||0)===0));
+  const comp=orders.filter(o=>!sinProduccion(o)&&(gSt(o)==='closed'||gSt(o)==='stk_done'||gEtapa(o).lbl==='Terminado'));
   const enP=activasTodas.filter(o=>gEtapa(o).lbl!=='Sin iniciar'&&gEtapa(o).lbl!=='Terminado').length;
   const sinI=activasTodas.filter(o=>gEtapa(o).lbl==='Sin iniciar').length;
   // En riesgo: solo pedidos con producción NO terminada
@@ -5493,7 +5529,7 @@ function renderPT(){
   // Panel "En camino" — ingeniería marcada pero sin orden de producción todavía
   const proxProd=orders.filter(o=>
     !['closed','stk_done','cancelado'].includes(gSt(o))&&
-    o.tipo!=='stk'&&
+    o.tipo!=='stk'&&!sinProduccion(o)&&
     !(o.from_stock&&(parseInt(o.qty_produccion)||0)===0)&& // excluir pedidos 100% del almacén
     o.stages&&o.stages.ingenieria&&o.stages.ingenieria.done&&
     !(o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done)
@@ -5514,6 +5550,7 @@ function renderPT(){
   }
   // Base: pedidos con orden de producción activa, excluyendo los 100% cubiertos por almacén
   const base=orders.filter(o=>
+    !sinProduccion(o)&&
     o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done&&
     !['closed','cancelado'].includes(gSt(o))&&gSt(o)!=='stk_done'&&
     !(o.from_stock&&(parseInt(o.qty_produccion)||0)===0) // excluir si todo viene del almacén
@@ -5523,11 +5560,11 @@ function renderPT(){
   // sientan "perdidos". Se muestran con la leyenda "Surtido por almacén".
   const surtidoAlmacen=orders.filter(o=>o.tipo!=='stk'&&o.from_stock&&(parseInt(o.qty_produccion)||0)===0);
   if(pFilter==='todos'){
-    fl=[...base, ...orders.filter(o=>gSt(o)==='closed'||gSt(o)==='stk_done'||gEtapa(o).lbl==='Terminado'), ...surtidoAlmacen];
+    fl=[...base, ...orders.filter(o=>!sinProduccion(o)&&(gSt(o)==='closed'||gSt(o)==='stk_done'||gEtapa(o).lbl==='Terminado')), ...surtidoAlmacen];
     // Deduplicar por id
     const seen=new Set();fl=fl.filter(o=>{if(seen.has(o.id))return false;seen.add(o.id);return true;});
   }else if(pFilter==='done'){
-    fl=orders.filter(o=>gSt(o)==='closed'||gSt(o)==='stk_done'||gEtapa(o).lbl==='Terminado');
+    fl=orders.filter(o=>!sinProduccion(o)&&(gSt(o)==='closed'||gSt(o)==='stk_done'||gEtapa(o).lbl==='Terminado'));
   }else{
     fl=base.filter(o=>gEtapa(o).lbl!=='Terminado');
     if(pFilter==='pending')fl=fl.filter(o=>gEtapa(o).lbl==='Sin iniciar');
@@ -6384,7 +6421,7 @@ async function saveProd(){
       ch.push('Entrada al almacén registrada');
     }else{
       const finVal=o.finiquito||'Pendiente';
-      if(intentarCierreAutomatico(nSt,finVal,by,tPSt)){
+      if(intentarCierreAutomatico(nSt,finVal,by,tPSt,o.tipo)){
         ch.push('Pedido cerrado automáticamente ('+(cond==='Crédito'?'crédito cobrado':'contado')+')');
       }else if(cond==='Crédito'){
         ch.push('Embarque registrado — pendiente cobro');
@@ -8891,7 +8928,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-28-1800';
+const APP_VERSION = '2026-08-31-1643';
 
 let _versionCheckTimer = null;
 
