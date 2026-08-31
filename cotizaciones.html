@@ -3116,24 +3116,19 @@ function generarPDFCotizacion(datos) {
   const hayServiciosExtra = serviciosExtra.length > 0;
 
   // ── Accesorios, flete y otros cargos — MISMA tabla que los tanques ──────
-  // Antes esto abría una segunda tabla con su propio encabezado (y su propio
-  // subtotal parcial), lo que alargaba la cotización de más. Ahora se agregan
-  // como renglones adicionales de la tabla de partidas, separados solo por
-  // una fila divisora ligera (sin repetir la barra de encabezado ni columnas).
+  // Sin fila divisora ni encabezado propio: se agregan como renglones más de
+  // la tabla de partidas, siguiendo la MISMA numeración corrida (1-, 2-, 3-...)
+  // que ya traen los tanques, para no gastar una fila completa solo en un rótulo.
   let totalServiciosExtra = 0;
   if (hayServiciosExtra) {
-    rows.push([{
-      content: 'ACCESORIOS, FLETE Y OTROS CARGOS',
-      colSpan: 4,
-      styles: { fontStyle: 'bold', fontSize: 7.5, textColor: [95,94,90], fillColor: [241,239,232], cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } }
-    }]);
-    serviciosExtra.forEach(s => {
+    serviciosExtra.forEach((s, idx) => {
       const cant = Number(s.cantidad) || 1;
       const punit = Number(s.precio_unit) || 0;
       const subtotal = cant * punit;
       totalServiciosExtra += subtotal;
       const cat = ['Flete','Accesorios','Otro'].includes(s.categoria) ? s.categoria : 'Otro';
-      rows.push([cat.toUpperCase() + ' — ' + (s.descripcion||'').toUpperCase(), String(cant), fmtSinDivisa(punit), fmtSinDivisa(subtotal)]);
+      const numero = partidas.length + idx + 1;
+      rows.push([`${numero}- ${cat.toUpperCase()} — ${(s.descripcion||'').toUpperCase()}`, String(cant), fmtSinDivisa(punit), fmtSinDivisa(subtotal)]);
     });
   }
 
