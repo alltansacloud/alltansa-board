@@ -765,7 +765,7 @@ textarea{resize:vertical;min-height:58px}
       <div id="stockDesglose" class="hidden" style="background:#fff;border:1px solid #C8E6C9;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px"></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="tbtn tbtn-red" onclick="confirmarJale()" id="btnJalar" disabled style="opacity:.5">✓ Confirmar y jalar del almacén</button>
-        <button class="tbtn-white" onclick="cerrarStockPanel()">✕ Producir sin almacén</button>
+        <button class="tbtn-white" id="btnCerrarStockPanel" onclick="cerrarStockPanel()">✕ Producir sin almacén</button>
       </div>
     </div>
     <div id="stkBanner" class="hidden" style="background:var(--stk-bg);border:1px solid var(--stk);border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:12px;color:var(--stk);font-weight:600">📦 ORDEN DE ALMACÉN (STK) — Producción interna, sin cliente asignado</div>
@@ -796,7 +796,7 @@ textarea{resize:vertical;min-height:58px}
     <div class="mdx-sec">Producto / servicio</div>
     <div class="fg2">
       <div class="fg full"><label id="fDescLabel">Modelo / descripción del equipo</label><input id="fDesc" type="text" placeholder="Ej. Tanque de aire vertical 500L 150 PSI"></div>
-      <div class="fg full" id="fQtyWrap"><label>Cantidad de tanques</label>
+      <div class="fg full" id="fQtyWrap"><label id="fQtyLabel">Cantidad de tanques</label>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input id="fQty" type="number" min="1" value="1" oninput="updT();recalcDesglose()" style="width:90px;min-width:70px;flex-shrink:0">
           <button type="button" id="btnVerAlmacen" class="tbtn-white" onclick="abrirStockPanel()" style="font-size:11px;padding:5px 10px;white-space:nowrap;display:none">📦 Ver almacén</button>
@@ -2152,6 +2152,13 @@ function embarqueHabilitado(o){
   // Flete además no tiene nada que fabricar ni comprar: solo requiere el pago (o crédito
   // autorizado) para poder confirmar el viaje/entrega.
   if(o.tipo==='accesorios'||o.tipo==='flete'){
+    // Accesorios con cobertura PARCIAL de almacén (parte de stock, resto por comprar):
+    // no dejar embarcar hasta que Compras marque la parte faltante como Recibida —
+    // si no, el pago por sí solo dejaría "confirmar embarque" algo que ni siquiera
+    // ha llegado. Full-stock (qty_produccion=0) no pasa por aquí — nada que comprar.
+    if(o.tipo==='accesorios'&&(parseInt(o.qty_produccion)||0)>0&&(o.compras_accesorios||'Pendiente')!=='Recibido'){
+      return{ok:false,msg:'Pendiente recepción de compras ('+(parseInt(o.qty_produccion)||0)+' uds faltantes)'};
+    }
     const fin=o.finiquito||'Pendiente';
     const cond=o.condicion_pago||'Contado';
     if(fin==='Pagado'||fin==='Crédito autorizado'||fin==='Cartera vencida')return{ok:true,msg:''};
@@ -2303,7 +2310,7 @@ function blqSel(o){
 }
 
 function comprasBadge(val){
-  const colors={'Pendiente':'#FCE8E6|#C0391B','Pedido':'#FEF3CD|#854F0B','Recibido':'#E6F4EA|#137333'};
+  const colors={'Pendiente':'#FCE8E6|#C0391B','Pedido':'#FEF3CD|#854F0B','Recibido':'#E6F4EA|#137333','N/A':'#F1F3F4|#5F6368'};
   const [bg,col]=(colors[val||'Pendiente']||'#FCE8E6|#C0391B').split('|');
   return{bg,col};
 }
@@ -3121,7 +3128,11 @@ function _aplicarVisibilidadPorTipo(){
   else{badge.textContent='TANQUE';badge.style.background='var(--red)';}
   document.getElementById('fEspecSecT').style.display=(esAcc||esFle)?'none':'';
   document.getElementById('fEspecWrap').style.display=(esAcc||esFle)?'none':'';
-  document.getElementById('fQtyWrap').style.display=(esAcc||esFle)?'none':'';
+  // Cantidad SÍ aplica a Accesorios (se pueden pedir varias unidades y jalar
+  // del almacén) — solo Flete la oculta, porque es un servicio único sin
+  // unidades ni catálogo de inventario que le corresponda.
+  document.getElementById('fQtyWrap').style.display=esFle?'none':'';
+  document.getElementById('fQtyLabel').textContent=esAcc?'Cantidad':'Cantidad de tanques';
   document.getElementById('fCiudadWrap').style.display=esFle?'':'none';
   const labels={pedido:'Modelo / descripción del equipo',accesorios:'Descripción de los accesorios',flete:'Descripción del servicio'};
   document.getElementById('fDescLabel').textContent=labels[isStk?'pedido':tipoPedido]||labels.pedido;
@@ -3270,7 +3281,8 @@ function canNuevoPedidoConStock(){return CU&&(CU.area==='Ventas / Embarques'||CU
 
 // Mostrar botón "Ver almacén" al abrir modal (nuevo pedido o edición)
 function checkStockBtn(){
-  if(isStk||tipoPedido!=='pedido'||!canNuevoPedidoConStock()){
+  // Flete nunca jala de almacén — no hay catálogo de inventario que le aplique.
+  if(isStk||tipoPedido==='flete'||!canNuevoPedidoConStock()){
     document.getElementById('btnVerAlmacen').style.display='none';
     return;
   }
@@ -3282,14 +3294,20 @@ function checkStockBtn(){
       return;
     }
   }
-  const hayStock=inventory.some(i=>(parseInt(i.stock_actual)||0)>0);
+  // Accesorios solo debe ver stock de tipo:'Accesorios'; un pedido de tanque
+  // solo debe ver stock de tanque — así no se mezclan los dos catálogos.
+  const esAccModal=tipoPedido==='accesorios';
+  const hayStock=inventory.some(i=>(parseInt(i.stock_actual)||0)>0&&(esAccModal?(i.tipo==='Accesorios'):(i.tipo!=='Accesorios')));
   document.getElementById('btnVerAlmacen').style.display=hayStock?'':'none';
 }
 
 // Abrir panel con tabla de selección explícita
 function abrirStockPanel(){
-  const disponibles=inventory.filter(i=>(parseInt(i.stock_actual)||0)>0);
-  if(!disponibles.length){toast('No hay modelos con stock disponible');return;}
+  // Cada tipo de pedido ve solo su catálogo — Accesorios no debe mezclarse
+  // con modelos de tanque en la lista de selección, y viceversa.
+  const esAccModal=tipoPedido==='accesorios';
+  const disponibles=inventory.filter(i=>(parseInt(i.stock_actual)||0)>0&&(esAccModal?(i.tipo==='Accesorios'):(i.tipo!=='Accesorios')));
+  if(!disponibles.length){toast(esAccModal?'No hay accesorios con stock disponible':'No hay modelos con stock disponible');return;}
   const wrap=document.getElementById('stockTableWrap');
   wrap.style.overflowX='hidden';
   wrap.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px">'+
@@ -3317,6 +3335,7 @@ function abrirStockPanel(){
   document.getElementById('stockDesglose').classList.add('hidden');
   document.getElementById('btnJalar').disabled=true;
   document.getElementById('btnJalar').style.opacity='.5';
+  document.getElementById('btnCerrarStockPanel').textContent=esAccModal?'✕ Comprar sin almacén':'✕ Producir sin almacén';
   fromStockData=null;
   document.getElementById('stockAlertBox').classList.remove('hidden');
 }
@@ -3344,6 +3363,7 @@ function recalcDesglose(){
   const stockDisp=parseInt(fromStockData.stock_actual)||0;
   const delAlmacen=Math.min(stockDisp,qty);
   const aProd=Math.max(0,qty-delAlmacen);
+  const esAccModal=tipoPedido==='accesorios';
   const desglose=document.getElementById('stockDesglose');
   desglose.innerHTML=
     '<div style="font-weight:700;color:#137333;margin-bottom:8px">✓ <span style="color:var(--navy)">'+fromStockData.modelo+'</span> seleccionado</div>'+
@@ -3358,12 +3378,13 @@ function recalcDesglose(){
       '</div>'+
       '<div style="text-align:center;background:'+(aProd>0?'#FEF3CD':'#F8F9FC')+';border-radius:6px;padding:8px">'+
         '<div style="font-size:20px;font-weight:700;color:'+(aProd>0?'#854F0B':'var(--muted)')+'">'+aProd+'</div>'+
-        '<div style="font-size:10px;color:var(--muted);text-transform:uppercase">A producir</div>'+
+        '<div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+(esAccModal?'A comprar':'A producir')+'</div>'+
       '</div>'+
     '</div>'+
     '<div style="margin-top:8px;font-size:11px;color:'+(aProd===0?'#137333':'#854F0B')+'">'+
       (aProd===0?'✓ Almacén cubre el 100% — no se generará orden de producción ni de compras.':
-       '⚠ Orden de producción por <strong>'+aProd+' uds</strong>. Almacén aporta <strong>'+delAlmacen+' uds</strong>.')+
+       (esAccModal?'⚠ Orden de compra por <strong>'+aProd+' uds</strong> (no pasa por Producción). Almacén aporta <strong>'+delAlmacen+' uds</strong>.':
+       '⚠ Orden de producción por <strong>'+aProd+' uds</strong>. Almacén aporta <strong>'+delAlmacen+' uds</strong>.'))+
     '</div>';
   desglose.classList.remove('hidden');
 }
@@ -3404,10 +3425,15 @@ async function aplicarJaleAlmacen(order,qty,client,by){
     // 100% cubierto por almacén: la unidad ya viene terminada de fábrica
     // (fue producida como STK) — se marcan TODAS las etapas de producción
     // como completadas, incluyendo Sandblast y Lib. Calidad.
-    PROD_STAGES.forEach(st=>{
-      order.prod_stages[st.key]={done:true,date:today(),by:'Sistema (stock)'};
-    });
-    order.prod_stages.lib_calidad={done:true,date:today(),by:'Sistema (stock)'};
+    // Accesorios/Flete quedan fuera de este bloque: no existen etapas físicas
+    // de producción/calidad para ellos (nunca se fabrican), así que marcarlas
+    // solo ensuciaría el dato sin que nada las lea (ver sinProduccion()).
+    if(order.tipo!=='accesorios'&&order.tipo!=='flete'){
+      PROD_STAGES.forEach(st=>{
+        order.prod_stages[st.key]={done:true,date:today(),by:'Sistema (stock)'};
+      });
+      order.prod_stages.lib_calidad={done:true,date:today(),by:'Sistema (stock)'};
+    }
     order.stages.ingenieria={done:true,date:today(),by:'N/A (Stock)'};
     order.stages.requisicion={done:true,date:today(),by:'N/A (Stock)'};
     order.stages.orden_prod={done:true,date:today(),by:'N/A (Stock)'};
@@ -3574,8 +3600,11 @@ async function saveOrder(){
       pct_anticipo:pctAntic,
       finiquito:isStk?'N/A':'Pendiente',
       finiquito_date:'',finiquito_by:'',
-      compras_placas:'Pendiente',compras_placas_fecha:'',
-      compras_accesorios:'Pendiente',compras_accesorios_fecha:'',
+      // Placas nunca aplica a Accesorios/Flete (no hay lámina que comprar para
+      // ninguno de los dos). Accesorios sí compra "accesorios" (el ítem en sí);
+      // Flete no compra nada — ver embarqueHabilitado/comprasHabilitado.
+      compras_placas:(tipoPedido==='accesorios'||tipoPedido==='flete')?'N/A':'Pendiente',compras_placas_fecha:'',
+      compras_accesorios:tipoPedido==='flete'?'N/A':'Pendiente',compras_accesorios_fecha:'',
       log:[{by,msg:(isStk?'Orden STK creada':'Pedido creado')+(useFromStock?' — jalado del almacén':'')+' por '+by,ts}],
       createdAt:today(),
       fluido:document.getElementById('fFluido').value||'',
@@ -6451,6 +6480,16 @@ function renderComp(){
   document.getElementById('cC').classList.remove('hidden');
 }
 
+// Accesorios no tiene "Placas" (queda en 'N/A' — ver saveOrder) — su
+// completitud depende solo de si el accesorio mismo ya se recibió. Para
+// cualquier otro tipo, se mantiene el criterio de siempre (placas Y accesorios).
+function esMaterialCompleto(o){
+  const acc=o.compras_accesorios||'Pendiente';
+  if(o.tipo==='accesorios')return acc==='Recibido';
+  const placas=o.compras_placas||'Pendiente';
+  return placas==='Recibido'&&acc==='Recibido';
+}
+
 function renderCS(){
   // Panel "En camino" — ingeniería marcada pero aún no habilitados en Compras
   const proxComp=orders.filter(o=>
@@ -6477,7 +6516,7 @@ function renderCS(){
   const act=orders.filter(o=>comprasHabilitado(o)&&!['closed','stk_done','cancelado'].includes(gSt(o)));
   const pendPlacas=act.filter(o=>(o.compras_placas||'Pendiente')==='Pendiente').length;
   const pendAcc=act.filter(o=>(o.compras_accesorios||'Pendiente')==='Pendiente').length;
-  const completos=act.filter(o=>(o.compras_placas||'Pendiente')==='Recibido'&&(o.compras_accesorios||'Pendiente')==='Recibido').length;
+  const completos=act.filter(esMaterialCompleto).length;
   document.getElementById('cSR').innerHTML=
     '<div class="stat"><div class="stat-label">Órdenes activas</div><div class="stat-val">'+act.length+'</div></div>'+
     '<div class="stat s-red"><div class="stat-label">Placas pendientes</div><div class="stat-val">'+pendPlacas+'</div></div>'+
@@ -6493,8 +6532,8 @@ function setCF(k){cFilter=k;renderCF();renderCCards();}
 
 function renderCCards(){
   let fl=orders.filter(o=>comprasHabilitado(o)&&!['closed','stk_done','cancelado'].includes(gSt(o)));
-  if(cFilter==='pend')fl=fl.filter(o=>(o.compras_placas||'Pendiente')!=='Recibido'||(o.compras_accesorios||'Pendiente')!=='Recibido');
-  else if(cFilter==='comp')fl=fl.filter(o=>(o.compras_placas||'Pendiente')==='Recibido'&&(o.compras_accesorios||'Pendiente')==='Recibido');
+  if(cFilter==='pend')fl=fl.filter(o=>!esMaterialCompleto(o));
+  else if(cFilter==='comp')fl=fl.filter(esMaterialCompleto);
   if(cSearch)fl=fl.filter(o=>matchSearch(o,cSearch));
   // Orden por folio, más reciente arriba
   fl.sort((a,b)=>{
@@ -6511,7 +6550,7 @@ function renderCCards(){
     const cp=comprasBadge(placas);const ca=comprasBadge(acc);
     const editable=canCompras();
     const isSTK=o.tipo==='stk';
-    const isCompleto=placas==='Recibido'&&acc==='Recibido';
+    const isCompleto=esMaterialCompleto(o);
     // Fecha de completado = la más reciente entre placas y accesorios
     const fechaComp=[o.compras_placas_fecha,o.compras_accesorios_fecha].filter(Boolean).sort().pop();
 
@@ -6545,7 +6584,7 @@ function renderCCards(){
             (isSTK?'&nbsp;'+stkBadge():'')+
           '</div>'+
           '<div class="comp-card-client">'+(isSTK?'Almacén interno':o.client)+' — '+o.desc+
-          ' ('+(o.from_stock&&parseInt(o.qty_produccion)>0?parseInt(o.qty_produccion):o.qty)+' uds'+(isSTK?' — reabastecimiento':' a producir')+')</div>'+
+          ' ('+(o.from_stock&&parseInt(o.qty_produccion)>0?parseInt(o.qty_produccion):o.qty)+' uds'+(isSTK?' — reabastecimiento':(o.tipo==='accesorios'?' a comprar':' a producir'))+')</div>'+
           (isSTK?'<div style="font-size:11px;background:#E8F0FE;color:#1a73e8;border-radius:6px;padding:4px 8px;margin-top:4px">🏭 Pedido de reabastecimiento de inventario — no es venta</div>':'')+
           (o.from_stock&&parseInt(o.qty_almacen)>0?
             '<div style="font-size:11px;background:#E6F4EA;color:#137333;border-radius:6px;padding:4px 8px;margin-top:4px">'+
@@ -6572,8 +6611,11 @@ function renderCompCardDetail(o,placas,acc,cp,ca,editable,isSTK){
       '');
   // Si la requisición no está confirmada, bloquear los selectores
   const editableFinal=editable&&!reqPendiente;
-  return bannerReq+
-  '<div class="comp-fields">'+
+  // Placas no aplica a pedidos tipo Accesorios (nunca hay lámina que comprar
+  // para un accesorio) — se omite el campo entero en vez de mostrar un
+  // "Pendiente" que nunca se va a resolver.
+  const esAccPedido=o.tipo==='accesorios';
+  const campoPlacas=esAccPedido?'':(
     '<div class="comp-field">'+
       '<div class="comp-field-label">🔩 Placas</div>'+
       (editableFinal?
@@ -6583,7 +6625,11 @@ function renderCompCardDetail(o,placas,acc,cp,ca,editable,isSTK){
       (placas==='Recibido'&&o.compras_placas_fecha?'<div class="comp-date" style="color:#137333">✅ Recibido: '+fd(o.compras_placas_fecha)+'</div>':'')+
       (placas==='Pedido'&&o.compras_placas_fecha?'<div class="comp-date">📅 Est. recepción: '+fd(o.compras_placas_fecha)+'</div>':'')+
       (editableFinal&&placas==='Pedido'?'<div class="comp-row"><input type="date" id="fp_'+o.id+'" value="'+(normDate(o.compras_placas_fecha)||'')+'" style="border-radius:8px;padding:4px 8px;font-size:11px;width:auto" onchange="updComprasFecha(\''+o.id+'\',\'placas\',this.value)"><label style="font-size:10px;color:var(--muted)"> Fecha est.</label></div>':'')+
-    '</div>'+
+    '</div>'
+  );
+  return bannerReq+
+  '<div class="comp-fields">'+
+    campoPlacas+
     '<div class="comp-field">'+
       '<div class="comp-field-label">🔧 Accesorios</div>'+
       (editableFinal?
@@ -8928,7 +8974,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-08-31-1643';
+const APP_VERSION = '2026-09-01-1352';
 
 let _versionCheckTimer = null;
 
