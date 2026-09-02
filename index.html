@@ -8194,7 +8194,10 @@ function renderContab() {
 // Por facturar / Saldo x cobrar: SIEMPRE saldo vivo a hoy, sin importar el
 // mes — igual que "Total por facturar" y "Cartera vigente/vencida" en las
 // tarjetas KPI, que explícitamente ignoran el mes ("todos los pedidos,
-// todos los meses").
+// todos los meses"). Saldo x cobrar usa ctSaldoCarteraReal (fuente única que
+// ya exige actividad real — al menos 1 factura o 1 abono) en vez de
+// ctSaldoEfectivo directo — mismo criterio que ya usa Administración y
+// Reportes para Cartera (ver FIX abajo).
 function ctRenderTotalesFiltrados(pedidos, filtMes) {
   const foot = document.getElementById('ctFootTotales');
   if (!foot) return;
@@ -8212,7 +8215,14 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
     const folio = o.folio || o.id;
     sumValor   += ctValorPedido(o);
     sumPorFact += ctPorFacturar(o);
-    sumSaldo   += Math.max(0, ctSaldoEfectivo(o));
+    // FIX (sep 2026, caso CLEVELAND): antes se sumaba ctSaldoEfectivo(o)
+    // directo, de CUALQUIER pedido visible — incluso uno "Sin facturar" sin
+    // ninguna factura ni abono capturado — eso inflaba "Saldo x cobrar" del
+    // pie de tabla con dinero que ni siquiera es deuda formal todavía,
+    // desalineándolo de "Cartera vigente + Cartera vencida" de los KPIs de
+    // arriba (que sí exigen actividad real vía ctSaldoCarteraReal). Ahora
+    // usa esa misma fuente única en los dos lados.
+    sumSaldo += ctSaldoCarteraReal(o);
 
     if (filtMes) {
       ctFacturasDePedido(folio).forEach(f => {
@@ -9105,7 +9115,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-02-1200';
+const APP_VERSION = '2026-09-02-1530';
 
 let _versionCheckTimer = null;
 
