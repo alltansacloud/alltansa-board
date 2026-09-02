@@ -1279,6 +1279,15 @@ textarea{resize:vertical;min-height:58px}
         </table>
       </div>
     </div>
+    <!-- Aclaraciones automáticas: facturas/abonos de un pedido visible en la
+         tabla cuya fecha cae FUERA del mes seleccionado — explica por qué el
+         KPI/pie de tabla no coincide con lo que se ve en ese renglón. Se
+         calcula solo (ctRenderNotasAclaraciones); no requiere que nadie
+         escriba nada. -->
+    <div class="card" id="ctNotasWrap" style="display:none;margin-top:14px;padding:14px 20px;background:#FFFBEA;border:1px solid #F5E1A4;border-radius:10px">
+      <div style="font-size:11px;font-weight:700;color:#8A6D00;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">⚠️ Aclaraciones automáticas</div>
+      <div id="ctNotasBody" style="font-size:12px;color:#5C4A00;line-height:1.7"></div>
+    </div>
   </div>
 </div>
 
@@ -4681,6 +4690,27 @@ function calcReporte(pedidos,desde,hasta){
   const cartera=Math.round(pedidos.reduce(function(s,o){
     return s+((typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0);
   },0));
+  // Cobrado que pertenece a pedidos cuyo FOLIO (fecha de venta) cae FUERA de
+  // este rango — dinero real cobrado en el período, pero de una venta que
+  // "Ventas totales" de este mismo reporte no está contando (porque esa
+  // venta se registra en otro rango). Es la causa más común de que "Cobrado"
+  // no cuadre a simple vista contra "Ventas" — no es un error, son dos ejes
+  // de tiempo distintos (venta vs cobro), pero vale la pena decirlo directo
+  // en vez de dejar que se note nada más como un %  raro.
+  let cobradoFueraDeRango=0;
+  (ctAbonos||[]).forEach(function(a){
+    const folio=a.folio_pedido;
+    if(!folio)return;
+    const o=orders.find(function(x){return (x.folio||x.id)===folio;});
+    if(!o||o.tipo==='stk'||gSt(o)==='cancelado')return;
+    const fa=cleanDate(a.fecha_abono);
+    if(!fa)return;
+    const d=new Date(fa);
+    if(desde&&d<desde)return;
+    if(hasta&&d>hasta)return;
+    const fp=fechaDelPedido(o);
+    if(fp&&(fp<desde||fp>hasta))cobradoFueraDeRango+=parseFloat(a.monto)||0;
+  });
   const clientes=[...new Set(pedidos.filter(function(o){return o.tipo!=='stk';}).map(function(o){return o.client||'';}).filter(Boolean))].length;
   const cerrados=pedidos.filter(function(o){return gSt(o)==='closed';}).length;
   const fluidos={};
@@ -4711,7 +4741,7 @@ function calcReporte(pedidos,desde,hasta){
     if(hasta&&d>hasta)return;
     porCliente[cli].cobrado+=parseFloat(a.monto)||0;
   });
-  return{total,ventas,cobrado,cartera,clientes,cerrados,fluidos,porCliente};
+  return{total,ventas,cobrado,cartera,clientes,cerrados,fluidos,porCliente,cobradoFueraDeRango};
 }
 
 function calcPorMes(pedidos,desde,hasta){
@@ -4822,6 +4852,31 @@ function calcAlmacenSnapshot(){
 }
 
 // ===== CUENTAS POR COBRAR (fotografía general, no por período) =====
+// Agrupa montos de facturas/abonos por mes calendario ("ago 2026: $X · sep
+// 2026: $Y") — solo aporta algo si hay actividad en MÁS DE UN mes; si todo
+// cae en el mismo mes, regresa '' y el llamador usa el tooltip genérico de
+// siempre. Usado para que el desglose de Fact/Cob en Cuentas por Cobrar dejе
+// explícito de qué meses viene un monto que combina, por ejemplo, un
+// anticipo de un mes y un finiquito de otro (caso GALLEGOS).
+function ctDesgloseFechas(items, dateField, amountField) {
+  const porMes = {};
+  items.forEach(it => {
+    const raw = it[dateField];
+    if (!raw) return;
+    const d = new Date(raw);
+    if (isNaN(d)) return;
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    porMes[key] = (porMes[key] || 0) + (parseFloat(it[amountField]) || 0);
+  });
+  const keys = Object.keys(porMes).sort();
+  if (keys.length <= 1) return '';
+  const mesesTxt = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return keys.map(k => {
+    const [yy, mm] = k.split('-');
+    return mesesTxt[parseInt(mm)-1] + ' ' + yy + ': ' + ctFmt(porMes[k]);
+  }).join(' · ');
+}
+
 function calcCarteraGeneral(){
   // Todo pedido activo, sin importar de qué mes sea. Antigüedad = días desde
   // la fecha de ENTREGA comprometida (o.deadline), no desde la creación.
@@ -4965,12 +5020,19 @@ function renderCarteraGeneral(){
     c.folios.forEach(function(f){
       const diasLbl=f.dias==null?'Sin fecha':f.dias+' días';
       const diasColor=f.dias==null?'#9E9E9E':f.dias>90?'#C0391B':f.dias>60?'#854F0B':f.dias>30?'#854F0B':'#6B7A99';
+      // Si el Fact/Cob de este folio viene de más de un mes (ej. anticipo en
+      // un mes + finiquito en otro), el tooltip lo dice explícito en vez de
+      // dejar el número "pelón" — mismo caso GALLEGOS visto en Contabilidad.
+      const descFact=ctDesgloseFechas(ctFacturasDePedido(f.folio),'fecha_factura','monto_sin_iva');
+      const descCob=ctDesgloseFechas(ctAbonosDePedido(f.folio),'fecha_abono','monto');
+      const titleFact=descFact?('Por mes (sin IVA) — '+descFact):'Monto facturado a este pedido';
+      const titleCob=descCob?('Por mes — '+descCob):'Pagos ya recibidos';
       html+='<tr>'+
         '<td style="padding:4px 8px 4px 24px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.folio+'</td>'+
         '<td style="padding:4px 8px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Entrega: '+f.entrega+'</td>'+
         '<td style="padding:4px 8px;color:'+diasColor+';font-weight:600;white-space:nowrap">'+diasLbl+'</td>'+
-        '<td style="padding:4px 8px;text-align:right;color:var(--muted);white-space:nowrap" title="Monto facturado a este pedido">Fact: '+fmtRpt(f.facturado)+'</td>'+
-        '<td style="padding:4px 8px;text-align:right;color:#137333;white-space:nowrap" title="Pagos ya recibidos">Cob: '+fmtRpt(f.cobrado)+'</td>'+
+        '<td style="padding:4px 8px;text-align:right;color:var(--muted);white-space:nowrap" title="'+titleFact+'">Fact: '+fmtRpt(f.facturado)+(descFact?' ℹ️':'')+'</td>'+
+        '<td style="padding:4px 8px;text-align:right;color:#137333;white-space:nowrap" title="'+titleCob+'">Cob: '+fmtRpt(f.cobrado)+(descCob?' ℹ️':'')+'</td>'+
         '<td style="padding:4px 8px;text-align:right;font-weight:700;color:#C0391B;white-space:nowrap" title="Lo que todavía falta cobrar">Pend: '+fmtRpt(f.saldo)+'</td>'+
       '</tr>';
     });
@@ -5145,6 +5207,11 @@ async function renderReporte(){
   html+='<div class="rpt-kpi navy"><p class="rpt-kpi-label">Clientes</p><p class="rpt-kpi-val">'+d.clientes+'</p><p class="rpt-kpi-note">'+(d.total>0?(d.total/Math.max(1,d.clientes)).toFixed(1)+' ped/cliente':'—')+'</p></div>';
   html+='<div class="rpt-kpi amber"><p class="rpt-kpi-label">Ticket promedio</p><p class="rpt-kpi-val amber">'+(ticketProm>0?fmtRpt(ticketProm):'—')+'</p><p class="rpt-kpi-note">por pedido</p></div>';
   html+='</div>';
+  if(d.cobradoFueraDeRango>1){
+    html+='<div style="background:#FFFBEA;border:1px solid #F5E1A4;border-radius:8px;padding:10px 14px;margin:-6px 0 16px;font-size:11px;color:#5C4A00">'+
+      '⚠️ '+fmtRpt(d.cobradoFueraDeRango)+' de lo "Cobrado" corresponde a pedidos registrados fuera de este período (su venta ya se contó en otro rango) — no es un cobro extra, es una diferencia de calendario entre venta y cobro.'+
+    '</div>';
+  }
   if(mostrarMeses){
     html+='<div class="rpt-sec">Desglose mensual del per&iacute;odo</div><div class="rpt-concentrado" style="margin-bottom:20px">';
     html+='<table class="rpt-mes-tbl"><thead><tr><th>Mes</th><th>Pedidos</th><th>Ventas</th><th>Cobrado</th><th>Cartera</th><th>% Cob.</th></tr></thead><tbody>';
@@ -8041,6 +8108,7 @@ function renderContab() {
   if (!pedidos.length) {
     tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">No hay pedidos que mostrar</td></tr>';
     ctRenderTotalesFiltrados(pedidos, filtMes);
+    ctRenderNotasAclaraciones(pedidos, filtMes);
     return;
   }
 
@@ -8106,6 +8174,7 @@ function renderContab() {
   }).join('');
 
   ctRenderTotalesFiltrados(pedidos, filtMes);
+  ctRenderNotasAclaraciones(pedidos, filtMes);
 }
 
 // ── Fila de totales de la tabla ───────────────────
@@ -8180,6 +8249,68 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
       '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumSaldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(sumSaldo)+'</td>' +
       '<td></td><td></td><td></td>' +
     '</tr>';
+}
+
+// ── Aclaraciones automáticas ──────────────────────
+// Un pedido entra a la tabla si tiene AL MENOS una factura con fecha_factura
+// en el mes seleccionado (ver filtro arriba) — pero puede arrastrar OTRAS
+// facturas/abonos de meses distintos, que el renglón sí muestra (histórico
+// completo) pero el KPI/pie de tabla de arriba NO cuenta (solo cuenta lo de
+// ESTE mes). Caso real que expuso esto: GALLEGOS, sep 2026 — mitad
+// facturada/cobrada en agosto, mitad en septiembre. Esto se calcula solo,
+// comparando fechas — nadie tiene que escribir ninguna nota a mano. Solo
+// aplica cuando hay un mes explícito seleccionado (filtMes); sin mes
+// seleccionado no hay una ventana de tiempo con la que comparar.
+function ctRenderNotasAclaraciones(pedidos, filtMes) {
+  const wrap = document.getElementById('ctNotasWrap');
+  const body = document.getElementById('ctNotasBody');
+  if (!wrap || !body) return;
+  if (!filtMes) { wrap.style.display = 'none'; body.innerHTML = ''; return; }
+
+  const [y, m] = filtMes.split('-');
+  const anioSel = parseInt(y), mesSel = parseInt(m) - 1;
+  const mesesTxt = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const labelMesSel = mesesTxt[mesSel] + ' ' + anioSel;
+
+  const items = [];
+  pedidos.forEach(o => {
+    const folio = o.folio || o.id;
+    let sumFactFuera = 0, sumCobFuera = 0;
+    const mesesFuera = new Set();
+
+    ctFacturasDePedido(folio).forEach(f => {
+      if (!f.fecha_factura) return;
+      const d = new Date(f.fecha_factura);
+      if (isNaN(d)) return;
+      if (d.getMonth() === mesSel && d.getFullYear() === anioSel) return;
+      sumFactFuera += parseFloat(f.monto_sin_iva) || 0;
+      mesesFuera.add(mesesTxt[d.getMonth()] + ' ' + d.getFullYear());
+    });
+    ctAbonosDePedido(folio).forEach(a => {
+      if (!a.fecha_abono) return;
+      const d = new Date(a.fecha_abono);
+      if (isNaN(d)) return;
+      if (d.getMonth() === mesSel && d.getFullYear() === anioSel) return;
+      sumCobFuera += parseFloat(a.monto) || 0;
+      mesesFuera.add(mesesTxt[d.getMonth()] + ' ' + d.getFullYear());
+    });
+
+    if (sumFactFuera > 0.01 || sumCobFuera > 0.01) {
+      const partes = [];
+      if (sumFactFuera > 0.01) partes.push(ctFmt(sumFactFuera) + ' sin IVA facturado');
+      if (sumCobFuera > 0.01) partes.push(ctFmt(sumCobFuera) + ' cobrado');
+      const labelFuera = mesesFuera.size === 1 ? [...mesesFuera][0] : 'otros meses';
+      items.push(
+        '<div style="margin-bottom:8px"><strong style="color:var(--navy)">' + folio + ' — ' + (o.client||'—') + '</strong><br>' +
+        partes.join(' y ') + ' en ' + labelFuera + ' — no ' + (partes.length > 1 ? 'están incluidos' : 'está incluido') +
+        ' en los KPI de ' + labelMesSel + ' de arriba.</div>'
+      );
+    }
+  });
+
+  if (!items.length) { wrap.style.display = 'none'; body.innerHTML = ''; return; }
+  wrap.style.display = '';
+  body.innerHTML = items.join('');
 }
 
 // ── Filtro de meses ───────────────────────────────
@@ -8974,7 +9105,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-01-1352';
+const APP_VERSION = '2026-09-02-1200';
 
 let _versionCheckTimer = null;
 
