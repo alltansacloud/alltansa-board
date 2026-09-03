@@ -145,16 +145,11 @@ input:disabled,select:disabled,textarea:disabled{background:#F8F9FC;color:var(--
   <div class="login-card">
     <div class="login-logo"><img src="logo.png" alt="ALLTANSA"></div>
     <p class="login-sub">Módulo de Mantenimiento</p>
-    <div class="fg" style="margin-bottom:12px"><label>Tu nombre</label><input id="lName" type="text" placeholder="Ej. Carlos Mendoza"></div>
     <div class="fg" style="margin-bottom:12px">
-      <label>Área</label>
-      <select id="lArea">
-        <option value="">Seleccionar...</option>
-        <option>Dirección</option>
-        <option>Mantenimiento</option>
-      </select>
+      <label>Correo electrónico</label>
+      <input id="lEmail" type="email" placeholder="tu@alltansa.com" autocomplete="username">
     </div>
-    <div class="fg" style="margin-bottom:20px"><label>Contraseña</label><input id="lPass" type="password" placeholder="••••••••"></div>
+    <div class="fg" style="margin-bottom:20px"><label>Contraseña</label><input id="lPass" type="password" placeholder="••••••••" autocomplete="current-password"></div>
     <button id="lBtn" onclick="doLogin()" style="width:100%;padding:11px;background:var(--red);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Entrar</button>
     <div id="lErr" style="color:red;font-size:12px;margin-top:8px;text-align:center"></div>
   </div>
@@ -388,7 +383,6 @@ const AREAS_EQUIPO = ['Corte','Rolado','Ensamble','Soldadura','Sandblast','Trans
 // ESTADO
 // ===================================================
 let CU = null;
-let PASSWORDS = {};
 let equipos = [];
 let mantenimientos = [];
 let filtroAreaActual = 'Todos';
@@ -401,6 +395,7 @@ let bitacoraEquipoId = null;
 // ===================================================
 async function apiCall(params){
   const p = Object.assign({_tk:'segurid@d-ALLTANSA'}, params);
+  if(CU && CU.token) p._tok = CU.token;
   const qs = Object.entries(p)
     .map(([k,v])=>k+'='+encodeURIComponent(typeof v==='object'?JSON.stringify(v):v))
     .join('&');
@@ -412,6 +407,7 @@ async function apiCall(params){
 async function apiPost(params){
   const body = new URLSearchParams();
   body.append('_tk','segurid@d-ALLTANSA');
+  if(CU && CU.token) body.append('_tok', CU.token);
   Object.entries(params).forEach(([k,v])=>body.append(k, typeof v==='object'?JSON.stringify(v):String(v)));
   const r = await fetch(API, {method:'POST', body});
   const tx = await r.text();
@@ -504,37 +500,55 @@ function nextMantId(){
 
 // ===================================================
 // LOGIN
+// Antes: getPasswords traía la contraseña de "Dirección"/"Mantenimiento" al
+// navegador para compararla ahí mismo, sin hash, sin expiración de sesión
+// (hallazgo de seguridad, sep 2026). Ahora: login real contra el mismo
+// servidor que index.html/cotizaciones.html/maquila.html, sesión compartida
+// (localStorage) — si ya iniciaste en el Board principal, este módulo te
+// reconoce solo. Este módulo sigue siendo exclusivo de Dirección y
+// Mantenimiento: si el servidor autentica a alguien de otra área, se le
+// niega la entrada aquí igual que antes (antes ni siquiera aparecía como
+// opción en el selector).
 // ===================================================
-async function loadPasswords(){
-  try{
-    const r = await apiCall({action:'getPasswords'});
-    if(r && r.passwords) PASSWORDS = r.passwords;
-  }catch(e){}
+const SESSION_HOURS = 168; // 7 días — debe coincidir con SESION_DURACION_MS del servidor
+function sessionValida(u){
+  return !!(u && u.loginAt && u.token && (Date.now()-u.loginAt) < SESSION_HOURS*3600*1000);
 }
 
 async function doLogin(){
-  const name = document.getElementById('lName').value.trim();
-  const area = document.getElementById('lArea').value;
-  const pass = document.getElementById('lPass').value;
-  const err  = document.getElementById('lErr');
+  const email = document.getElementById('lEmail').value.trim();
+  const pass  = document.getElementById('lPass').value;
+  const err   = document.getElementById('lErr');
   err.textContent='';
-  if(!name){err.textContent='Escribe tu nombre.';return;}
-  if(!area){err.textContent='Selecciona un área.';return;}
-  if(!pass){err.textContent='Escribe la contraseña.';return;}
-  if(Object.keys(PASSWORDS).length===0) await loadPasswords();
-  if(PASSWORDS[area] && pass !== PASSWORDS[area]){err.textContent='Contraseña incorrecta.';return;}
-  CU = {name, area};
-  try{localStorage.setItem('alltansa_mant_user', JSON.stringify(CU));}catch(e){}
+  if(!email){err.textContent='Ingresa tu correo.';return;}
+  if(!pass){err.textContent='Ingresa tu contraseña.';return;}
+  const btn = document.getElementById('lBtn'); btn.disabled = true;
+  let r;
+  try{
+    r = await apiPost({action:'login', email, password:pass});
+  }catch(e){
+    err.textContent='No se pudo conectar. Intenta de nuevo.';
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  if(!r || !r.ok){ err.textContent = (r&&r.error) || 'Correo o contraseña incorrectos.'; return; }
+  if(!['Dirección','Mantenimiento'].includes(r.area)){
+    err.textContent = 'Tu área no tiene acceso a este módulo.';
+    return;
+  }
+  CU = {name:r.nombre, area:r.area, email:r.email, token:r.token, loginAt:Date.now()};
+  try{localStorage.setItem('alltansa_user', JSON.stringify(CU));}catch(e){}
   document.getElementById('lw').style.display='none';
   document.getElementById('app').style.display='block';
-  document.getElementById('topbarUser').textContent=name+' · '+area;
+  document.getElementById('topbarUser').textContent=CU.name+' · '+CU.area;
   document.getElementById('btnNuevoEquipo').style.display=canEditEquipos()?'inline-flex':'none';
   await loadAll();
 }
 
 function doLogout(){
   CU=null; equipos=[]; mantenimientos=[];
-  try{localStorage.removeItem('alltansa_mant_user');}catch(e){}
+  try{localStorage.removeItem('alltansa_user');}catch(e){}
   document.getElementById('app').style.display='none';
   document.getElementById('lw').style.display='flex';
 }
@@ -1076,14 +1090,15 @@ function renderBtnNuevoMant(){
 // ===================================================
 // INIT
 // ===================================================
-loadPasswords();
 
-// Restaurar sesión
+// Restaurar sesión — misma llave compartida que index.html/cotizaciones.html/
+// maquila.html; valida expiración (7 días) y que el área siga siendo una de
+// las permitidas en este módulo específico.
 try{
-  const sv=localStorage.getItem('alltansa_mant_user');
+  const sv=localStorage.getItem('alltansa_user');
   if(sv){
     const u=JSON.parse(sv);
-    if(u&&u.name&&u.area&&['Dirección','Mantenimiento'].includes(u.area)){
+    if(sessionValida(u) && ['Dirección','Mantenimiento'].includes(u.area)){
       CU=u;
       document.getElementById('lw').style.display='none';
       document.getElementById('app').style.display='block';

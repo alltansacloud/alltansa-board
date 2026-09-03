@@ -507,27 +507,13 @@ textarea{resize:vertical;min-height:58px}
   <div class="login-card">
     <div class="login-logo"><img src="logo.png" alt="ALLTANSA"></div>
     <p class="login-sub">Board de seguimiento de pedidos</p>
-    <div class="fg" style="margin-bottom:12px"><label>Tu nombre</label><input id="lName" type="text" placeholder="Ej. Carlos Mendoza"></div>
     <div class="fg" style="margin-bottom:12px">
-      <label>Área</label>
-      <select id="lArea">
-        <option value="">Seleccionar...</option>
-        <option>Ventas / Embarques</option>
-        <option>Dirección</option>
-        <option>Contabilidad</option>
-        <option>Ingeniería de ventas</option>
-        <option>Producción</option>
-        <option>Compras</option>
-        <option>Calidad</option>
-      </select>
-    </div>
-    <div class="fg" style="margin-bottom:12px">
-      <label>Contraseña</label>
-      <input id="lPass" type="password" placeholder="••••••••">
+      <label>Correo electrónico</label>
+      <input id="lEmail" type="email" placeholder="tu@alltansa.com" autocomplete="username">
     </div>
     <div class="fg" style="margin-bottom:20px">
-      <label>Correo electrónico <span style="color:var(--muted);font-weight:400">(para notificaciones)</span></label>
-      <input id="lEmail" type="email" placeholder="tu@correo.com">
+      <label>Contraseña</label>
+      <input id="lPass" type="password" placeholder="••••••••" autocomplete="current-password">
     </div>
     <button id="lBtn" style="width:100%;padding:11px;background:var(--red);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Entrar</button>
     <div id="lErr" style="color:red;font-size:12px;margin-top:8px;text-align:center"></div>
@@ -1878,7 +1864,11 @@ const API_TOKEN='segurid@d-ALLTANSA';
 // para diagnóstico y se regresa un mensaje limpio y en español.
 function parseApiTxt(tx){
   try{
-    return JSON.parse(tx);
+    const data=JSON.parse(tx);
+    if(data&&data.error&&/sesión inválida|expirada/i.test(data.error)){
+      manejarSesionExpirada();
+    }
+    return data;
   }catch(e){
     console.error('Respuesta no-JSON de Google (posible tropiezo de Drive/Apps Script):', tx);
     return{error:'No se pudo conectar con Google (Drive/Sheets tuvo un tropiezo momentáneo). Intenta de nuevo en unos segundos.'};
@@ -1887,6 +1877,7 @@ function parseApiTxt(tx){
 
 async function apiCall(p){
   const params={...p,_tk:API_TOKEN};
+  if(CU&&CU.token)params._tok=CU.token;
   const qs=Object.entries(params).map(([k,v])=>k+'='+encodeURIComponent(typeof v==='object'?JSON.stringify(v):v)).join('&');
   const r=await fetch(API+'?'+qs);const tx=await r.text();
   return parseApiTxt(tx);
@@ -1894,6 +1885,7 @@ async function apiCall(p){
 async function apiPost(params){
   const body=new URLSearchParams();
   body.append('_tk',API_TOKEN);
+  if(CU&&CU.token)body.append('_tok',CU.token);
   Object.entries(params).forEach(([k,v])=>body.append(k,typeof v==='object'?JSON.stringify(v):String(v)));
   const r=await fetch(API,{method:'POST',body});
   const tx=await r.text();
@@ -1908,6 +1900,7 @@ async function apiSave(order){
   body.append('action','save');
   body.append('data',JSON.stringify(o));
   body.append('_tk',API_TOKEN);
+  if(CU&&CU.token)body.append('_tok',CU.token);
   const r=await fetch(API,{method:'POST',body});
   const tx=await r.text();
   return parseApiTxt(tx);
@@ -1916,6 +1909,7 @@ async function apiDel(id){
   invalidarCache();
   const body=new URLSearchParams();
   body.append('_tk',API_TOKEN);
+  if(CU&&CU.token)body.append('_tok',CU.token);
   body.append('action','delete');
   body.append('id',id);
   const r=await fetch(API,{method:'POST',body});
@@ -7547,10 +7541,11 @@ async function sha256(str){
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-// ===== SEGURIDAD: EXPIRACIÓN DE SESIÓN (160 horas) =====
-const SESSION_HOURS=160;
+// ===== SEGURIDAD: EXPIRACIÓN DE SESIÓN (168 horas = 7 días, decisión de
+// Alex sep 2026 — debe coincidir con SESION_DURACION_MS del servidor) =====
+const SESSION_HOURS=168;
 function sessionValida(u){
-  if(!u||!u.loginAt)return false;
+  if(!u||!u.loginAt||!u.token)return false;
   return(Date.now()-u.loginAt)<SESSION_HOURS*3600*1000;
 }
 
@@ -7561,49 +7556,50 @@ function doLogout(){
   ['aw','pw','cw','sw','hw'].forEach(id=>document.getElementById(id).classList.add('hidden'));
 }
 
-// ===== LOGIN =====
-// Contraseñas por área (se validan contra hoja Usuarios del Sheet)
-let PASSWORDS = {};
-async function loadPasswords(){
-  try{
-    const r = await apiCall({action:'getPasswords'});
-    if(r && r.passwords) PASSWORDS = r.passwords;
-  }catch(e){ console.warn('No se pudieron cargar contraseñas del Sheet:', e); }
+// Se dispara cuando el SERVIDOR (no el reloj del navegador) dice que la
+// sesión ya no es válida — token vencido, revocado, o inventado. Ver el
+// gancho en parseApiTxt más abajo. window._sesionExpiradaMostrada evita
+// mostrar el aviso más de una vez si varias llamadas fallan casi juntas.
+function manejarSesionExpirada(){
+  if(window._sesionExpiradaMostrada)return;
+  window._sesionExpiradaMostrada=true;
+  doLogout();
+  try{showAlert('Tu sesión expiró. Vuelve a iniciar sesión.','⚠️');}catch(e){}
 }
 
+// ===== LOGIN =====
+// Antes esto comparaba contra una libreta de contraseñas que el servidor le
+// mandaba entera al navegador (hallazgo de seguridad, sep 2026). Ahora el
+// navegador solo manda correo+contraseña y el SERVIDOR decide — nombre y
+// área ya no los escribe quien inicia sesión, los regresa el servidor según
+// lo que encontró en la hoja Usuarios.
 document.getElementById('lBtn').addEventListener('click', async function(){
-  const name=document.getElementById('lName').value.trim();
-  const area=document.getElementById('lArea').value;
-  const pass=document.getElementById('lPass').value;
   const email=document.getElementById('lEmail').value.trim();
+  const pass=document.getElementById('lPass').value;
   const err=document.getElementById('lErr');
-  if(!name){err.textContent='Ingresa tu nombre.';return;}
-  if(!area){err.textContent='Selecciona un área.';return;}
+  const btn=document.getElementById('lBtn');
+  if(!email){err.textContent='Ingresa tu correo.';return;}
   if(!pass){err.textContent='Ingresa la contraseña.';return;}
-  // Si PASSWORDS aún está vacío, intentar cargar de nuevo
-  if(Object.keys(PASSWORDS).length === 0){
-    err.textContent='Cargando contraseñas...';
-    await loadPasswords();
+  err.textContent='Verificando...';
+  btn.disabled=true;
+  let r;
+  try{
+    r=await apiPost({action:'login',email,password:pass});
+  }catch(e){
+    err.textContent='No se pudo conectar. Intenta de nuevo.';
+    btn.disabled=false;
+    return;
   }
-  if(PASSWORDS[area]){
-    const storedPass=PASSWORDS[area];
-    // Soporte para contraseñas hasheadas (64 chars hex) y texto plano (migración)
-    let match=false;
-    if(storedPass.length===64&&/^[0-9a-f]+$/.test(storedPass)){
-      // Contraseña hasheada — comparar hash
-      const hashed=await sha256(pass);
-      match=(hashed===storedPass);
-    } else {
-      // Contraseña en texto plano (aún no migrada)
-      match=(pass===storedPass);
-    }
-    if(!match){err.textContent='Contraseña incorrecta.';return;}
+  btn.disabled=false;
+  if(!r||!r.ok){
+    err.textContent=(r&&r.error)||'No se pudo iniciar sesión.';
+    return;
   }
   err.textContent='';
-  CU={name,area,email,loginAt:Date.now()};
+  CU={name:r.nombre,area:r.area,email:r.email,token:r.token,loginAt:Date.now()};
   try{localStorage.setItem('alltansa_user',JSON.stringify(CU));}catch(e){}
   document.getElementById('lw').classList.add('hidden');
-  const view=getInitialView(area);
+  const view=getInitialView(CU.area);
   if(view==='prod'){showProd();loadAll();}
   else if(view==='cal'){showCal();loadAll();}
   else if(view==='comp'){showComp();loadAll();}
@@ -7613,9 +7609,6 @@ document.getElementById('lBtn').addEventListener('click', async function(){
   iniciarAutoRefresh();
   iniciarChequeoVersion();
 });
-
-// ===== INICIO — cargar contraseñas del Sheet =====
-loadPasswords();
 
 // Chequeo de versión: se ejecuta de inmediato al cargar la página, SIN depender
 // de que el login o auto-login termine sin errores más abajo. Antes solo se
@@ -7635,8 +7628,6 @@ try{
     const u=JSON.parse(sv);
     if(u&&u.name&&u.area&&sessionValida(u)){
       CU=u;
-      document.getElementById('lName').value=u.name;
-      document.getElementById('lArea').value=u.area;
       if(u.email)document.getElementById('lEmail').value=u.email;
       document.getElementById('lw').classList.add('hidden');
       const view=getInitialView(u.area);
@@ -9115,7 +9106,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-02-1530';
+const APP_VERSION = '2026-09-03-1800';
 
 let _versionCheckTimer = null;
 

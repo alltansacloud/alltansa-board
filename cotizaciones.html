@@ -400,17 +400,11 @@
   <div class="login-box">
     <img id="loginLogo" src="logo.png" alt="ALLTANSA" onerror="this.style.display='none'"/>
     <h2>Seguimiento de Cotizaciones</h2>
-    <p>Ingresa con tu área y contraseña</p>
-    <select id="loginArea">
-      <option value="">-- Selecciona tu área --</option>
-      <option value="Ventas/Embarques">Ventas / Embarques</option>
-      <option value="Ingeniería de ventas">Ingeniería de ventas</option>
-      <option value="Dirección">Dirección</option>
-      <option value="Contabilidad">Contabilidad</option>
-    </select>
+    <p>Ingresa con tu correo y contraseña</p>
+    <input type="email" id="loginEmail" placeholder="tu@alltansa.com" autocomplete="username"/>
     <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password"/>
     <button class="btn-login" id="btnLogin">Entrar</button>
-    <div class="login-err" id="loginErr">Área o contraseña incorrectos.</div>
+    <div class="login-err" id="loginErr">Correo o contraseña incorrectos.</div>
   </div>
 </div>
 
@@ -854,8 +848,8 @@
 const API = 'https://script.google.com/macros/s/AKfycbxFGplnK4-63imhYKIjfDsrlblmp1d-FU1BPzdA0LtImKaRjdEqYal32CBrVmJ4GGE3uw/exec';
 const API_TOKEN = 'segurid@d-ALLTANSA';
 
-const ROLES_PERMITIDOS = ['Ventas/Embarques','Ingeniería de ventas','Dirección','Contabilidad'];
-const ROLES_EDICION    = ['Ventas/Embarques','Ingeniería de ventas','Dirección'];
+const ROLES_PERMITIDOS = ['Ventas / Embarques','Ingeniería de ventas','Dirección','Contabilidad'];
+const ROLES_EDICION    = ['Ventas / Embarques','Ingeniería de ventas','Dirección'];
 const ROLES_SOLO_VER   = ['Contabilidad'];
 
 const ESTADOS = ['Nueva','En estimación','Estimación OK','Enviada','En negociación','Colocada','Cancelada','Perdida','Sin respuesta'];
@@ -943,39 +937,72 @@ function getMonthLabel(yyyymm) {
 
 /* ═══════════════════════════════════════════
    AUTH
+   Antes: getPasswords traía TODAS las contraseñas al navegador para
+   compararlas aquí mismo (hallazgo de seguridad, sep 2026), sin guardar
+   sesión — pedía volver a entrar en cada carga de página. Ahora: login real
+   contra el servidor (mismo endpoint que index.html) y la sesión se guarda
+   en localStorage bajo la MISMA llave que usa index.html — si ya iniciaste
+   sesión ahí, este módulo te reconoce solo, sin pedir contraseña otra vez.
 ═══════════════════════════════════════════ */
+const SESSION_HOURS = 168; // 7 días — debe coincidir con SESION_DURACION_MS del servidor
+function sessionValida(u) {
+  return !!(u && u.loginAt && u.token && (Date.now() - u.loginAt) < SESSION_HOURS * 3600 * 1000);
+}
+
 async function initLogin() {
   document.getElementById('loginPass').addEventListener('keydown', e => {
     if (e.key === 'Enter') attemptLogin();
   });
   document.getElementById('btnLogin').addEventListener('click', attemptLogin);
+
+  // Auto-login: reutiliza la sesión si ya iniciaste desde el Board principal
+  // (o desde este mismo módulo antes) y todavía no vence.
+  try {
+    const sv = localStorage.getItem('alltansa_user');
+    if (sv) {
+      const u = JSON.parse(sv);
+      if (sessionValida(u)) {
+        currentUser = u;
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appScreen').style.display = 'block';
+        document.getElementById('topbarUser').textContent = u.name || u.area;
+        applyRoleUI();
+        loadData();
+        loadClientes();
+        loadPrecios();
+        iniciarChequeoVersion();
+      } else {
+        localStorage.removeItem('alltansa_user');
+      }
+    }
+  } catch (e) { try { localStorage.removeItem('alltansa_user'); } catch (x) {} }
 }
 
 async function attemptLogin() {
-  const area = document.getElementById('loginArea').value;
-  const pass = document.getElementById('loginPass').value.trim();
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
   const errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
 
-  if (!area) { errEl.textContent = 'Selecciona tu área.'; errEl.style.display = 'block'; return; }
-  if (!ROLES_PERMITIDOS.includes(area)) { errEl.textContent = 'Área sin acceso a este módulo.'; errEl.style.display = 'block'; return; }
+  if (!email) { errEl.textContent = 'Ingresa tu correo.'; errEl.style.display = 'block'; return; }
+  if (!pass)  { errEl.textContent = 'Ingresa tu contraseña.'; errEl.style.display = 'block'; return; }
 
   setLoading(true);
   try {
-    const r = await fetch(`${API}?action=getPasswords&_tk=${API_TOKEN}`);
+    const body = new URLSearchParams();
+    body.append('action', 'login');
+    body.append('email', email);
+    body.append('password', pass);
+    body.append('_tk', API_TOKEN);
+    const r = await fetch(API, { method: 'POST', body });
     const d = await r.json();
     setLoading(false);
-    if (!d.passwords) { errEl.textContent = 'Error al conectar. Intenta de nuevo.'; errEl.style.display = 'block'; return; }
-    // Tolerante a espacios/mayúsculas accidentales en la hoja "Usuarios":
-    // busca el área comparando de forma normalizada, no exacta.
-    const norm = s => String(s || '').trim().toLowerCase();
-    const areaKey = Object.keys(d.passwords).find(k => norm(k) === norm(area));
-    const pwd = areaKey ? String(d.passwords[areaKey]).trim() : undefined;
-    if (!pwd || pwd !== pass) { errEl.textContent = 'Área o contraseña incorrectos.'; errEl.style.display = 'block'; return; }
-    currentUser = { area, name: area };
+    if (!d || !d.ok) { errEl.textContent = (d && d.error) || 'Correo o contraseña incorrectos.'; errEl.style.display = 'block'; return; }
+    currentUser = { area: d.area, name: d.nombre, email: d.email, token: d.token, loginAt: Date.now() };
+    try { localStorage.setItem('alltansa_user', JSON.stringify(currentUser)); } catch (e) {}
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appScreen').style.display = 'block';
-    document.getElementById('topbarUser').textContent = area;
+    document.getElementById('topbarUser').textContent = currentUser.name || currentUser.area;
     applyRoleUI();
     loadData();
     loadClientes();
@@ -993,10 +1020,11 @@ function logout() {
   allCots = [];
   allClientes = [];
   listaPrecios = [];
+  try { localStorage.removeItem('alltansa_user'); } catch (e) {}
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('loginPass').value = '';
-  document.getElementById('loginArea').value = '';
+  document.getElementById('loginEmail').value = '';
 }
 
 function applyRoleUI() {
@@ -1013,7 +1041,7 @@ function applyRoleUI() {
 async function loadData() {
   setLoading(true);
   try {
-    const r = await fetch(`${API}?action=getCotizaciones&_tk=${API_TOKEN}`);
+    const r = await fetch(`${API}?action=getCotizaciones&_tk=${API_TOKEN}&_tok=${encodeURIComponent(currentUser?.token||'')}`);
     const d = await r.json();
     allCots = d.cotizaciones || [];
     setLoading(false);
@@ -1034,6 +1062,7 @@ async function apiCotSave(cotizacion) {
   body.append('action', 'saveCotizacion');
   body.append('data', JSON.stringify(cotizacion));
   body.append('_tk', API_TOKEN);
+  body.append('_tok', currentUser?.token||'');
   const r = await fetch(API, { method: 'POST', body });
   const tx = await r.text();
   try { return JSON.parse(tx); } catch(e) { return { error: tx }; }
@@ -2295,6 +2324,7 @@ async function guardarCotizacionCore(esGeneracionPdf = false) {
     fd.append('action', 'saveCotizacion');
     fd.append('data', JSON.stringify(cot));
     fd.append('_tk', API_TOKEN);
+    fd.append('_tok', currentUser?.token||'');
 
     // Tiempo máximo de espera: 10s. Si se cae la señal, el fetch puede
     // quedarse "colgado" sin avisar nada — con esto falla rápido y claro
@@ -2407,7 +2437,7 @@ function updateTabBadges() {
 async function loadClientes() {
   setLoading(true);
   try {
-    const r = await fetch(`${API}?action=getClientes&_tk=${API_TOKEN}`);
+    const r = await fetch(`${API}?action=getClientes&_tk=${API_TOKEN}&_tok=${encodeURIComponent(currentUser?.token||'')}`);
     const d = await r.json();
     allClientes = d.clientes || [];
     setLoading(false);
@@ -2427,6 +2457,7 @@ async function apiClienteSave(cliente) {
   body.append('action', 'saveCliente');
   body.append('data', JSON.stringify(cliente));
   body.append('_tk', API_TOKEN);
+  body.append('_tok', currentUser?.token||'');
   const r = await fetch(API, { method: 'POST', body });
   const tx = await r.text();
   try { return JSON.parse(tx); } catch(e) { return { error: tx }; }
@@ -2671,7 +2702,7 @@ async function loadPrecios() {
   const bodyEl = document.getElementById('preciosBodyCot');
   if (bodyEl) bodyEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-style:italic">Cargando...</div>';
   try {
-    const r = await fetch(`${API}?action=getPrecios&_tk=${API_TOKEN}`);
+    const r = await fetch(`${API}?action=getPrecios&_tk=${API_TOKEN}&_tok=${encodeURIComponent(currentUser?.token||'')}`);
     const d = await r.json();
     listaPrecios = d.items || [];
     updateTabBadges();
@@ -3576,6 +3607,7 @@ async function generarCotizacionExpress() {
     fd.append('action', 'saveCotizacion');
     fd.append('data', JSON.stringify(cot));
     fd.append('_tk', API_TOKEN);
+    fd.append('_tok', currentUser?.token||'');
     const res  = await fetch(API, { method: 'POST', body: fd });
     const json = await res.json();
     if (json.error || !json.ok) throw new Error(json.error || 'Error al guardar');
@@ -3653,7 +3685,7 @@ async function descargarResumenPDF(id) {
 
   let movimientos = [];
   try {
-    const r = await fetch(`${API}?action=getLogCotizacion&folio=${encodeURIComponent(cot.folio||'')}&_tk=${API_TOKEN}`);
+    const r = await fetch(`${API}?action=getLogCotizacion&folio=${encodeURIComponent(cot.folio||'')}&_tk=${API_TOKEN}&_tok=${encodeURIComponent(currentUser?.token||'')}`);
     const d = await r.json();
     movimientos = d.movimientos || [];
   } catch(e) { /* si falla el log, seguimos solo con la bitácora */ }
@@ -3919,7 +3951,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-08-31-1437';
+const APP_VERSION = '2026-09-03-1800';
 
 let _versionCheckTimer = null;
 

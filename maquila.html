@@ -43,7 +43,7 @@
   .topbar-user { font-size: 12px; opacity: .75; }
 
   /* ── MAIN LAYOUT ── */
-  #appScreen { display: block; }
+  #appScreen { display: none; }
   .main-wrap { max-width: 100%; margin: 0 auto; padding: 18px 20px 40px; }
 
   /* ── SUMMARY ── */
@@ -193,6 +193,19 @@
 <!-- TOAST -->
 <div id="toast"></div>
 
+<!-- LOGIN -->
+<div id="loginScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--light)">
+  <div style="background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:32px 28px;width:320px;text-align:center">
+    <img src="logo.png" alt="ALLTANSA" style="height:40px;margin-bottom:12px" onerror="this.style.display='none'"/>
+    <h2 style="font-size:16px;margin-bottom:4px;color:var(--navy)">Control de Maquila</h2>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:18px">Ingresa con tu correo y contraseña</p>
+    <input type="email" id="loginEmail" placeholder="tu@alltansa.com" autocomplete="username" style="width:100%;padding:9px 10px;margin-bottom:10px;border:1px solid var(--border);border-radius:7px;font-size:13px;box-sizing:border-box"/>
+    <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password" style="width:100%;padding:9px 10px;margin-bottom:14px;border:1px solid var(--border);border-radius:7px;font-size:13px;box-sizing:border-box"/>
+    <button id="btnLogin" class="btn btn-primary" style="width:100%">Entrar</button>
+    <div id="loginErr" style="color:var(--red);font-size:12px;margin-top:10px;display:none"></div>
+  </div>
+</div>
+
 <!-- APP -->
 <div id="appScreen">
 
@@ -203,9 +216,10 @@
       <span class="topbar-title">Control de Maquila</span>
     </div>
     <div class="topbar-right">
-      <span class="topbar-user">Dirección</span>
+      <span class="topbar-user" id="topbarUser">—</span>
       <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/','_self')">Board Principal</button>
       <button class="btn-topbar" onclick="window.open('https://alltansacloud.github.io/alltansa-board/cotizaciones.html','_blank')">Cotizaciones</button>
+      <button class="btn-topbar danger" onclick="doLogout()">Salir</button>
     </div>
   </div>
 
@@ -295,14 +309,81 @@ let foliosCache = [];   // [{folio, cliente}] — vía getFoliosLigero, no carga
 let verCompletados = false; // toggle de la vista: pendientes (default) vs completados/archivados
 
 /* ═══════════════════════════════════════════
-   INICIO — sin login: el acceso se controla entrando desde el botón
-   "🏭 Maquila" dentro de Compras en el Board, que ya requiere sesión ahí.
+   AUTH — antes esta página NO pedía login: asumía que solo se llegaba aquí
+   dando clic desde Compras dentro del Board principal (que sí exigía
+   sesión). Pero la URL es pública igual que cualquier otra página estática
+   — cualquiera con el link entraba directo como "Dirección" sin ninguna
+   contraseña (hallazgo de seguridad, sep 2026). Ahora exige login real
+   contra el mismo servidor, con sesión compartida (localStorage) con
+   index.html/cotizaciones.html — si ya iniciaste sesión en el Board
+   principal, este módulo te reconoce solo.
 ═══════════════════════════════════════════ */
+const SESSION_HOURS = 168; // 7 días — debe coincidir con SESION_DURACION_MS del servidor
+function sessionValida(u) {
+  return !!(u && u.loginAt && u.token && (Date.now() - u.loginAt) < SESSION_HOURS * 3600 * 1000);
+}
+
 function iniciarApp() {
-  currentUser = { area: 'Dirección' };
+  try {
+    const sv = localStorage.getItem('alltansa_user');
+    if (sv) {
+      const u = JSON.parse(sv);
+      if (sessionValida(u)) { currentUser = u; mostrarApp(); return; }
+      localStorage.removeItem('alltansa_user');
+    }
+  } catch (e) { try { localStorage.removeItem('alltansa_user'); } catch (x) {} }
+  mostrarLogin();
+}
+
+function mostrarApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('topbarUser').textContent = currentUser.name || currentUser.area || '—';
   loadFoliosLigero();
   loadMaquila();
   iniciarChequeoVersion();
+}
+
+function mostrarLogin() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appScreen').style.display = 'none';
+}
+
+function doLogout() {
+  currentUser = null;
+  allMaquila = [];
+  try { localStorage.removeItem('alltansa_user'); } catch (e) {}
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginEmail').value = '';
+  mostrarLogin();
+}
+
+async function attemptLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  const err   = document.getElementById('loginErr');
+  err.style.display = 'none';
+  if (!email) { err.textContent = 'Ingresa tu correo.'; err.style.display = 'block'; return; }
+  if (!pass)  { err.textContent = 'Ingresa tu contraseña.'; err.style.display = 'block'; return; }
+  setLoading(true);
+  try {
+    const body = new URLSearchParams();
+    body.append('action', 'login');
+    body.append('email', email);
+    body.append('password', pass);
+    body.append('_tk', API_TOKEN);
+    const r = await fetch(API, { method: 'POST', body });
+    const d = await r.json();
+    setLoading(false);
+    if (!d || !d.ok) { err.textContent = (d && d.error) || 'Correo o contraseña incorrectos.'; err.style.display = 'block'; return; }
+    currentUser = { area: d.area, name: d.nombre, email: d.email, token: d.token, loginAt: Date.now() };
+    try { localStorage.setItem('alltansa_user', JSON.stringify(currentUser)); } catch (e) {}
+    mostrarApp();
+  } catch (e) {
+    setLoading(false);
+    err.textContent = 'Error de conexión. Verifica tu red.';
+    err.style.display = 'block';
+  }
 }
 
 /* ═══════════════════════════════════════════
@@ -310,7 +391,7 @@ function iniciarApp() {
 ═══════════════════════════════════════════ */
 async function loadFoliosLigero() {
   try {
-    const r = await fetch(`${API}?action=getFoliosLigero&_tk=${API_TOKEN}`);
+    const r = await fetch(`${API}?action=getFoliosLigero&_tk=${API_TOKEN}&_tok=${encodeURIComponent(currentUser?.token||'')}`);
     const d = await r.json();
     foliosCache = d.folios || [];
     const dl = document.getElementById('foliosDatalist');
@@ -325,7 +406,7 @@ async function loadFoliosLigero() {
 async function loadMaquila() {
   setLoading(true);
   try {
-    const r = await fetch(`${API}?action=getMaquila&_tk=${API_TOKEN}`);
+    const r = await fetch(`${API}?action=getMaquila&_tk=${API_TOKEN}&_tok=${encodeURIComponent(currentUser?.token||'')}`);
     const d = await r.json();
     allMaquila = d.items || [];
     setLoading(false);
@@ -345,6 +426,7 @@ async function guardarCampo(id, field, value) {
     body.append('action', 'saveMaquila');
     body.append('data', JSON.stringify({ id, [field]: value }));
     body.append('_tk', API_TOKEN);
+    body.append('_tok', currentUser?.token||'');
     await fetch(API, { method: 'POST', body });
   } catch(e) {
     showToast('No se pudo guardar el cambio. Intenta de nuevo.', 'error');
@@ -355,7 +437,7 @@ async function agregarEnvio() {
   const nuevo = {
     folio_pedido: '', servicio: 'Rolado', proveedor: PROVEEDOR_DEFAULT['Rolado'], oc_alltansa: '',
     fecha_envio: '', fecha_recogido: '', factura: '', fecha_pago: '',
-    modificado_por: 'Dirección'
+    modificado_por: (currentUser && (currentUser.name || currentUser.area)) || 'Sistema'
   };
   setLoading(true);
   try {
@@ -363,6 +445,7 @@ async function agregarEnvio() {
     body.append('action', 'saveMaquila');
     body.append('data', JSON.stringify(nuevo));
     body.append('_tk', API_TOKEN);
+    body.append('_tok', currentUser?.token||'');
     const r = await fetch(API, { method: 'POST', body });
     const d = await r.json();
     setLoading(false);
@@ -380,7 +463,7 @@ async function eliminarEnvio(id) {
   if (!confirm('¿Eliminar este registro de maquila? No se puede deshacer.')) return;
   setLoading(true);
   try {
-    const r = await fetch(`${API}?action=deleteMaquila&id=${encodeURIComponent(id)}&_tk=${API_TOKEN}`);
+    const r = await fetch(`${API}?action=deleteMaquila&id=${encodeURIComponent(id)}&_tk=${API_TOKEN}&_tok=${encodeURIComponent(currentUser?.token||'')}`);
     const d = await r.json();
     setLoading(false);
     if (d.error) { showToast(d.error, 'error'); return; }
@@ -414,6 +497,7 @@ async function cerrarEnvio(id) {
     body.append('action', 'saveMaquila');
     body.append('data', JSON.stringify({ id, cerrado: true, fecha_cierre: fecha }));
     body.append('_tk', API_TOKEN);
+    body.append('_tok', currentUser?.token||'');
     await fetch(API, { method: 'POST', body });
     item.cerrado = true;
     item.fecha_cierre = fecha;
@@ -436,6 +520,7 @@ async function reabrirEnvio(id) {
     body.append('action', 'saveMaquila');
     body.append('data', JSON.stringify({ id, cerrado: false, fecha_cierre: '' }));
     body.append('_tk', API_TOKEN);
+    body.append('_tok', currentUser?.token||'');
     await fetch(API, { method: 'POST', body });
     item.cerrado = false;
     item.fecha_cierre = '';
@@ -722,7 +807,7 @@ function setLoading(v) {
    CHEQUEO DE VERSIÓN — version.json comparte llaves con
    index.html / cotizaciones.html; este módulo usa la llave "maquila".
 ═══════════════════════════════════════════ */
-const APP_VERSION = '2026-08-18-1230';
+const APP_VERSION = '2026-09-03-1800';
 let _versionCheckTimer = null;
 
 function _mostrarTagVersion(){
@@ -766,6 +851,8 @@ function iniciarChequeoVersion(){
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btnLogin').addEventListener('click', attemptLogin);
+  document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
   iniciarApp();
 });
 </script>
