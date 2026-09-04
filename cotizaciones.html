@@ -1374,9 +1374,9 @@ function openModal(id) {
     try { partidas = typeof cot.partidas === 'string' ? JSON.parse(cot.partidas) : cot.partidas; } catch(e) {}
   } else if (cot?.tipo) {
     partidas = [{ tipo: cot.tipo||'Aire', cantidad: Number(cot.cantidad)||1,
-                  capacidad: cot.capacidad||'', descripcion: cot.descripcion||'', precio_unit: Number(cot.monto)||0 }];
+                  capacidad: cot.capacidad||'', descripcion: cot.descripcion||'', precio_unit: Number(cot.monto)||0, descuento_pct: 0 }];
   }
-  if (!partidas.length) partidas = [{ tipo:'Aire', cantidad:1, capacidad:'', descripcion:'', precio_unit:0 }];
+  if (!partidas.length) partidas = [{ tipo:'Aire', cantidad:1, capacidad:'', descripcion:'', precio_unit:0, descuento_pct:0 }];
   currentPartidas = partidas;
 
   let serviciosExtra = [];
@@ -1619,6 +1619,7 @@ function openModal(id) {
         <th style="width:55px">Cant.</th>
         <th>Descripcion</th>
         <th style="width:105px">Precio unit.</th>
+        <th style="width:75px">Desc. %</th>
         <th style="width:90px;text-align:right">Subtotal</th>
         ${!readOnly ? '<th style="width:32px"></th>' : ''}
       </tr></thead>
@@ -1626,7 +1627,7 @@ function openModal(id) {
       <tfoot>
         <tr class="partidas-total-row">
           <td colspan="2" style="text-align:right;color:var(--muted);font-size:12px">TOTAL</td>
-          <td colspan="${!readOnly?3:2}" style="text-align:right;font-size:15px;color:var(--navy)" id="partidasTotal">$0.00</td>
+          <td colspan="${!readOnly?4:3}" style="text-align:right;font-size:15px;color:var(--navy)" id="partidasTotal">$0.00</td>
         </tr>
       </tfoot>
     </table>
@@ -1640,6 +1641,7 @@ function openModal(id) {
         <th>Descripción</th>
         <th style="width:55px">Cant.</th>
         <th style="width:105px">Precio unit.</th>
+        <th style="width:75px">Desc. %</th>
         <th style="width:90px;text-align:right">Subtotal</th>
         ${!readOnly ? '<th style="width:32px"></th>' : ''}
       </tr></thead>
@@ -1647,7 +1649,7 @@ function openModal(id) {
       <tfoot>
         <tr class="partidas-total-row">
           <td colspan="3" style="text-align:right;color:var(--muted);font-size:12px">SUBTOTAL ACCESORIOS/FLETE</td>
-          <td colspan="${!readOnly?2:1}" style="text-align:right;font-size:14px;color:var(--navy)" id="serviciosTotal">$0.00</td>
+          <td colspan="${!readOnly?3:2}" style="text-align:right;font-size:14px;color:var(--navy)" id="serviciosTotal">$0.00</td>
         </tr>
       </tfoot>
     </table>
@@ -1930,11 +1932,24 @@ function deleteConn(idx) {
 }
 
 /* ── Partidas ─────────────────────────────────────────────── */
+// Fuente única para calcular montos de una partida (bruto/descuento/neto).
+// La usan tanto el modal de edición como el PDF, para que el número que ve
+// Alex al editar sea exactamente el mismo que ve el cliente en el PDF.
+function partidaMontos(p) {
+  const cant    = Number(p.cantidad) || 1;
+  const punit   = Number(p.precio_unit) || 0;
+  const gross   = cant * punit;
+  const discPct = Math.min(100, Math.max(0, Number(p.descuento_pct) || 0));
+  const discAmt = gross * (discPct / 100);
+  const net     = gross - discAmt;
+  return { cant, punit, gross, discPct, discAmt, net };
+}
+
 function initPartidas(readOnly) {
   renderPartidas(readOnly);
   const btn = document.getElementById('btnAddPartida');
   if (btn) btn.onclick = () => {
-    currentPartidas.push({ tipo:'', cantidad:1, capacidad:'', descripcion:'', precio_unit:0 });
+    currentPartidas.push({ tipo:'', cantidad:1, capacidad:'', descripcion:'', precio_unit:0, descuento_pct:0 });
     renderPartidas(readOnly);
   };
 }
@@ -1942,7 +1957,9 @@ function initPartidas(readOnly) {
 function renderPartidas(readOnly) {
   const tbody = document.getElementById('partidasTbody');
   if (!tbody) return;
-  tbody.innerHTML = currentPartidas.map((p, i) => `
+  tbody.innerHTML = currentPartidas.map((p, i) => {
+    const m = partidaMontos(p);
+    return `
     <tr data-idx="${i}">
       <td><input type="number" min="1" value="${p.cantidad||1}" ${readOnly?'disabled':''}
         onchange="updatePartida(${i},'cantidad',this.value)" style="width:48px"/></td>
@@ -1951,21 +1968,25 @@ function renderPartidas(readOnly) {
         style="width:100%;min-height:100px;resize:vertical;font-family:inherit;font-size:13px;padding:6px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box">${escHtml(p.descripcion||'')}</textarea></td>
       <td><input type="number" min="0" step="0.01" value="${p.precio_unit||0}" ${readOnly?'disabled':''}
         onchange="updatePartida(${i},'precio_unit',this.value)" style="width:95px"/></td>
-      <td class="subtotal-cell">${fmtMonto((p.cantidad||1)*(p.precio_unit||0), currentMoneda())}</td>
+      <td><input type="number" min="0" max="100" step="0.1" value="${m.discPct||0}" ${readOnly?'disabled':''}
+        onchange="updatePartida(${i},'descuento_pct',this.value)" style="width:60px" title="% de descuento sobre esta partida"/></td>
+      <td class="subtotal-cell">${fmtMonto(m.net, currentMoneda())}</td>
       ${!readOnly ? `<td><button class="btn-del-partida" onclick="deletePartida(${i})">✕</button></td>` : ''}
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   recalcTotal();
 }
 
 function updatePartida(idx, field, value) {
   if (!currentPartidas[idx]) return;
-  if (field === 'cantidad' || field === 'precio_unit') value = Number(value) || 0;
+  if (field === 'cantidad' || field === 'precio_unit' || field === 'descuento_pct') value = Number(value) || 0;
+  if (field === 'descuento_pct') value = Math.min(100, Math.max(0, value));
   currentPartidas[idx][field] = value;
   const row = document.querySelector(`#partidasTbody tr[data-idx="${idx}"]`);
   if (row) {
-    const p = currentPartidas[idx];
+    const m = partidaMontos(currentPartidas[idx]);
     const cell = row.querySelector('.subtotal-cell');
-    if (cell) cell.textContent = fmtMonto((p.cantidad||1)*(p.precio_unit||0), currentMoneda());
+    if (cell) cell.textContent = fmtMonto(m.net, currentMoneda());
   }
   recalcTotal();
 }
@@ -1978,8 +1999,8 @@ function deletePartida(idx) {
 
 function recalcTotal() {
   const moneda = currentMoneda();
-  const totalPartidas  = currentPartidas.reduce((s, p) => s + (p.cantidad||1)*(p.precio_unit||0), 0);
-  const totalServicios = currentServiciosExtra.reduce((s, x) => s + (x.cantidad||1)*(x.precio_unit||0), 0);
+  const totalPartidas  = currentPartidas.reduce((s, p) => s + partidaMontos(p).net, 0);
+  const totalServicios = currentServiciosExtra.reduce((s, x) => s + partidaMontos(x).net, 0);
   const el = document.getElementById('partidasTotal');
   if (el) el.textContent = fmtMonto(totalPartidas, moneda);
   const elServ = document.getElementById('serviciosTotal');
@@ -1995,7 +2016,7 @@ function initServiciosExtra(readOnly) {
   renderServiciosExtra(readOnly);
   const btn = document.getElementById('btnAddServicio');
   if (btn) btn.onclick = () => {
-    currentServiciosExtra.push({ categoria:'Accesorios', descripcion:'', cantidad:1, precio_unit:0 });
+    currentServiciosExtra.push({ categoria:'Accesorios', descripcion:'', cantidad:1, precio_unit:0, descuento_pct:0 });
     renderServiciosExtra(readOnly);
   };
 }
@@ -2003,7 +2024,9 @@ function initServiciosExtra(readOnly) {
 function renderServiciosExtra(readOnly) {
   const tbody = document.getElementById('serviciosTbody');
   if (!tbody) return;
-  tbody.innerHTML = currentServiciosExtra.map((s, i) => `
+  tbody.innerHTML = currentServiciosExtra.map((s, i) => {
+    const m = partidaMontos(s);
+    return `
     <tr data-idx="${i}">
       <td><select ${readOnly?'disabled':''} onchange="updateServicioExtra(${i},'categoria',this.value)">
         ${CATEGORIAS_SERVICIO_EXTRA.map(c => `<option value="${c}" ${s.categoria===c?'selected':''}>${c}</option>`).join('')}
@@ -2014,21 +2037,25 @@ function renderServiciosExtra(readOnly) {
         onchange="updateServicioExtra(${i},'cantidad',this.value)" style="width:48px"/></td>
       <td><input type="number" min="0" step="0.01" value="${s.precio_unit||0}" ${readOnly?'disabled':''}
         onchange="updateServicioExtra(${i},'precio_unit',this.value)" style="width:95px"/></td>
-      <td class="subtotal-cell-servicio">${fmtMonto((s.cantidad||1)*(s.precio_unit||0), currentMoneda())}</td>
+      <td><input type="number" min="0" max="100" step="0.1" value="${m.discPct||0}" ${readOnly?'disabled':''}
+        onchange="updateServicioExtra(${i},'descuento_pct',this.value)" style="width:60px" title="% de descuento sobre este cargo"/></td>
+      <td class="subtotal-cell-servicio">${fmtMonto(m.net, currentMoneda())}</td>
       ${!readOnly ? `<td><button class="btn-del-partida" onclick="deleteServicioExtra(${i})">✕</button></td>` : ''}
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   recalcTotal();
 }
 
 function updateServicioExtra(idx, field, value) {
   if (!currentServiciosExtra[idx]) return;
-  if (field === 'cantidad' || field === 'precio_unit') value = Number(value) || 0;
+  if (field === 'cantidad' || field === 'precio_unit' || field === 'descuento_pct') value = Number(value) || 0;
+  if (field === 'descuento_pct') value = Math.min(100, Math.max(0, value));
   currentServiciosExtra[idx][field] = value;
   const row = document.querySelector(`#serviciosTbody tr[data-idx="${idx}"]`);
   if (row) {
-    const s = currentServiciosExtra[idx];
+    const m = partidaMontos(currentServiciosExtra[idx]);
     const cell = row.querySelector('.subtotal-cell-servicio');
-    if (cell) cell.textContent = fmtMonto((s.cantidad||1)*(s.precio_unit||0), currentMoneda());
+    if (cell) cell.textContent = fmtMonto(m.net, currentMoneda());
   }
   recalcTotal();
 }
@@ -3136,12 +3163,20 @@ function generarPDFCotizacion(datos) {
     { content: 'SUBTOTAL', styles: { halign: 'right' } }
   ]];
   let total = 0;
-  const rows = partidas.map((p, i) => {
-    const cant = Number(p.cantidad) || 1;
-    const punit = Number(p.precio_unit) || 0;
-    const subtotal = cant * punit;
-    total += subtotal;
-    return [construirDescripcionPartida(p, i), String(cant), fmtSinDivisa(punit), fmtSinDivisa(subtotal)];
+  const rows = [];
+  partidas.forEach((p, i) => {
+    const m = partidaMontos(p);
+    total += m.net;
+    rows.push([construirDescripcionPartida(p, i), String(m.cant), fmtSinDivisa(m.punit), fmtSinDivisa(m.gross)]);
+    // Descuento por partida — renglón aparte justo debajo (precio original ya
+    // quedó arriba en SUBTOTAL, aquí el % y el importe). La columna SUBTOTAL
+    // se lee de corrido de arriba a abajo, así que el footer ya cierra neto.
+    if (m.discPct > 0) {
+      rows.push([
+        { content: `DESCUENTO (${m.discPct}%)`, colSpan: 3, styles: { halign: 'right', fontStyle: 'italic', fontSize: 8, textColor: [192,57,27] } },
+        { content: '-' + fmtSinDivisa(m.discAmt), styles: { halign: 'right', fontStyle: 'italic', fontSize: 8, textColor: [192,57,27] } }
+      ]);
+    }
   });
   const serviciosExtra = (datos.serviciosExtra || []).filter(s => s.descripcion || (s.cantidad||1)*(s.precio_unit||0) > 0);
   const hayServiciosExtra = serviciosExtra.length > 0;
@@ -3153,13 +3188,17 @@ function generarPDFCotizacion(datos) {
   let totalServiciosExtra = 0;
   if (hayServiciosExtra) {
     serviciosExtra.forEach((s, idx) => {
-      const cant = Number(s.cantidad) || 1;
-      const punit = Number(s.precio_unit) || 0;
-      const subtotal = cant * punit;
-      totalServiciosExtra += subtotal;
+      const m = partidaMontos(s);
+      totalServiciosExtra += m.net;
       const cat = ['Flete','Accesorios','Otro'].includes(s.categoria) ? s.categoria : 'Otro';
       const numero = partidas.length + idx + 1;
-      rows.push([`${numero}- ${cat.toUpperCase()} — ${(s.descripcion||'').toUpperCase()}`, String(cant), fmtSinDivisa(punit), fmtSinDivisa(subtotal)]);
+      rows.push([`${numero}- ${cat.toUpperCase()} — ${(s.descripcion||'').toUpperCase()}`, String(m.cant), fmtSinDivisa(m.punit), fmtSinDivisa(m.gross)]);
+      if (m.discPct > 0) {
+        rows.push([
+          { content: `DESCUENTO (${m.discPct}%)`, colSpan: 3, styles: { halign: 'right', fontStyle: 'italic', fontSize: 8, textColor: [192,57,27] } },
+          { content: '-' + fmtSinDivisa(m.discAmt), styles: { halign: 'right', fontStyle: 'italic', fontSize: 8, textColor: [192,57,27] } }
+        ]);
+      }
     });
   }
 
@@ -3951,7 +3990,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-09-03-1800';
+const APP_VERSION = '2026-09-04-1530';
 
 let _versionCheckTimer = null;
 
