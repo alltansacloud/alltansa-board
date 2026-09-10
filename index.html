@@ -910,6 +910,7 @@ textarea{resize:vertical;min-height:58px}
     <div id="pEntradaParcialWrap" style="display:none"></div>
     <div id="pLockMsg" class="hidden"></div>
     <div id="pLS" class="hidden"><div class="sec-t">Historial</div><div id="pLL"></div></div>
+    <div id="pAudLog" class="hidden"><div class="sec-t">Auditoría — quién y cuándo</div><div id="pAudLL"></div></div>
     <div class="mfooter">
       <button class="tbtn-white" onclick="closePModal()">Cancelar</button>
       <button class="tbtn tbtn-red" id="pSaveBtn" onclick="saveProd()">Guardar</button>
@@ -1608,8 +1609,9 @@ let tSt={},tPSt={};
 // ===== PERMISOS =====
 // Admin: Ventas, Dirección, Contabilidad, Ingeniería de ventas
 function canAdmin(){return CU&&['Ventas / Embarques','Dirección','Contabilidad','Ingeniería de ventas'].includes(CU.area);}
-// Producción: solo Producción, Dirección (Calidad ya tiene su propio módulo)
-function canProdView(){return CU&&['Producción','Dirección'].includes(CU.area);}
+// Producción: Producción, Dirección y Calidad (Calidad apoya llenado de etapas
+// desde sep 2026 — mantiene además su propio módulo vía canCal()).
+function canProdView(){return CU&&['Producción','Dirección','Calidad'].includes(CU.area);}
 // Compras: solo Compras y Dirección
 function canCompView(){return CU&&['Compras','Dirección'].includes(CU.area);}
 // Almacén: solo Ventas/Embarques y Dirección
@@ -1619,7 +1621,10 @@ function isDir(){return CU&&CU.area==='Dirección';}
 function canCal(){return CU&&(CU.area==='Calidad'||CU.area==='Dirección');}
 function canContab(){return CU&&(CU.area==='Contabilidad'||CU.area==='Dirección');}
 function canEmbarque(){return CU&&(CU.area==='Ventas / Embarques'||CU.area==='Dirección');}
-function canProdStages(){return CU&&CU.area==='Producción';}
+// Mismas acciones que Producción (marcar etapas, confirmar planos, entradas
+// parciales a almacén) — Calidad apoya el llenado desde sep 2026. Todo cambio
+// queda auditado en LogProduccion (apps_script.js) con la sesión validada.
+function canProdStages(){return CU&&(CU.area==='Producción'||CU.area==='Calidad');}
 function canEditCond(){return CU&&(CU.area==='Ventas / Embarques'||CU.area==='Dirección');}
 function canEditAnticipo(){return CU&&(CU.area==='Contabilidad'||CU.area==='Dirección');}
 // Solo Ventas/Embarques y Dirección pueden crear pedidos nuevos
@@ -5774,11 +5779,31 @@ function renderPMobile(fl){
   }).join('');
 }
 
+// Historial de auditoría persistente (hoja LogProduccion, sep 2026) — a
+// diferencia de o.log (se trunca a 30 entradas), esta hoja conserva todo el
+// historial. Se carga aparte, sin bloquear la apertura del modal.
+async function cargarLogProduccion(folio){
+  const box=document.getElementById('pAudLog'),list=document.getElementById('pAudLL');
+  if(!box||!list||!folio)return;
+  try{
+    const r=await apiCall({action:'getLogProduccion',folio:folio});
+    const mov=(r&&r.movimientos)||[];
+    if(!mov.length){box.classList.add('hidden');return;}
+    list.innerHTML=mov.slice().reverse().map(m=>{
+      const ts=m.timestamp?new Date(m.timestamp).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      return '<div class="log-e"><span class="log-by">'+(m.usuario||'')+'</span> — '+(m.detalle||m.accion||'')+'<span class="log-ts">'+ts+'</span></div>';
+    }).join('');
+    box.classList.remove('hidden');
+  }catch(e){box.classList.add('hidden');}
+}
+
 // ===== MODAL PRODUCCIÓN =====
 function openPEdit(id){
   const o=orders.find(x=>x.id===id);if(!o)return;
   pEditId=id;tPSt=JSON.parse(JSON.stringify(o.prod_stages||initPS()));
   loadContab().catch(()=>{});
+  document.getElementById('pAudLog').classList.add('hidden');
+  cargarLogProduccion(o.folio);
   // Migración: si o.calidad ya era 'liberado' y lib_calidad no estaba marcado, sincronizar
   if(!tPSt.lib_calidad){tPSt.lib_calidad={done:false,date:null,by:null};}
   if((o.calidad||'pendiente')==='liberado'&&!(tPSt.lib_calidad&&tPSt.lib_calidad.done)){
@@ -5959,7 +5984,7 @@ function calBadgeTabla(o){
 
 function togPS(k){
   const o=orders.find(x=>x.id===pEditId)||{};
-  if(!canProdStages()&&!isDir()){showAlert('Solo Producción o Dirección pueden modificar las etapas de producción.','🚫');return;}
+  if(!canProdStages()&&!isDir()){showAlert('Solo Producción, Calidad o Dirección pueden modificar las etapas de producción.','🚫');return;}
 
   // Bloqueo progresivo
   const idx=PROD_STAGES.findIndex(st=>st.key===k);
@@ -6717,7 +6742,7 @@ function toggleCompCard(id){
 // ===== CONFIRMACIÓN RECEPCIÓN PLANOS (Producción) =====
 async function confirmarPlanos(oid){
   const o=orders.find(x=>x.id===oid);if(!o)return;
-  if(!canProdStages()&&!isDir()){showAlert('Solo Producción o Dirección pueden confirmar la recepción de planos.','🚫');return;}
+  if(!canProdStages()&&!isDir()){showAlert('Solo Producción, Calidad o Dirección pueden confirmar la recepción de planos.','🚫');return;}
   if(!await showConfirm('¿Confirmar recepción de planos para '+o.folio+'?\nEsto habilitará las etapas de producción.'))return;
   const by=CU.name+' ('+CU.area+')';
   const n=new Date();
@@ -9106,7 +9131,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-03-1800';
+const APP_VERSION = '2026-09-10-1345';
 
 let _versionCheckTimer = null;
 
