@@ -3006,6 +3006,7 @@ async function descargarCotizacionPDF() {
   const nuevaRevision = currentPdfNotas.revision || 0;
   generarPDFCotizacion({
     folio: guardado.folio || '', cliente, contacto, moneda,
+    fecha: document.getElementById('mFecha')?.value || '',
     notasComerciales: notas, notasTecnicas, incluye, noIncluye, notasEsp,
     revision: nuevaRevision,
     partidas: currentPartidas,
@@ -3072,13 +3073,25 @@ function generarPDFCotizacion(datos) {
   const notasTecnicas = datos.notasTecnicas || null;
   const moneda   = datos.moneda || 'MXN';
   const revision = parseInt(datos.revision) || 0;
-
   // Categorías presentes en esta cotización → Material/Norma dinámico (una línea por categoría).
   const categoriasPresentes = [...new Set(partidas.map(p => p.tipo).filter(t => t === 'Aire' || t === 'Diesel'))];
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
   const W = 215.9, M = 14;
-  const mesAnio = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+  // Fecha que se imprime en el PDF: SIEMPRE la fecha de la cotización
+  // (datos.fecha, formato "YYYY-MM-DD" — la misma que se ve en la columna
+  // "Fecha" del board y en "Fecha de recepción" del modal), nunca el día en
+  // que se genera o re-descarga el archivo. Antes usaba new Date() a secas,
+  // así que re-descargar el PDF de una cotización vieja desde el folio le
+  // ponía la fecha de HOY en vez de la fecha real con la que se mandó al
+  // cliente. Se parsean los componentes a mano (no `new Date(datos.fecha)`)
+  // para no arriesgar un corrimiento de día por zona horaria.
+  let fechaPdf = new Date();
+  const fPart = (datos.fecha || '').split('-').map(Number);
+  if (fPart.length === 3 && fPart[0] && fPart[1] && fPart[2]) {
+    fechaPdf = new Date(fPart[0], fPart[1] - 1, fPart[2]);
+  }
+  const mesAnio = fechaPdf.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
 
   // ── Logo + título ──────────────────────────────────────────────
   try {
@@ -3656,6 +3669,7 @@ async function generarCotizacionExpress() {
       folio: json.folio || '',
       cliente, contacto,
       condPago: '',
+      fecha: cot.fecha,
       incluye: notasIncluye, noIncluye: notasNoIncluye,
       notasComerciales, notasTecnicas, notasEsp: notasEspeciales,
       revision: 0,
@@ -3706,6 +3720,7 @@ function descargarUltimoPDF(id) {
     cliente: c.cliente || '',
     contacto: c.contacto || '',
     moneda: c.moneda || 'MXN',
+    fecha: c.fecha || '',
     notasComerciales,
     notasTecnicas,
     incluye: c.pdf_incluye || '',
@@ -3990,7 +4005,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-09-04-1530';
+const APP_VERSION = '2026-09-11-1427';
 
 let _versionCheckTimer = null;
 
