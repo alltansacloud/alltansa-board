@@ -418,6 +418,7 @@ textarea{resize:vertical;min-height:58px}
   .rpt-ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px;padding:12px 16px;background:#F4F5F7;border-radius:10px}
   .rpt-ctrl label{font-size:12px;color:#6B7A99;font-weight:600}
   .rpt-ctrl input[type=date]{font-size:12px;padding:5px 10px;border:1px solid #DDE1EA;border-radius:7px;background:#fff;color:#1B2A4A;font-family:inherit}
+  .rpt-ctrl select{font-size:12px;padding:5px 10px;border:1px solid #DDE1EA;border-radius:7px;background:#fff;color:#1B2A4A;font-family:inherit}
   .rpt-ctrl-sep{font-size:12px;color:#9E9E9E}
   .rpt-btn{padding:7px 16px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
   .rpt-btn.primary{background:#1B2A4A;color:#fff}
@@ -475,6 +476,7 @@ textarea{resize:vertical;min-height:58px}
     .rpt-ctrl{flex-direction:column;align-items:stretch;gap:6px;padding:10px 12px}
     .rpt-ctrl label{font-size:11px}
     .rpt-ctrl input[type=date]{width:100%;font-size:12px}
+    .rpt-ctrl select{width:100%;font-size:12px}
     .rpt-ctrl-sep{text-align:center}
     .rpt-btn{width:100%;justify-content:center;padding:8px}
     #rptExportBtns{width:100%;margin-left:0!important;flex-direction:row;gap:6px}
@@ -1468,6 +1470,19 @@ textarea{resize:vertical;min-height:58px}
         <input type="date" id="rptDesde"/>
         <span class="rpt-ctrl-sep">al</span>
         <input type="date" id="rptHasta"/>
+        <label style="margin-left:4px">Agrupar por:</label>
+        <select id="rptAgrupar">
+          <option value="">Resumen general</option>
+          <option value="cliente">Cliente</option>
+          <option value="fluido">Tipo de producto</option>
+          <option value="material">Material</option>
+          <option value="modelo">Modelo (capacidad + material + fluido)</option>
+          <option value="capacidad">Rango de capacidad</option>
+          <option value="condicion">Condición de pago</option>
+          <option value="ciudad">Ciudad destino</option>
+          <option value="cartera">Estatus de cartera</option>
+          <option value="tipoped">Tipo de pedido</option>
+        </select>
         <button class="rpt-btn primary" onclick="renderReporte()">Generar reporte</button>
         <button class="rpt-btn" onclick="abrirCarteraGeneral()" style="background:#A32D2D;color:#fff">📋 Cuentas por Cobrar</button>
         <div style="margin-left:auto;display:flex;gap:8px" id="rptExportBtns" style="display:none">
@@ -4656,6 +4671,76 @@ function fmtPct(v,total){
   return Math.round((v/total)*100)+'%';
 }
 
+// ── "Agrupar por" — Reporte Ejecutivo (sep 2026) ──────────────────────────
+// Config de dimensiones seleccionables por el usuario. Cada entrada define
+// cómo extraer la "key" de agrupación de un pedido. Reutiliza los mismos
+// campos que ya usa el resto de Contabilidad/Reportes (fuente única) — no
+// se inventa ningún dato nuevo.
+function rptBucketCapacidad(litros){
+  const n=parseFloat(litros);
+  if(!n||n<=0)return'Sin especificar';
+  if(n<500)return'< 500 L';
+  if(n<1000)return'500 – 999 L';
+  if(n<2000)return'1,000 – 1,999 L';
+  if(n<5000)return'2,000 – 4,999 L';
+  if(n<10000)return'5,000 – 9,999 L';
+  return'10,000+ L';
+}
+const RPT_ESTATUS_CARTERA_LABELS={
+  sin_facturar:'Sin facturar', liquidado:'Liquidado', parcial:'Parcial',
+  vencido:'Vencido', facturado:'Facturado (pendiente de cobro)'
+};
+const RPT_GRUPOS={
+  cliente:  {label:'Cliente',           fn:o=>o.client},
+  fluido:   {label:'Tipo de producto',  fn:o=>o.fluido},
+  material: {label:'Material',          fn:o=>o.material},
+  // "Modelo" para un pedido a la medida = su combinación de especificación,
+  // ya que no existe un campo "modelo" fijo (eso solo aplica a catálogo de
+  // Inventario/STK). Distinto de "Modelos más vendidos" (más abajo), que
+  // agrupa por el texto libre de o.desc y por eso puede fragmentar el mismo
+  // modelo en varias filas si se redactó distinto cada vez.
+  modelo:   {label:'Modelo (capacidad + material + fluido)', fn:o=>{
+               const cap=o.capacidad_litros?(parseFloat(o.capacidad_litros)+' L'):'S/capacidad';
+               return cap+' · '+(o.material||'S/material')+' · '+(o.fluido||'S/fluido');
+             }},
+  capacidad:{label:'Rango de capacidad', fn:o=>rptBucketCapacidad(o.capacidad_litros)},
+  condicion:{label:'Condición de pago',  fn:o=>o.condicion_pago},
+  ciudad:   {label:'Ciudad destino',     fn:o=>o.ciudad_destino},
+  cartera:  {label:'Estatus de cartera', fn:o=>RPT_ESTATUS_CARTERA_LABELS[ctEstatusCartera(o)]||ctEstatusCartera(o)},
+  tipoped:  {label:'Tipo de pedido',     fn:o=>({accesorios:'Accesorios',flete:'Flete'}[o.tipo]||'Pedido (tanque)')}
+};
+
+// Mismo criterio que calcReporte() usa para "porCliente": ventas=ct(qty,value)
+// del pedido, cobrado=abonos reales cuya fecha_abono cae dentro del rango
+// (nunca el histórico completo del pedido), cartera=ctSaldoCarteraReal — para
+// que esta vista SIEMPRE cuadre con el resto de Contabilidad/Reportes.
+function calcReportePorGrupo(pedidos,desde,hasta,extraerFn){
+  const acc={},folioToKey={};
+  pedidos.forEach(o=>{
+    const key=(extraerFn(o)||'').toString().trim()||'Sin especificar';
+    if(!acc[key])acc[key]={pedidos:0,ventas:0,cobrado:0,cartera:0};
+    acc[key].pedidos++;
+    acc[key].ventas+=ct(o.qty,o.value);
+    acc[key].cartera+=(typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0;
+    folioToKey[o.folio||o.id]=key;
+  });
+  (ctAbonos||[]).forEach(a=>{
+    const folio=a.folio_pedido;
+    if(!folio)return;
+    const key=folioToKey[folio];
+    if(!key)return; // el pedido de este abono no está en el conjunto filtrado (fuera de rango / stk / cancelado)
+    const fa=cleanDate(a.fecha_abono);
+    if(!fa)return;
+    const d=new Date(fa);
+    if(desde&&d<desde)return;
+    if(hasta&&d>hasta)return;
+    acc[key].cobrado+=parseFloat(a.monto)||0;
+  });
+  const filas=Object.entries(acc).map(([k,v])=>Object.assign({grupo:k},v)).sort((a,b)=>b.ventas-a.ventas);
+  const totales=filas.reduce((s,f)=>({pedidos:s.pedidos+f.pedidos,ventas:s.ventas+f.ventas,cobrado:s.cobrado+f.cobrado,cartera:s.cartera+f.cartera}),{pedidos:0,ventas:0,cobrado:0,cartera:0});
+  return{filas,totales};
+}
+
 function calcReporte(pedidos,desde,hasta){
   const total=pedidos.length;
   const ventas=pedidos.reduce(function(s,o){return s+ct(o.qty,o.value);},0); // venta, sin IVA
@@ -5176,6 +5261,7 @@ async function renderReporte(){
   var pedidos=orders.filter(function(o){return o.tipo!=='stk'&&gSt(o)!=='cancelado'&&enRango(o,desde,hasta);});
   var d=calcReporte(pedidos,desde,hasta);
   var porMes=calcPorMes(pedidos,desde,hasta);
+  var grupoSel=document.getElementById('rptAgrupar')?document.getElementById('rptAgrupar').value:'';
   var mostrarMeses=porMes.length>1;
   var ticketProm=d.total>0?d.ventas/d.total:0;
   var pctCob=d.ventas>0?Math.min(100,Math.round((d.cobrado/d.ventas)*100)):0;
@@ -5210,6 +5296,33 @@ async function renderReporte(){
     html+='<div style="background:#FFFBEA;border:1px solid #F5E1A4;border-radius:8px;padding:10px 14px;margin:-6px 0 16px;font-size:11px;color:#5C4A00">'+
       '⚠️ '+fmtRpt(d.cobradoFueraDeRango)+' de lo "Cobrado" corresponde a pedidos registrados fuera de este período (su venta ya se contó en otro rango) — no es un cobro extra, es una diferencia de calendario entre venta y cobro.'+
     '</div>';
+  }
+  // ── "Agrupar por" seleccionado: reemplaza el resto del resumen general
+  // (desglose mensual, producción, modelos por texto libre, STK, almacén,
+  // cobranza) por una sola tabla rankeada de la dimensión elegida. Las
+  // tarjetas KPI de arriba (ventas/cobrado/cartera/pedidos/clientes/ticket)
+  // siempre se quedan, dan el contexto del período completo.
+  if(grupoSel&&RPT_GRUPOS[grupoSel]){
+    var gdef=RPT_GRUPOS[grupoSel];
+    var g=calcReportePorGrupo(pedidos,desde,hasta,gdef.fn);
+    html+='<div class="rpt-sec">'+gdef.label+'</div><div class="rpt-concentrado">';
+    if(!g.filas.length){html+='<p class="rpt-empty">Sin datos en el per&iacute;odo.</p>';}
+    else{
+      html+='<table class="rpt-tbl"><thead><tr><th>'+gdef.label+'</th><th class="r">Pedidos</th><th class="r">Ventas</th><th class="r">Cobrado</th><th class="r">Cartera</th><th class="r">%</th></tr></thead><tbody>';
+      g.filas.forEach(function(f){
+        html+='<tr><td>'+f.grupo+'</td><td class="r">'+f.pedidos+'</td><td class="r">'+fmtRpt(f.ventas)+'</td>';
+        html+='<td class="r" style="color:#3B6D11">'+fmtRpt(f.cobrado)+'</td>';
+        html+='<td class="r" style="color:'+(f.cartera>0?'#A32D2D':'#3B6D11')+'">'+(f.cartera>0?fmtRpt(f.cartera):'—')+'</td>';
+        html+='<td class="r" style="color:#6B7A99">'+fmtPct(f.ventas,d.ventas)+'</td></tr>';
+      });
+      html+='</tbody><tfoot><tr class="total"><td>Total</td><td class="r">'+g.totales.pedidos+'</td><td class="r">'+fmtRpt(g.totales.ventas)+'</td>';
+      html+='<td class="r" style="color:#3B6D11">'+fmtRpt(g.totales.cobrado)+'</td><td class="r" style="color:#A32D2D">'+fmtRpt(g.totales.cartera)+'</td><td class="r">100%</td></tr></tfoot></table>';
+    }
+    html+='</div>';
+    document.getElementById('rptBody').innerHTML='<div id="rptContent">'+html+'</div>';
+    var expBtnsG=document.getElementById('rptExportBtns');
+    if(expBtnsG)expBtnsG.style.display='flex';
+    return;
   }
   if(mostrarMeses){
     html+='<div class="rpt-sec">Desglose mensual del per&iacute;odo</div><div class="rpt-concentrado" style="margin-bottom:20px">';
@@ -9131,7 +9244,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-10-1345';
+const APP_VERSION = '2026-09-11-1403';
 
 let _versionCheckTimer = null;
 
