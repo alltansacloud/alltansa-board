@@ -2631,8 +2631,17 @@ function renderAdmin(){
   document.getElementById('aLB').classList.add('hidden');
   document.getElementById('aC').classList.remove('hidden');
   // Cargar datos de Contabilidad en background para badges de anticipo/finiquito
+  // FIX (sep 2026, caso "Facturado no coincide con Contabilidad"): antes,
+  // al terminar este loadContab() en background, solo se re-renderizaba la
+  // tabla (renderAT()) — nunca los KPIs (renderAS()). Como renderAS() ya se
+  // había pintado arriba con el ctFacturas/ctAbonos que hubiera en memoria
+  // ANTES de este loadContab() (vacío o desactualizado, ej. recién iniciada
+  // la sesión), los KPIs del Board (Facturado/Cobrado/Depositado/Por
+  // facturar/Cartera) podían quedarse mostrando cifras viejas indefinidamente
+  // — hasta que el usuario tocara el filtro Mes/Año (el único que ya volvía
+  // a llamar renderAS()). Ahora también se re-renderiza renderAS() aquí.
   if(typeof loadContab === 'function'){
-    loadContab().then(()=>{ renderAT(); }).catch(()=>{});
+    loadContab().then(()=>{ renderAS(); renderAT(); }).catch(()=>{});
   }
 }
 
@@ -2750,21 +2759,16 @@ function calcDepositadoMes(yymm){
 // pedido, sin importar cuándo se facture). Un pedido puede registrarse en
 // un mes y facturarse -total o parcialmente- en otro. Excluye STK, igual
 // que el resto de estos KPIs.
+// FIX (sep 2026, decisión de Alex): delega a ctFacturadoFiscalMes() — fuente
+// única compartida con Contabilidad. Antes este loop era una copia
+// independiente del de ctRenderKpis; funcionalmente casi idéntico pero con
+// doble mantenimiento. yymm sigue siendo el formato de entrada aquí
+// ("YYMM", ej. "2609") porque así lo producen getMesActual()/getMesPasado();
+// se traduce a año/mes 0-indexado antes de llamar a la fuente única.
 function calcFacturadoMes(yymm){
-  let fact=0;
-  (ctFacturas||[]).forEach(f=>{
-    const folio=f.folio_pedido;
-    if(!folio)return;
-    const o=orders.find(x=>(x.folio||x.id)===folio);
-    if(o&&o.tipo==='stk')return;
-    const df=cleanDate(f.fecha_factura);
-    if(!df)return;
-    const d=new Date(df);
-    const fYYMM=String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0');
-    if(fYYMM!==yymm)return;
-    fact+=parseFloat(f.monto_sin_iva)||0;
-  });
-  return fact;
+  const anio = 2000 + parseInt(yymm.slice(0,2), 10);
+  const mesIndex0 = parseInt(yymm.slice(2,4), 10) - 1;
+  return (typeof ctFacturadoFiscalMes==='function') ? ctFacturadoFiscalMes(anio, mesIndex0) : 0;
 }
 
 function renderAS(){
@@ -7926,6 +7930,34 @@ function ctPorFacturar(o) {
   return Math.max(0, valorPedido - sinIvaFact);
 }
 
+// Facturado fiscal del mes — fuente única de verdad para "cuánto se facturó
+// realmente (SAT) en un mes dado": suma monto_sin_iva de las facturas cuya
+// fecha_factura cae en ese mes/año, sin importar el folio/mes del pedido
+// original (un pedido puede registrarse en un mes y facturarse -total o
+// parcialmente- en otro). Excluye STK.
+// FIX (sep 2026, decisión de Alex — caso "Facturado no coincide entre
+// Administración y Contabilidad"): antes Contabilidad (ctRenderKpis) y
+// Administración (calcFacturadoMes) tenían cada uno su propio loop
+// funcionalmente idéntico pero independiente — mismo cálculo, doble
+// mantenimiento. Ahora ambos llaman a esta misma función, así SIEMPRE
+// muestran el mismo número (el mismo patrón que ya usa ctSaldoCarteraReal
+// para Cartera). anio: año completo (ej. 2026). mesIndex0: mes 0-indexado
+// (0=Ene...11=Dic), igual que Date.getMonth().
+function ctFacturadoFiscalMes(anio, mesIndex0) {
+  let fact = 0;
+  orders.forEach(o => {
+    if (o.tipo === 'stk') return;
+    const folio = o.folio || o.id;
+    ctFacturasDePedido(folio).forEach(f => {
+      const df = f.fecha_factura ? new Date(f.fecha_factura) : null;
+      if (df && df.getMonth() === mesIndex0 && df.getFullYear() === anio) {
+        fact += parseFloat(f.monto_sin_iva) || 0;
+      }
+    });
+  });
+  return fact;
+}
+
 // Aplica los abonos de un pedido a sus facturas en orden FIFO (la más
 // antigua primero, por fecha_factura) — el sistema no liga cada abono a una
 // factura en particular (los abonos son del pedido completo), así que esto
@@ -8071,17 +8103,10 @@ function ctRenderKpis(pedidosParaCartera, filtMes) {
   // no el total del CFDI (monto_total, que incluye IVA). El IVA no es ingreso
   // de la empresa — es un pasivo trasladado al SAT — así que no debe inflar
   // la cifra de ventas del mes. Cobrado sigue con IVA (es efectivo real).
-  let facturadoMes = 0;
-  orders.forEach(o => {
-    if (o.tipo === 'stk') return;
-    const folio = o.folio || o.id;
-    ctFacturasDePedido(folio).forEach(f => {
-      const df = f.fecha_factura ? new Date(f.fecha_factura) : null;
-      if (df && df.getMonth()===mesSel && df.getFullYear()===anioSel) {
-        facturadoMes += parseFloat(f.monto_sin_iva)||0;
-      }
-    });
-  });
+  // FIX (sep 2026, decisión de Alex): cálculo extraído a ctFacturadoFiscalMes()
+  // — fuente única compartida con Administración ("Facturado <mes>" en el
+  // Board), para que ambos SIEMPRE muestren el mismo número fiscal.
+  let facturadoMes = ctFacturadoFiscalMes(anioSel, mesSel);
 
   let cobradoMes = 0;
   ctAbonos.forEach(a => {
@@ -9244,7 +9269,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-11-1403';
+const APP_VERSION = '2026-09-17-1200';
 
 let _versionCheckTimer = null;
 
