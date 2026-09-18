@@ -1923,7 +1923,17 @@ async function apiSave(order){
   if(CU&&CU.token)body.append('_tok',CU.token);
   const r=await fetch(API,{method:'POST',body});
   const tx=await r.text();
-  return parseApiTxt(tx);
+  const res=parseApiTxt(tx);
+  // Antes: si el backend fallaba (ej. excepción en saveOrder), esto devolvía
+  // {error:...} sin lanzar excepción — todos los "try{await apiSave(...)...}"
+  // del archivo asumían éxito, actualizaban orders[] en memoria y mostraban
+  // el toast de "✓" aunque NADA se hubiera escrito en el Sheet. Al refrescar,
+  // loadAll() traía la versión real (sin el cambio) y parecía que "se revertía
+  // solo" (bug detectado sep 2026, caso cancelarPedido). Lanzar aquí activa
+  // los catch(e){showAlert(...)} que YA existen en las ~25 llamadas a
+  // apiSave() sin tener que tocar cada una.
+  if(res&&res.error)throw new Error(res.error);
+  return res;
 }
 async function apiDel(id){
   invalidarCache();
@@ -1934,7 +1944,9 @@ async function apiDel(id){
   body.append('id',id);
   const r=await fetch(API,{method:'POST',body});
   const tx=await r.text();
-  return parseApiTxt(tx);
+  const res=parseApiTxt(tx);
+  if(res&&res.error)throw new Error(res.error); // mismo riesgo que apiSave — ver nota ahí
+  return res;
 }
 async function apiSaveInv(item){return apiCall({action:'saveInv',data:item});}
 async function apiLogMov(mov){return apiCall({action:'logMov',data:mov});}
@@ -9269,7 +9281,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-17-1200';
+const APP_VERSION = '2026-09-18-1800';
 
 let _versionCheckTimer = null;
 
