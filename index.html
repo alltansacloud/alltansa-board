@@ -793,6 +793,40 @@ textarea{resize:vertical;min-height:58px}
       </div>
       <div class="fg" id="fValWrap"><label>Precio unitario (MXN)</label><input id="fVal" type="number" min="0" placeholder="0.00" oninput="updT()"></div>
       <div class="fg" id="fPctWrap"><label>% Anticipo <span style="font-weight:400;color:var(--muted)">(0 = contado contra entrega)</span></label><input id="fPctAntic" type="number" min="0" max="100" value="0" placeholder="0" oninput="updT()"></div>
+      <!-- Pedido combinado: accesorios / flete incluidos en el mismo folio A- (solo pedidos de tanque) -->
+      <div class="fg full" id="fExtrasWrap" style="display:none">
+        <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#FAFBFC">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--acc);margin:0">
+            <input type="checkbox" id="fIncAcc" onchange="toggleExtrasPedido()" style="width:auto;margin:0"> 🔧 Incluye accesorios
+          </label>
+          <div id="fAccWrap" style="display:none;margin-top:8px">
+            <div style="display:grid;grid-template-columns:1fr 160px;gap:8px">
+              <div><label style="font-size:11px">Descripción de los accesorios</label><input id="fAccDesc" type="text" placeholder="Ej. Kit de válvulas, manómetro y conexiones"></div>
+              <div class="fExtraMontoWrap"><label style="font-size:11px">Monto (MXN, antes de IVA)</label><input id="fAccMonto" type="number" min="0" placeholder="0.00" oninput="updT()"></div>
+            </div>
+            <label class="fExtraMontoWrap" style="display:flex;align-items:center;gap:6px;font-size:11px;margin-top:6px;cursor:pointer"><input type="checkbox" id="fAccEnPrecio" onchange="updT()" style="width:auto;margin:0"> Van incluidos en el precio del tanque <span style="color:var(--muted)">(solo desglose interno, no cambia el total)</span></label>
+          </div>
+          <div style="border-top:1px dashed var(--border);margin:10px 0"></div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--fle);margin:0">
+            <input type="checkbox" id="fIncFle" onchange="toggleExtrasPedido()" style="width:auto;margin:0"> 🚚 Incluye flete
+          </label>
+          <div id="fFleWrap" style="display:none;margin-top:8px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 160px;gap:8px">
+              <div><label style="font-size:11px">Ciudad destino</label><input id="fFleCiudad" type="text" placeholder="Ej. Saltillo, Coah."></div>
+              <div><label style="font-size:11px">Descripción del servicio</label><input id="fFleDesc" type="text" placeholder="Ej. Entrega en planta del cliente"></div>
+              <div class="fExtraMontoWrap"><label style="font-size:11px">Monto (MXN, antes de IVA)</label><input id="fFleMonto" type="number" min="0" placeholder="0.00" oninput="updT()"></div>
+            </div>
+            <div class="fExtraMontoWrap" style="font-size:11px;color:var(--fle);margin-top:6px">Se factura como partida propia — lleva retención de IVA del 4%.</div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:8px">Montos globales (no por unidad), antes de IVA; se suman al total del pedido como partidas de la factura. Total con IVA = subtotal × 1.16 − 4% del flete (igual que el CFDI). Accesorios "incluidos en el precio" = solo desglose interno. Los accesorios se compran en el mismo pedido (Compras → Accesorios).</div>
+        </div>
+      </div>
+      <!-- AC-/FLE- independientes: liga opcional (solo referencia) a un pedido de tanque existente -->
+      <div class="fg full" id="fLigadoWrap" style="display:none">
+        <label>Ligado a pedido de tanque <span style="font-weight:400;color:var(--muted)">(opcional — solo referencia, se cobra por separado)</span></label>
+        <input id="fLigado" type="text" list="fLigadoList" placeholder="Ej. A-2610-03" autocomplete="off" onfocus="poblarLigadoList()">
+        <datalist id="fLigadoList"></datalist>
+      </div>
       <div class="fg full" id="fTotalWrap">
         <div class="mdx-resumen">
           <div class="mdx-row"><span>Monto total <span style="font-weight:400;font-style:italic;font-size:11px">(antes de IVA)</span></span><span id="tPrev" style="font-size:16px;font-weight:700;color:var(--navy)">$0</span></div>
@@ -1333,8 +1367,18 @@ textarea{resize:vertical;min-height:58px}
           </select>
         </div>
         <div class="fg"><label>% del pedido</label><input id="ctFPct" type="number" min="1" max="100" placeholder="Ej. 30"></div>
+        <div class="fg" id="ctFConceptoWrap" style="grid-column:1/-1;display:none"><label>¿Qué se está facturando? <span style="font-weight:400;color:var(--muted)">(pedido combinado — solo para reportes por línea, no cambia montos ni IVA)</span></label>
+          <select id="ctFConcepto" onchange="ctCalcIva()">
+            <option value="General">Pedido completo (todo junto)</option>
+            <option value="Tanque">Solo tanque</option>
+            <option value="Accesorios">Solo accesorios</option>
+            <option value="Flete">Solo flete</option>
+          </select>
+        </div>
         <div class="fg"><label>Monto sin IVA ($)</label><input id="ctFMonto" type="number" min="0" placeholder="0.00" oninput="ctCalcIva()"></div>
         <div class="fg"><label>IVA (16%)</label><input id="ctFIva" type="number" readonly style="background:#F8F9FC;color:var(--muted)"></div>
+        <div class="fg" id="ctFRetWrap" style="display:none"><label>Retención IVA 4% (flete)</label><input id="ctFRet" type="number" min="0" step="0.01" placeholder="0.00" oninput="ctCalcTotalFact()"><div id="ctFRetHint" style="font-size:10px;color:var(--muted);margin-top:2px"></div></div>
+        <div class="fg"><label>Total factura</label><input id="ctFTotal" type="text" readonly style="background:#F8F9FC;color:var(--navy);font-weight:700"></div>
         <div class="fg"><label>Días de crédito</label><input id="ctFDias" type="number" min="0" value="0" placeholder="0 = contado" oninput="ctCalcVenc()"></div>
         <div class="fg"><label>Fecha vencimiento</label><input id="ctFVenc" type="date" readonly style="background:#F8F9FC;color:var(--muted)"></div>
 
@@ -1751,6 +1795,114 @@ function daysSince(d){
 
 function fm(v){if(!v&&v!==0)return '—';return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',minimumFractionDigits:0}).format(v);}
 function ct(q,u){return(parseFloat(q)||0)*(parseFloat(u)||0);}
+
+// ===== PEDIDO COMBINADO (tanque + accesorios + flete en un mismo folio A-) =====
+// Un pedido de tanque (folio A-) puede traer accesorios y/o flete con su
+// propio monto (acc_monto / fle_monto — globales, antes de IVA). Cada uno
+// tiene un modo:
+//   • "incluido en el precio" (acc_en_precio / fle_en_precio = '1'): el
+//     monto YA viene dentro de qty×precio; NO cambia el total ni lo que se
+//     factura — solo se DESGLOSA para control interno. (Política oct 2026:
+//     el flete va incluido en el precio y se factura todo junto.)
+//   • "se suma al precio" (flag vacío): venta adicional; se suma al total.
+// ct(qty,value) = precio capturado. totalPedido(o) = valor completo del
+// pedido (= lo que se factura) y es lo que deben usar ventas, cartera
+// estimada, reportes y KPIs. Pedidos sin desglose: total = ct(qty,value).
+// INVARIANTE: ventasPorLinea(o).tanque+accesorios+flete === totalPedido(o).
+function esPedidoTanque(o){return !!o&&o.tipo!=='stk'&&o.tipo!=='accesorios'&&o.tipo!=='flete';}
+function montoAccIncluido(o){return esPedidoTanque(o)?(parseFloat(o.acc_monto)||0):0;}
+function montoFleIncluido(o){return esPedidoTanque(o)?(parseFloat(o.fle_monto)||0):0;}
+function accEnPrecio(o){return String(o&&o.acc_en_precio||'')==='1';}
+function fleEnPrecio(o){return String(o&&o.fle_en_precio||'')==='1';}
+function tieneAccIncluido(o){return esPedidoTanque(o)&&!!((o.acc_desc||'').toString().trim()||montoAccIncluido(o)>0);}
+function tieneFleIncluido(o){return esPedidoTanque(o)&&!!((o.fle_desc||'').toString().trim()||(o.ciudad_destino||'').toString().trim()||montoFleIncluido(o)>0);}
+// Solo lo que SE SUMA al precio capturado (lo incluido en precio no suma)
+function extrasPedido(o){return (accEnPrecio(o)?0:montoAccIncluido(o))+(fleEnPrecio(o)?0:montoFleIncluido(o));}
+// ¿El pedido trae algún desglose (sume o no)?
+function tieneDesglose(o){return montoAccIncluido(o)>0||montoFleIncluido(o)>0;}
+function totalPedido(o){return ct(o.qty,o.value)+extrasPedido(o);}
+// Ventas por línea de producto (antes de IVA). "suelto" = vendido en su
+// propio folio (AC-/FLE-); "incluido" = dentro de un pedido de tanque (A-).
+// La parte "tanque" de un A- = total − accesorios − flete (lo incluido en
+// precio se le descuenta al tanque; lo sumado ya está fuera de ct()).
+function ventasPorLinea(o){
+  const r={tanque:0,accesorios:0,flete:0,acc_suelto:0,acc_incluido:0,fle_suelto:0,fle_incluido:0};
+  if(!o||o.tipo==='stk')return r;
+  if(o.tipo==='accesorios'){r.accesorios=r.acc_suelto=ct(o.qty,o.value);return r;}
+  if(o.tipo==='flete'){r.flete=r.fle_suelto=ct(o.qty,o.value);return r;}
+  const acc=montoAccIncluido(o),fle=montoFleIncluido(o);
+  r.tanque=totalPedido(o)-acc-fle;
+  r.accesorios=r.acc_incluido=acc;
+  r.flete=r.fle_incluido=fle;
+  return r;
+}
+// ===== RETENCIÓN IVA 4% EN FLETES (oct 2026) =====
+// Política: el flete se factura como PARTIDA propia en el mismo CFDI y el
+// sistema de facturación retiene 4% de IVA solo sobre esa partida (aplica a
+// todos los clientes). El total con IVA del pedido debe coincidir al peso
+// con el total del CFDI:  subtotal × 1.16 − flete × 0.04.
+// Fuente única: totalConIvaPedido(o). La usan Admin (badge de anticipo),
+// detalle del pedido y ctSaldoEfectivo (cartera) — antes eran ×1.16 sueltos.
+const RET_IVA_FLETE=0.04;
+function _r2(v){return Math.round((v+Number.EPSILON)*100)/100;}
+// Monto de flete sujeto a retención (antes de IVA). Un flete "incluido en el
+// precio" (solo pedidos capturados en la versión 2026-10-08-2100) va dentro
+// de la partida del tanque → no lleva retención.
+function fleteSujetoRet(o){
+  if(!o||o.tipo==='stk')return 0;
+  if(o.tipo==='flete')return ct(o.qty,o.value);
+  if(o.tipo==='accesorios')return 0;
+  return fleEnPrecio(o)?0:montoFleIncluido(o);
+}
+function retIvaPedido(o){return _r2(fleteSujetoRet(o)*RET_IVA_FLETE);}
+// Total esperado del pedido CON IVA (= total del CFDI). Pedido "sin
+// factura": sin IVA ni retención (lo pactado tal cual — caso OVSA).
+function totalConIvaPedido(o){
+  if(o&&o.sin_factura&&o.sin_factura.done)return ctValorPedido(o);
+  return _r2(ctValorPedido(o)*1.16-retIvaPedido(o));
+}
+
+// Pedido liquidado = mismo criterio que ctVerificarCierreAutomatico: nada
+// pendiente por facturar y saldo efectivo en cero. Se usa para "Cobrado por
+// línea": si el pedido está pagado al 100%, cada línea está cobrada al 100%
+// (exacto, sin prorratear abonos parciales).
+function pedidoLiquidado(o){
+  if(!o||o.tipo==='stk')return false;
+  if(typeof ctPorFacturar!=='function'||typeof ctSaldoEfectivo!=='function')return false;
+  return ctPorFacturar(o)<=0.01&&ctSaldoEfectivo(o)<=0.01;
+}
+// Concepto de una factura para reportes por línea. Si Contabilidad la
+// etiquetó (Tanque/Accesorios/Flete) se respeta; si viene "General" o vacía,
+// se deduce del pedido: AC- → Accesorios, FLE- → Flete, A- sin extras →
+// Tanque, A- con extras → Mixto (no se reparte proporcionalmente a propósito).
+function conceptoFacturaLinea(f,o){
+  const c=(f&&f.concepto||'').toString().trim();
+  if(c&&c!=='General')return c;
+  if(!o)return 'Mixto';
+  if(o.tipo==='accesorios')return 'Accesorios';
+  if(o.tipo==='flete')return 'Flete';
+  return tieneDesglose(o)||tieneAccIncluido(o)||tieneFleIncluido(o)?'Mixto':'Tanque';
+}
+// Badges compactos para tablas/tarjetas: qué incluye el pedido de tanque, o a
+// qué pedido de tanque está ligado un AC-/FLE- independiente.
+function badgesIncluye(o){
+  let h='';
+  if(tieneAccIncluido(o))h+='<span class="badge" title="'+escAttrInc(o.acc_desc||'')+'" style="background:var(--acc-bg);color:var(--acc);font-size:9px;margin:2px 3px 0 0;display:inline-flex;white-space:nowrap">🔧 Incluye accesorios</span>';
+  if(tieneFleIncluido(o))h+='<span class="badge" title="'+escAttrInc(o.fle_desc||'')+'" style="background:var(--fle-bg);color:var(--fle);font-size:9px;margin:2px 3px 0 0;display:inline-flex;white-space:nowrap">🚚 Flete'+(o.ciudad_destino?' a '+escAttrInc(o.ciudad_destino):'')+'</span>';
+  if((o.tipo==='accesorios'||o.tipo==='flete')&&o.pedido_ligado)h+='<span class="badge" style="background:#F1F3F4;color:var(--muted);font-size:9px;margin:2px 3px 0 0;display:inline-flex;white-space:nowrap">🔗 '+escAttrInc(o.pedido_ligado)+'</span>';
+  return h?'<div>'+h+'</div>':'';
+}
+// Línea de desglose de montos (solo cuando el pedido trae desglose)
+function desgloseMontosHtml(o){
+  if(!tieneDesglose(o))return '';
+  const v=ventasPorLinea(o);
+  const p=['Tanque '+fm(v.tanque)];
+  if(v.accesorios>0)p.push('Acc. '+fm(v.accesorios)+(accEnPrecio(o)?'*':''));
+  if(v.flete>0)p.push('Flete '+fm(v.flete)+(fleEnPrecio(o)?'*':''));
+  const nota=(accEnPrecio(o)&&v.accesorios>0)||(fleEnPrecio(o)&&v.flete>0)?' <span title="* incluido en el precio — solo desglose interno">(* en precio)</span>':'';
+  return '<div style="font-size:10px;color:var(--muted);white-space:nowrap">'+p.join(' + ')+nota+'</div>';
+}
+function escAttrInc(v){return String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function intentarCierreAutomatico(nSt,fin,by,prodStages,tipo){
   // Cierra el pedido si el finiquito ya está pagado Y Calidad ya lo liberó —
   // usada por updFiniq, confirmarEmbarqueNormal, confirmarEmbarqueStock y saveProd.
@@ -1778,7 +1930,7 @@ function intentarCierreAutomatico(nSt,fin,by,prodStages,tipo){
 // Extraído aparte para poder usarlo también en la sección "Pendientes por
 // facturar" de Cuentas por Cobrar (calcCarteraGeneral).
 function estimadoPendienteSinFacturar(o){
-  const total=ct(o.qty,o.value);
+  const total=totalPedido(o);
   const pA=Math.min(100,Math.max(0,parseInt(o.pct_anticipo)||0));
   const finiq=o.finiquito||'Pendiente';
   if(finiq==='Pagado')return 0;
@@ -1806,17 +1958,72 @@ function saldoPendiente(o){
   // el estimado simple (anticipo/finiquito) como respaldo provisional.
   return estimadoPendienteSinFacturar(o);
 }
+// Lee los montos de accesorios/flete del modal — 0 si la sección no aplica
+// (STK, AC-, FLE-) o si la casilla no está palomeada.
+function _extrasDelModal(){
+  const w=document.getElementById('fExtrasWrap');
+  if(!w||w.style.display==='none')return{acc:0,fle:0,incAcc:false,incFle:false,accEP:false,fleEP:false,accM:0,fleM:0,enPrecio:0};
+  const incAcc=document.getElementById('fIncAcc').checked;
+  const incFle=document.getElementById('fIncFle').checked;
+  const accEP=incAcc&&document.getElementById('fAccEnPrecio').checked;
+  const fleEP=false; // oct 2026: el flete SIEMPRE es partida propia (con retención)
+  const accM=incAcc?(parseFloat(document.getElementById('fAccMonto').value)||0):0;
+  const fleM=incFle?(parseFloat(document.getElementById('fFleMonto').value)||0):0;
+  return{
+    incAcc,incFle,accEP,fleEP,accM,fleM,
+    // acc/fle = lo que SE SUMA al precio capturado (lo incluido en precio no suma)
+    acc:accEP?0:accM,
+    fle:fleEP?0:fleM,
+    // lo que se descuenta de la parte "tanque" del desglose
+    enPrecio:(accEP?accM:0)+(fleEP?fleM:0)
+  };
+}
+function toggleExtrasPedido(){
+  document.getElementById('fAccWrap').style.display=document.getElementById('fIncAcc').checked?'':'none';
+  document.getElementById('fFleWrap').style.display=document.getElementById('fIncFle').checked?'':'none';
+  updT();
+}
+function _resetExtrasModal(){
+  document.getElementById('fIncAcc').checked=false;
+  document.getElementById('fIncFle').checked=false;
+  ['fAccDesc','fAccMonto','fFleCiudad','fFleDesc','fFleMonto','fLigado'].forEach(id=>{const el=document.getElementById(id);el.value='';el.disabled=false;});
+  document.getElementById('fIncAcc').disabled=false;
+  document.getElementById('fIncFle').disabled=false;
+  // Default: accesorios se suman al precio (venta adicional)
+  document.getElementById('fAccEnPrecio').checked=false;
+  document.getElementById('fAccEnPrecio').disabled=false;
+  document.querySelectorAll('.fExtraMontoWrap').forEach(el=>el.style.display='');
+  document.getElementById('fAccWrap').style.display='none';
+  document.getElementById('fFleWrap').style.display='none';
+}
+// Sugerencias para "Ligado a pedido": pedidos de tanque (A-) no cancelados,
+// del mismo cliente si ya se capturó; si no, todos. Más recientes primero.
+function poblarLigadoList(){
+  const dl=document.getElementById('fLigadoList');if(!dl)return;
+  const cli=(document.getElementById('fClient').value||'').trim().toLowerCase();
+  const lista=orders.filter(o=>esPedidoTanque(o)&&o.folio&&gSt(o)!=='cancelado'&&(!cli||(o.client||'').trim().toLowerCase()===cli))
+    .sort((a,b)=>String(b.folio).localeCompare(String(a.folio),'es',{numeric:true}))
+    .slice(0,60);
+  dl.innerHTML=lista.map(o=>'<option value="'+escAttrInc(o.folio)+'">'+escAttrInc((o.client||'')+' · '+(o.desc||''))+'</option>').join('');
+}
 function updT(){
   const qty=document.getElementById('fQty').value;
   const val=document.getElementById('fVal').value;
-  const t=ct(qty,val);
+  const tBase=ct(qty,val);
+  // Extras del pedido combinado (solo cuenta lo que está palomeado y visible)
+  const ex=_extrasDelModal();
+  const t=tBase+ex.acc+ex.fle;
   document.getElementById('tPrev').textContent=t>0?fm(t):'$0';
   const pA=Math.min(100,Math.max(0,parseInt(document.getElementById('fPctAntic')?document.getElementById('fPctAntic').value:0)||0));
   const pF=100-pA;
   const elD=document.getElementById('tPrevDesglose');
   if(elD){
     if(t>0){
-      elD.innerHTML='<span style="color:#1a73e8">A: '+pA+'% '+fm(t*(pA/100))+'</span>&nbsp;&nbsp;<span style="color:#C0391B">F: '+pF+'% '+fm(t*(pF/100))+'</span>';
+      const tanqueDesg=t-ex.accM-ex.fleM;
+      const lineaDesg=(ex.accM>0||ex.fleM>0)?'<div style="color:'+(tanqueDesg<0?'#C0391B':'var(--muted)')+';margin-bottom:3px">Desglose: Tanque '+fm(tanqueDesg)+(ex.accM>0?' + Accesorios '+fm(ex.accM)+(ex.accEP?' (en precio)':''):'')+(ex.fleM>0?' + Flete '+fm(ex.fleM)+(ex.fleEP?' (en precio)':''):'')+(tanqueDesg<0?' ⚠️ lo incluido en precio supera el precio del tanque':'')+'</div>':'';
+      const retPrev=_r2(ex.fle*RET_IVA_FLETE);
+      const lineaIva=ex.fle>0?'<div style="color:var(--muted);margin-bottom:3px">Con IVA: '+fm(_r2(t*1.16-retPrev))+' <span style="font-size:10px">(IVA '+fm(_r2(t*0.16))+' − ret. 4% flete '+fm(retPrev)+')</span></div>':'';
+      elD.innerHTML=lineaDesg+lineaIva+'<span style="color:#1a73e8">A: '+pA+'% '+fm(t*(pA/100))+'</span>&nbsp;&nbsp;<span style="color:#C0391B">F: '+pF+'% '+fm(t*(pF/100))+'</span>';
       elD.style.display='';
     }else{elD.style.display='none';}
   }
@@ -2269,7 +2476,7 @@ function anticBadge(o,editable){
 
   // Datos desde Contabilidad (si están disponibles)
   const cobrado = ctTotalCobrado(folio);
-  const valorConIva = ctValorPedido(o) * 1.16;
+  const valorConIva = totalConIvaPedido(o);
   const pctCobrado = valorConIva > 0 ? Math.min(100, Math.round((cobrado/valorConIva)*100)) : 0;
   const tieneActividad = ctTieneActividad(folio);
 
@@ -2578,7 +2785,7 @@ async function confirmarEmbarqueNormal(oid){
   if(!canEmbarque()){showAlert('Solo Ventas/Embarques o Dirección pueden confirmar el embarque.','🚫');return;}
   const emb=embarqueHabilitado(o);
   if(!emb.ok){showAlert('No se puede embarcar: '+emb.msg,'⚠️');return;}
-  if(!await showConfirm('¿Confirmar embarque de '+o.qty+' uds de '+(o.desc||o.folio)+'?\n\nEsta acción registrará la salida del tanque.'))return;
+  if(!await showConfirm('¿Confirmar embarque de '+o.qty+' uds de '+(o.desc||o.folio)+'?'+(tieneAccIncluido(o)?'\nIncluye accesorios: '+(o.acc_desc||'—'):'')+(tieneFleIncluido(o)?'\nFlete incluido — destino: '+(o.ciudad_destino||'—'):'')+'\n\nEsta acción registrará la salida del tanque.'))return;
   const n=new Date();const ts=n.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const by=CU.name+' ('+CU.area+')';
   const nPS=JSON.parse(JSON.stringify(o.prod_stages||{}));
@@ -2603,7 +2810,7 @@ async function confirmarEmbarqueStock(oid){
   if(!canEmbarque()){showAlert('Solo Ventas/Embarques o Dirección pueden confirmar el embarque.','🚫');return;}
   const emb=embarqueHabilitado(o);
   if(!emb.ok){showAlert('No se puede embarcar: '+emb.msg,'⚠️');return;}
-  if(!await showConfirm('¿Confirmar embarque de '+o.qty+' uds de '+(o.desc||o.folio)+'?\n\nEsta acción registrará la salida física del almacén.'))return;
+  if(!await showConfirm('¿Confirmar embarque de '+o.qty+' uds de '+(o.desc||o.folio)+'?'+(tieneAccIncluido(o)?'\nIncluye accesorios: '+(o.acc_desc||'—'):'')+(tieneFleIncluido(o)?'\nFlete incluido — destino: '+(o.ciudad_destino||'—'):'')+'\n\nEsta acción registrará la salida física del almacén.'))return;
   const n=new Date();const ts=n.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const by=CU.name+' ('+CU.area+')';
   const nPS=JSON.parse(JSON.stringify(o.prod_stages||{}));
@@ -2832,8 +3039,8 @@ function renderAS(){
   // Ventas del mes = total facturado pedidos registrados este mes (folio A-YYMM-##)
   const pedsMes=pedidosDelMes(yymm);
   const pedsMesPrev=pedidosDelMes(yymmPrev);
-  const ventasMes=pedsMes.reduce((s,o)=>s+ct(o.qty,o.value),0);
-  const ventasPrev=pedsMesPrev.reduce((s,o)=>s+ct(o.qty,o.value),0);
+  const ventasMes=pedsMes.reduce((s,o)=>s+totalPedido(o),0);
+  const ventasPrev=pedsMesPrev.reduce((s,o)=>s+totalPedido(o),0);
   const ventasDelta=ventasPrev>0?Math.round(((ventasMes-ventasPrev)/ventasPrev)*100):null;
 
   // Depositado = dinero real cobrado en el mes, fuente única: ledger de Abonos
@@ -3010,7 +3217,7 @@ function renderAT(){
   const editAntic=canEditAnticipo();
   const editFiniq=canContab();
   b.innerHTML=fl.map(o=>{
-    const t=ct(o.qty,o.value);
+    const t=totalPedido(o);
     const sem=gSem(o);
     const dlStr=fd(o.deadline);
     const isSTK=o.tipo==='stk';
@@ -3022,11 +3229,11 @@ function renderAT(){
     return'<tr style="'+rowStyle+'">'+
       '<td style="position:sticky;left:0;background:'+stickyBg+';z-index:1;box-shadow:2px 0 4px rgba(0,0,0,.06);width:110px;min-width:110px"><div class="'+(isSTK?'folio-stk':'folio')+'" style="cursor:pointer" title="Ver detalle del pedido" onclick="openHistDetail(\''+o.id+'\')">'+(o.folio||'—')+'</div>'+(o.num&&!isSTK?'<div class="sub">'+o.num+'</div>':'')+'</td>'+
       '<td style="position:sticky;left:110px;background:'+stickyBg+';z-index:1;box-shadow:2px 0 4px rgba(0,0,0,.06);min-width:140px"><div>'+(isSTK?'<em style="color:var(--muted)">Almacén interno</em>':o.client||'')+'</div>'+(o.notes?'<div class="sub">'+o.notes+'</div>':'')+'</td>'+
-      '<td>'+(o.desc||'')+'<br>'+(o.fluido||o.capacidad_litros||o.presion_psi||o.material?'<span style="font-size:10px;color:var(--muted)">'+(o.fluido?o.fluido:'')+( o.capacidad_litros?' · '+o.capacidad_litros+'L':'')+( o.presion_psi?' · '+o.presion_psi+' psi':'')+( o.material?' · '+o.material:'')+( o.acabado?' · '+o.acabado:'' )+'</span>':'')+'</td>'+
+      '<td>'+(o.desc||'')+'<br>'+(o.fluido||o.capacidad_litros||o.presion_psi||o.material?'<span style="font-size:10px;color:var(--muted)">'+(o.fluido?o.fluido:'')+( o.capacidad_litros?' · '+o.capacidad_litros+'L':'')+( o.presion_psi?' · '+o.presion_psi+' psi':'')+( o.material?' · '+o.material:'')+( o.acabado?' · '+o.acabado:'' )+'</span>':'')+badgesIncluye(o)+'</td>'+
       '<td style="text-align:center"><span class="qty-pill">'+(o.qty||1)+'</span>'+(tieneAlmacenAdmin?'<div class="badge" style="background:#E6F4EA;color:#137333;margin-top:3px;font-size:9px;display:inline-flex;white-space:nowrap">📦 '+o.qty_almacen+' almacén'+(parseInt(o.qty_produccion)>0?' / '+o.qty_produccion+' prod':'')+'</div>':'')+'</td>'+
       '<td>'+(isSTK?'<span style="color:var(--muted);font-size:11px">Sin precio</span>':fm(o.value))+'</td>'+
       '<td style="text-align:right">'+(isSTK?'—':
-        '<div class="total-val">'+fm(t)+'</div>'+
+        '<div class="total-val">'+fm(t)+'</div>'+desgloseMontosHtml(o)+
         ((parseInt(o.pct_anticipo)||0)>0?
           '<div style="font-size:10px;margin-top:3px">'+
           '<span style="color:#1a73e8">A: '+(o.pct_anticipo||0)+'% '+fm(t*((o.pct_anticipo||0)/100))+'</span> '+
@@ -3063,7 +3270,7 @@ function renderAMobile(fl){
     const sem=gSem(o);const isSTK=o.tipo==='stk';
     const isFromStock=!isSTK&&!!(o.from_stock&&(parseInt(o.qty_produccion)||0)===0);
     const tieneAlmacenAdmin=!isSTK&&!!(o.from_stock&&parseInt(o.qty_almacen||0)>0);
-    const t=ct(o.qty,o.value);
+    const t=totalPedido(o);
     return'<div class="m-card'+(isSTK?' stk-row':'')+'">'+
       '<div class="m-card-header">'+
         '<div class="m-card-folio-wrap">'+
@@ -3074,10 +3281,10 @@ function renderAMobile(fl){
       '</div>'+
       '<div class="m-card-body">'+
         '<div class="m-card-field"><span class="m-card-label">Cliente</span><span class="m-card-val">'+(isSTK?'STK interno':o.client||'—')+'</span></div>'+
-        '<div class="m-card-field"><span class="m-card-label">Modelo</span><span class="m-card-val">'+(o.desc||'—')+'</span></div>'+
+        '<div class="m-card-field"><span class="m-card-label">Modelo</span><span class="m-card-val">'+(o.desc||'—')+badgesIncluye(o)+'</span></div>'+
         (o.fluido||o.capacidad_litros||o.material?'<div class="m-card-field"><span class="m-card-label">Especificaciones</span><span class="m-card-val" style="font-size:11px">'+(o.fluido||'')+(o.capacidad_litros?' · '+o.capacidad_litros+'L':'')+(o.presion_psi?' · '+o.presion_psi+' psi':'')+(o.material?' · '+o.material:'')+(o.acabado?' · '+o.acabado:'')+'</span></div>':'')+
         '<div class="m-card-field"><span class="m-card-label">Cantidad</span><span class="m-card-val" style="font-weight:700;color:var(--navy)">'+(o.qty||1)+' uds</span>'+(tieneAlmacenAdmin?' <span class="badge" style="background:#E6F4EA;color:#137333;font-size:9px;display:inline-flex;white-space:nowrap">📦 '+o.qty_almacen+' almacén'+(parseInt(o.qty_produccion)>0?' / '+o.qty_produccion+' prod':'')+'</span>':'')+'</div>'+
-        '<div class="m-card-field"><span class="m-card-label">Total</span><span class="m-card-val">'+(isSTK?'—':fm(t))+'</span>'+(isSTK?'':'<span style="font-size:10px;color:var(--muted);font-style:italic">+ IVA</span>')+'</div>'+
+        '<div class="m-card-field"><span class="m-card-label">Total</span><span class="m-card-val">'+(isSTK?'—':fm(t)+desgloseMontosHtml(o))+'</span>'+(isSTK?'':'<span style="font-size:10px;color:var(--muted);font-style:italic">+ IVA</span>')+'</div>'+
         '<div class="m-card-field"><span class="m-card-label">Entrega</span><span class="m-card-val">'+(o.deadline?fd(o.deadline):'—')+'</span></div>'+
         '<div class="m-card-field"><span class="m-card-label">Anticipo</span><span class="m-card-val">'+(isSTK?'N/A':(o.anticipo_status||'Pendiente'))+'</span></div>'+
         '<div class="m-card-field"><span class="m-card-label">Finiquito</span><span class="m-card-val">'+(isSTK?'N/A':(o.finiquito||'Pendiente'))+'</span></div>'+
@@ -3173,6 +3380,11 @@ function _aplicarVisibilidadPorTipo(){
   document.getElementById('fQtyWrap').style.display=esFle?'none':'';
   document.getElementById('fQtyLabel').textContent=esAcc?'Cantidad':'Cantidad de tanques';
   document.getElementById('fCiudadWrap').style.display=esFle?'':'none';
+  // Pedido combinado: la sección de accesorios/flete incluidos solo aplica a
+  // pedidos de tanque (folio A-). AC-/FLE- muestran en su lugar la liga
+  // opcional a un pedido de tanque existente.
+  document.getElementById('fExtrasWrap').style.display=(!isStk&&!esAcc&&!esFle)?'':'none';
+  document.getElementById('fLigadoWrap').style.display=(esAcc||esFle)?'':'none';
   const labels={pedido:'Modelo / descripción del equipo',accesorios:'Descripción de los accesorios',flete:'Descripción del servicio'};
   document.getElementById('fDescLabel').textContent=labels[isStk?'pedido':tipoPedido]||labels.pedido;
   const placeholders={pedido:'Ej. Tanque de aire vertical 500L 150 PSI',accesorios:'Ej. Kit de válvulas y conexiones para tanque diésel',flete:'Ej. Entrega e instalación de 2 tanques en Saltillo, Coah.'};
@@ -3206,6 +3418,7 @@ function _prepModal(folio,title,subtitle,stkMode){
   document.getElementById('fDate').disabled=false;
   document.getElementById('fDL').value='';
   document.getElementById('fCiudad').value='';
+  _resetExtrasModal();
   document.getElementById('tPrev').textContent='$0';
   const elD=document.getElementById('tPrevDesglose');if(elD)elD.style.display='none';
   document.getElementById('stockAlertBox').classList.add('hidden');
@@ -3274,6 +3487,23 @@ function openEdit(id){
   document.getElementById('fDate').disabled=!!rv||soloIngenieria;
   document.getElementById('fDL').value=normDate(o.deadline);
   document.getElementById('fCiudad').value=o.ciudad_destino||'';
+  // Pedido combinado / liga — cargar lo guardado
+  _resetExtrasModal();
+  if(esPedidoTanque(o)){
+    const incAcc=tieneAccIncluido(o),incFle=tieneFleIncluido(o);
+    document.getElementById('fIncAcc').checked=incAcc;
+    document.getElementById('fIncFle').checked=incFle;
+    document.getElementById('fAccDesc').value=o.acc_desc||'';
+    document.getElementById('fAccMonto').value=(o.acc_monto!==''&&o.acc_monto!=null)?o.acc_monto:'';
+    document.getElementById('fFleCiudad').value=o.ciudad_destino||'';
+    document.getElementById('fFleDesc').value=o.fle_desc||'';
+    document.getElementById('fFleMonto').value=(o.fle_monto!==''&&o.fle_monto!=null)?o.fle_monto:'';
+    document.getElementById('fAccEnPrecio').checked=accEnPrecio(o);
+    document.getElementById('fAccWrap').style.display=incAcc?'':'none';
+    document.getElementById('fFleWrap').style.display=incFle?'':'none';
+  }else{
+    document.getElementById('fLigado').value=o.pedido_ligado||'';
+  }
   document.getElementById('fNotes').value=o.notes||'';
   document.getElementById('stockAlertBox').classList.add('hidden');
   // Cargar campos técnicos
@@ -3289,10 +3519,12 @@ function openEdit(id){
   updT();
 
   // Deshabilitar campos de datos del pedido para Ingeniería de ventas
-  ['fNum','fClient','fDesc','fQty','fVal','fNotes','fDL'].forEach(fid=>{
+  ['fNum','fClient','fDesc','fQty','fVal','fNotes','fDL','fIncAcc','fIncFle','fAccDesc','fAccMonto','fFleCiudad','fFleDesc','fFleMonto','fLigado','fAccEnPrecio'].forEach(fid=>{
     const el=document.getElementById(fid);
     if(el)el.disabled=soloIngenieria;
   });
+  // Ingeniería de ventas ve QUÉ incluye el pedido, pero no los montos
+  document.querySelectorAll('.fExtraMontoWrap').forEach(el=>el.style.display=soloIngenieria?'none':'');
   // Ocultar botón Guardar y reemplazar por aviso si es solo ingeniería sin cambios posibles
   document.getElementById('aSaveBtn').style.display=soloIngenieria?'':'';
 
@@ -3305,6 +3537,7 @@ function openEdit(id){
   document.getElementById('fPctWrap').style.display=soloIngenieria?'none':(isStk?'none':'');
   document.getElementById('fTotalWrap').style.display=soloIngenieria?'none':(isStk?'none':'');
   _aplicarVisibilidadPorTipo();
+  updT(); // recalcular ya con la sección de extras visible/oculta según el tipo
 
   const ls=document.getElementById('aLS');
   if(o.log&&o.log.length){
@@ -3599,6 +3832,31 @@ async function saveOrder(){
   const val=isStk?null:(parseFloat(document.getElementById('fVal').value)||null);
   const pctAntic=isStk?0:(parseInt(document.getElementById('fPctAntic').value)||0);
   const ciudadDestino=tipoPedido==='flete'?document.getElementById('fCiudad').value.trim():'';
+  // Pedido combinado (solo tanque A-): accesorios y/o flete incluidos
+  const esTanqueModal=!isStk&&tipoPedido==='pedido';
+  const exM=_extrasDelModal();
+  const accDesc=esTanqueModal&&exM.incAcc?document.getElementById('fAccDesc').value.trim():'';
+  const fleDesc=esTanqueModal&&exM.incFle?document.getElementById('fFleDesc').value.trim():'';
+  const fleCiudad=esTanqueModal&&exM.incFle?document.getElementById('fFleCiudad').value.trim():'';
+  const accMontoRaw=document.getElementById('fAccMonto').value;
+  const fleMontoRaw=document.getElementById('fFleMonto').value;
+  if(esTanqueModal&&exM.incAcc){
+    if(!accDesc){showAlert('Marcaste "Incluye accesorios": describe qué accesorios lleva.','⚠️');btn.disabled=false;btn.textContent='Guardar';return;}
+    if(accMontoRaw===''||parseFloat(accMontoRaw)<0){showAlert('Captura el monto de los accesorios (0 si van sin costo).','⚠️');btn.disabled=false;btn.textContent='Guardar';return;}
+  }
+  if(esTanqueModal&&exM.incFle){
+    if(!fleCiudad){showAlert('Marcaste "Incluye flete": captura la ciudad destino.','⚠️');btn.disabled=false;btn.textContent='Guardar';return;}
+    if(fleMontoRaw===''||parseFloat(fleMontoRaw)<0){showAlert('Captura el monto del flete (0 si va sin costo).','⚠️');btn.disabled=false;btn.textContent='Guardar';return;}
+  }
+  if(esTanqueModal&&exM.enPrecio>0){
+    const precioCapt=ct(document.getElementById('fQty').value,document.getElementById('fVal').value);
+    if(exM.enPrecio>precioCapt+0.01){showAlert('Lo marcado como "incluido en el precio" ('+fm(exM.enPrecio)+') es mayor que el precio del tanque capturado ('+fm(precioCapt)+'). Revisa el precio unitario o los montos.','⚠️');btn.disabled=false;btn.textContent='Guardar';return;}
+  }
+  const accEnPrecioF=esTanqueModal&&exM.incAcc&&exM.accEP?'1':'';
+  const fleEnPrecioF=''; // ya no se usa (flete siempre es partida)
+  const accMonto=esTanqueModal&&exM.incAcc?(parseFloat(accMontoRaw)||0):'';
+  const fleMonto=esTanqueModal&&exM.incFle?(parseFloat(fleMontoRaw)||0):'';
+  const pedidoLigado=(!isStk&&(tipoPedido==='accesorios'||tipoPedido==='flete'))?document.getElementById('fLigado').value.trim().toUpperCase():'';
   const useFromStock=!!(fromStockData&&!isStk&&!editId);
   let jaleInvId=null; // capturado si useFromStock, para completar historial/movimiento tras guardar (ver completarJaleAlmacenPostSave)
 
@@ -3628,7 +3886,10 @@ async function saveOrder(){
       qty,value:val,
       received:rec,
       deadline:document.getElementById('fDL').value,
-      ciudad_destino:ciudadDestino,
+      ciudad_destino:esTanqueModal?fleCiudad:ciudadDestino,
+      acc_desc:accDesc,acc_monto:accMonto,acc_en_precio:accEnPrecioF,
+      fle_desc:fleDesc,fle_monto:fleMonto,fle_en_precio:fleEnPrecioF,
+      pedido_ligado:pedidoLigado,
       notes:document.getElementById('fNotes').value.trim(),
       stages:initStages,
       prod_stages:initPS(),
@@ -3644,7 +3905,7 @@ async function saveOrder(){
       // Flete no compra nada — ver embarqueHabilitado/comprasHabilitado.
       compras_placas:(tipoPedido==='accesorios'||tipoPedido==='flete')?'N/A':'Pendiente',compras_placas_fecha:'',
       compras_accesorios:tipoPedido==='flete'?'N/A':'Pendiente',compras_accesorios_fecha:'',
-      log:[{by,msg:(isStk?'Orden STK creada':'Pedido creado')+(useFromStock?' — jalado del almacén':'')+' por '+by,ts}],
+      log:[{by,msg:(isStk?'Orden STK creada':'Pedido creado')+(accDesc?' — incluye accesorios':'')+(fleCiudad?' — incluye flete a '+fleCiudad:'')+(pedidoLigado?' — ligado a '+pedidoLigado:'')+(useFromStock?' — jalado del almacén':'')+' por '+by,ts}],
       createdAt:today(),
       fluido:document.getElementById('fFluido').value||'',
       capacidad_litros:document.getElementById('fCapacidad').value?parseFloat(document.getElementById('fCapacidad').value):'',
@@ -3675,6 +3936,23 @@ async function saveOrder(){
     const modeloCambio=o.desc!==desc;
     if(modeloCambio)ch.push('Modelo actualizado');
     if(!isStk&&normDate(o.deadline)!==document.getElementById('fDL').value)ch.push('Fecha compromiso actualizada');
+    // Pedido de la versión 2026-10-08-2100 con flete "incluido en el precio":
+    // al guardarlo, el flete pasa a ser partida (se suma al total y lleva
+    // retención). Avisar el cambio de total antes de guardar.
+    if(esTanqueModal&&fleEnPrecio(o)&&exM.incFle&&exM.fleM>0){
+      const totAntes=totalPedido(o);
+      const totDesp=ct(document.getElementById('fQty').value,document.getElementById('fVal').value)+exM.acc+exM.fle;
+      if(!await showConfirm('Este pedido tenía el flete "incluido en el precio". Ahora el flete se factura como partida propia (con retención 4%), así que se SUMA al total:\n\nTotal antes: '+fm(totAntes)+'\nTotal ahora: '+fm(totDesp)+'\n\nSi el precio del tanque ya traía el flete adentro, cancela y baja el precio unitario. ¿Guardar así?')){btn.disabled=false;btn.textContent='Guardar';return;}
+      ch.push('Flete pasado a partida propia (antes incluido en precio)');
+    }
+    if(esTanqueModal){
+      const accAntes=(o.acc_desc||'')+'|'+(parseFloat(o.acc_monto)||0)+'|'+(o.acc_en_precio||'');
+      const fleAntes=(o.fle_desc||'')+'|'+(o.ciudad_destino||'')+'|'+(parseFloat(o.fle_monto)||0)+'|'+(o.fle_en_precio||'');
+      if(accAntes!==accDesc+'|'+(parseFloat(accMonto)||0)+'|'+accEnPrecioF)ch.push(accDesc?'Accesorios incluidos actualizados':'Se quitaron los accesorios incluidos');
+      if(fleAntes!==fleDesc+'|'+fleCiudad+'|'+(parseFloat(fleMonto)||0)+'|'+fleEnPrecioF)ch.push(fleCiudad?'Flete incluido actualizado ('+fleCiudad+')':'Se quitó el flete incluido');
+    }else if(!isStk&&(o.pedido_ligado||'')!==pedidoLigado){
+      ch.push(pedidoLigado?'Ligado a '+pedidoLigado:'Se quitó la liga a pedido de tanque');
+    }
     // Auto-activar orden de producción si ambas están done — no aplica a Accesorios/Flete
     if(o.tipo!=='accesorios'&&o.tipo!=='flete'&&tSt.ingenieria&&tSt.ingenieria.done&&tSt.requisicion&&tSt.requisicion.done&&!tSt.orden_prod.done){
       tSt.orden_prod={done:true,date:today(),by:'Sistema (auto'+(isStk?' STK':'')+')'};
@@ -3714,7 +3992,11 @@ async function saveOrder(){
       desc,condicion_pago:cond,qty,value:val,pct_anticipo:pctAntic,
       received:rec,
       deadline:isStk?o.deadline:document.getElementById('fDL').value,
-      ciudad_destino:tipoPedido==='flete'?ciudadDestino:o.ciudad_destino,
+      ciudad_destino:tipoPedido==='flete'?ciudadDestino:(esTanqueModal?fleCiudad:o.ciudad_destino),
+      acc_desc:esTanqueModal?accDesc:(o.acc_desc||''),acc_monto:esTanqueModal?accMonto:(o.acc_monto!=null?o.acc_monto:''),
+      fle_desc:esTanqueModal?fleDesc:(o.fle_desc||''),fle_monto:esTanqueModal?fleMonto:(o.fle_monto!=null?o.fle_monto:''),
+      acc_en_precio:esTanqueModal?accEnPrecioF:(o.acc_en_precio||''),fle_en_precio:esTanqueModal?fleEnPrecioF:(o.fle_en_precio||''),
+      pedido_ligado:(!isStk&&!esTanqueModal)?pedidoLigado:(o.pedido_ligado||''),
       notes:document.getElementById('fNotes').value.trim(),
       stages:tSt,
       // Si se devolvió stock por cambio de modelo, este pedido deja de estar
@@ -4736,7 +5018,7 @@ function calcReportePorGrupo(pedidos,desde,hasta,extraerFn){
     const key=(extraerFn(o)||'').toString().trim()||'Sin especificar';
     if(!acc[key])acc[key]={pedidos:0,ventas:0,cobrado:0,cartera:0};
     acc[key].pedidos++;
-    acc[key].ventas+=ct(o.qty,o.value);
+    acc[key].ventas+=totalPedido(o);
     acc[key].cartera+=(typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0;
     folioToKey[o.folio||o.id]=key;
   });
@@ -4757,9 +5039,51 @@ function calcReportePorGrupo(pedidos,desde,hasta,extraerFn){
   return{filas,totales};
 }
 
+// Ventas por línea de producto (sin IVA) — fuente única: ventasPorLinea(o).
+// Suma lo vendido en folio propio (AC-/FLE-) + lo incluido en pedidos de
+// tanque (A-). La suma tanque+accesorios+flete SIEMPRE cuadra con "Ventas".
+function calcVentasPorLinea(pedidos){
+  const r={tanque:0,accesorios:0,flete:0,acc_suelto:0,acc_incluido:0,fle_suelto:0,fle_incluido:0,
+           n_tanque:0,n_acc_suelto:0,n_acc_incluido:0,n_fle_suelto:0,n_fle_incluido:0,
+           // Cobrado por línea = lo de pedidos LIQUIDADOS al 100% (exacto, sin prorrateo)
+           cob_tanque:0,cob_accesorios:0,cob_flete:0};
+  pedidos.forEach(o=>{
+    const v=ventasPorLinea(o);
+    Object.keys(v).forEach(k=>{r[k]+=v[k];});
+    if(pedidoLiquidado(o)){r.cob_tanque+=v.tanque;r.cob_accesorios+=v.accesorios;r.cob_flete+=v.flete;}
+    if(esPedidoTanque(o)){r.n_tanque++;if(tieneAccIncluido(o))r.n_acc_incluido++;if(tieneFleIncluido(o))r.n_fle_incluido++;}
+    else if(o.tipo==='accesorios')r.n_acc_suelto++;
+    else if(o.tipo==='flete')r.n_fle_suelto++;
+  });
+  return r;
+}
+// Facturado (sin IVA) en el rango por concepto, por fecha_factura — mismo
+// criterio que ctFacturadoFiscalMes (todos los pedidos no-STK). Facturas
+// "General" de un pedido combinado caen en "Mixto": NO se reparten
+// proporcionalmente (sería una cifra inventada).
+function calcFacturadoPorConcepto(desde,hasta){
+  const r={Tanque:0,Accesorios:0,Flete:0,Mixto:0,total:0,ret:0};
+  if(typeof ctFacturasDePedido!=='function')return r;
+  orders.forEach(o=>{
+    if(o.tipo==='stk')return;
+    ctFacturasDePedido(o.folio||o.id).forEach(f=>{
+      const ff=cleanDate(f.fecha_factura);if(!ff)return;
+      const d=new Date(ff);
+      if(desde&&d<desde)return;
+      if(hasta&&d>hasta)return;
+      const m=parseFloat(f.monto_sin_iva)||0;
+      const c=conceptoFacturaLinea(f,o);
+      r[r[c]!==undefined?c:'Mixto']+=m;
+      r.total+=m;
+      r.ret+=parseFloat(f.ret_iva)||0;
+    });
+  });
+  return r;
+}
+
 function calcReporte(pedidos,desde,hasta){
   const total=pedidos.length;
-  const ventas=pedidos.reduce(function(s,o){return s+ct(o.qty,o.value);},0); // venta, sin IVA
+  const ventas=pedidos.reduce(function(s,o){return s+totalPedido(o);},0); // venta, sin IVA
   // Cobrado: dinero REAL cobrado EN EL RANGO seleccionado, agrupado por la
   // fecha REAL de cada abono (fecha_abono) — igual que "Depositado"
   // (Administración) y "Cobrado este mes" (Contabilidad).
@@ -4817,13 +5141,13 @@ function calcReporte(pedidos,desde,hasta){
   pedidos.filter(function(o){return o.tipo!=='stk';}).forEach(function(o){
     const f=(o.fluido||'Sin especificar').trim()||'Sin especificar';
     if(!fluidos[f])fluidos[f]=0;
-    fluidos[f]+=ct(o.qty,o.value);
+    fluidos[f]+=totalPedido(o);
   });
   const porCliente={};
   pedidos.filter(function(o){return o.tipo!=='stk';}).forEach(function(o){
     const cli=(o.client||'Sin nombre').trim();
     if(!porCliente[cli])porCliente[cli]={ventas:0,cobrado:0};
-    porCliente[cli].ventas+=ct(o.qty,o.value);
+    porCliente[cli].ventas+=totalPedido(o);
   });
   // Cobrado por cliente — mismo criterio (fecha real del abono, dentro del
   // rango), mapeado a cliente vía el pedido asociado a cada abono.
@@ -4841,7 +5165,9 @@ function calcReporte(pedidos,desde,hasta){
     if(hasta&&d>hasta)return;
     porCliente[cli].cobrado+=parseFloat(a.monto)||0;
   });
-  return{total,ventas,cobrado,cartera,clientes,cerrados,fluidos,porCliente,cobradoFueraDeRango};
+  const lineas=calcVentasPorLinea(pedidos);
+  const facturadoLinea=calcFacturadoPorConcepto(desde,hasta);
+  return{total,ventas,cobrado,cartera,clientes,cerrados,fluidos,porCliente,cobradoFueraDeRango,lineas,facturadoLinea};
 }
 
 function calcPorMes(pedidos,desde,hasta){
@@ -4859,7 +5185,7 @@ function calcPorMes(pedidos,desde,hasta){
     const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     const b=bucket(key,d.getFullYear(),d.getMonth());
     b.pedidos++;
-    b.ventas+=ct(o.qty,o.value);
+    b.ventas+=totalPedido(o);
     b.cartera+=(typeof ctSaldoCarteraReal==='function')?ctSaldoCarteraReal(o):0;
   });
   // 2) Cobrado — por la fecha REAL del abono (fecha_abono), igual que
@@ -5026,7 +5352,7 @@ function calcCarteraGeneral(){
     // respeta el flag "sin_factura" (Dirección marcó que este pedido no
     // llevará factura, ej. pago en efectivo — caso OVSA, ago 2026), así los
     // dos módulos siempre coinciden en el número.
-    const valorPedido=(typeof ctValorPedido==='function')?ctValorPedido(o):ct(o.qty,o.value);
+    const valorPedido=(typeof ctValorPedido==='function')?ctValorPedido(o):totalPedido(o);
     const porFacturar=(typeof ctPorFacturar==='function')?ctPorFacturar(o):Math.max(0,valorPedido-((typeof ctTotalSinIvaFacturado==='function')?ctTotalSinIvaFacturado(folioKey):0));
     if(porFacturar>1){
       if(!porClienteSinFacturar[cli])porClienteSinFacturar[cli]={total:0,folios:[]};
@@ -5377,6 +5703,25 @@ async function renderReporte(){
   }
   html+='</div></div>';
 
+  // ── Ventas por línea de producto (tanque / accesorios / flete) ─────────
+  // Suelto = folio propio (AC-/FLE-); Incluido = dentro de un pedido de
+  // tanque (A-). Facturado por concepto = por fecha_factura en el rango.
+  var L=d.lineas, FL=d.facturadoLinea;
+  html+='<div class="rpt-sec">Ventas por l&iacute;nea de producto</div><div class="rpt-concentrado">';
+  html+='<table class="rpt-tbl"><thead><tr><th>L&iacute;nea</th><th class="r">Suelto (folio propio)</th><th class="r">Incluido en pedido de tanque</th><th class="r">Total ventas</th><th class="r">%</th><th class="r">Cobrado</th><th class="r">Por cobrar</th></tr></thead><tbody>';
+  function filaLinea(nom,suelto,nS,incl,nI,tot,cob){
+    return '<tr><td>'+nom+'</td><td class="r">'+(suelto===null?'<span style="color:#9E9E9E">—</span>':fmtRpt(suelto)+' <span style="color:#9E9E9E;font-size:10px">('+nS+')</span>')+'</td><td class="r">'+fmtRpt(incl)+' <span style="color:#9E9E9E;font-size:10px">('+nI+')</span></td><td class="r"><strong>'+fmtRpt(tot)+'</strong></td><td class="r" style="color:#6B7A99">'+fmtPct(tot,d.ventas)+'</td><td class="r" style="color:#1E7E34">'+fmtRpt(cob)+'</td><td class="r" style="color:#C0391B">'+fmtRpt(Math.max(0,tot-cob))+'</td></tr>';
+  }
+  html+=filaLinea('🛢️ Tanques',null,0,L.tanque,L.n_tanque,L.tanque,L.cob_tanque);
+  html+=filaLinea('🔧 Accesorios',L.acc_suelto,L.n_acc_suelto,L.acc_incluido,L.n_acc_incluido,L.accesorios,L.cob_accesorios);
+  html+=filaLinea('🚚 Fletes',L.fle_suelto,L.n_fle_suelto,L.fle_incluido,L.n_fle_incluido,L.flete,L.cob_flete);
+  var totLin=L.tanque+L.accesorios+L.flete, totCob=L.cob_tanque+L.cob_accesorios+L.cob_flete;
+  html+='</tbody><tfoot><tr class="total"><td>Total</td><td class="r">'+fmtRpt(L.acc_suelto+L.fle_suelto)+'</td><td class="r">'+fmtRpt(L.tanque+L.acc_incluido+L.fle_incluido)+'</td><td class="r">'+fmtRpt(totLin)+'</td><td class="r">100%</td><td class="r">'+fmtRpt(totCob)+'</td><td class="r">'+fmtRpt(Math.max(0,totLin-totCob))+'</td></tr></tfoot></table>';
+  html+='<div style="font-size:10px;color:#9E9E9E;font-style:italic;margin-top:6px">Ventas antes de IVA por folio del per&iacute;odo; entre par&eacute;ntesis, n&uacute;mero de pedidos. Accesorios/flete "incluidos en el precio" son desglose interno del precio del tanque (ya est&aacute;n dentro del total facturado). <strong>Cobrado</strong> = pedidos del per&iacute;odo liquidados al 100% (facturados y pagados completos); un pedido con saldo cuenta todo en "Por cobrar" — no se reparten abonos parciales entre l&iacute;neas.</div>';
+  if(FL.total>0)html+='<div style="font-size:10px;color:#9E9E9E;margin-top:4px">Facturado en el per&iacute;odo por concepto (fecha de factura): Tanque '+fmtRpt(FL.Tanque)+' · Accesorios '+fmtRpt(FL.Accesorios)+' · Flete '+fmtRpt(FL.Flete)+' · Pedido completo (combinado) '+fmtRpt(FL.Mixto)+'</div>';
+  if(FL.ret>0)html+='<div style="font-size:10px;color:#9E9E9E;margin-top:4px">Retención IVA 4% (fletes) en facturas del per&iacute;odo: <strong>'+fmtRpt(FL.ret)+'</strong> — la entera el cliente al SAT.</div>';
+  html+='</div>';
+
   // ── NUEVO: Producción y ciclo de pedidos ──────────────────────────────
   var prod=calcProduccion(desde,hasta);
   html+='<div class="rpt-sec">Producción y ciclo de pedidos</div><div class="rpt-kpis">';
@@ -5552,6 +5897,35 @@ async function exportarPDF(){
     y+=10;
   }
   if(y>220){doc.addPage();y=M;}
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(27,42,74);doc.text('VENTAS POR LÍNEA DE PRODUCTO',M,y);y+=6;
+  (function(){
+    const L=d.lineas,FL=d.facturadoLinea;
+    const cw=(W-M*2);
+    doc.setFillColor(27,42,74);doc.rect(M,y,cw,6,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);
+    doc.text('Línea',M+3,y+4);doc.text('Suelto',M+cw*0.34,y+4,{align:'right'});doc.text('Incluido',M+cw*0.50,y+4,{align:'right'});
+    doc.text('Total',M+cw*0.66,y+4,{align:'right'});doc.text('%',M+cw*0.74,y+4,{align:'right'});doc.text('Cobrado',M+cw*0.87,y+4,{align:'right'});doc.text('Por cobrar',M+cw-3,y+4,{align:'right'});
+    y+=6;
+    const filas=[['Tanques',null,L.tanque,L.tanque,L.cob_tanque],['Accesorios',L.acc_suelto,L.acc_incluido,L.accesorios,L.cob_accesorios],['Fletes',L.fle_suelto,L.fle_incluido,L.flete,L.cob_flete]];
+    filas.forEach(function(f,i){
+      if(i%2===0){doc.setFillColor(248,249,251);doc.rect(M,y,cw,5.5,'F');}
+      doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(27,42,74);
+      doc.text(f[0],M+3,y+4);
+      doc.text(f[1]===null?'—':fmtRpt(f[1]),M+cw*0.34,y+4,{align:'right'});doc.text(fmtRpt(f[2]),M+cw*0.50,y+4,{align:'right'});doc.text(fmtRpt(f[3]),M+cw*0.66,y+4,{align:'right'});doc.text(fmtPct(f[3],d.ventas),M+cw*0.74,y+4,{align:'right'});
+      doc.text(fmtRpt(f[4]),M+cw*0.87,y+4,{align:'right'});doc.text(fmtRpt(Math.max(0,f[3]-f[4])),M+cw-3,y+4,{align:'right'});
+      y+=5.5;
+    });
+    const tT=L.tanque+L.accesorios+L.flete,tC=L.cob_tanque+L.cob_accesorios+L.cob_flete;
+    doc.setFillColor(27,42,74);doc.rect(M,y,cw,6,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(255,255,255);
+    doc.text('Total',M+3,y+4);doc.text(fmtRpt(L.acc_suelto+L.fle_suelto),M+cw*0.34,y+4,{align:'right'});doc.text(fmtRpt(L.tanque+L.acc_incluido+L.fle_incluido),M+cw*0.50,y+4,{align:'right'});
+    doc.text(fmtRpt(tT),M+cw*0.66,y+4,{align:'right'});doc.text('100%',M+cw*0.74,y+4,{align:'right'});doc.text(fmtRpt(tC),M+cw*0.87,y+4,{align:'right'});doc.text(fmtRpt(Math.max(0,tT-tC)),M+cw-3,y+4,{align:'right'});
+    y+=8;
+    doc.setFont('helvetica','italic');doc.setFontSize(6.5);doc.setTextColor(120,120,120);
+    doc.text('Cobrado = pedidos del período liquidados al 100%. Accesorios/flete "en precio" son desglose interno del total facturado.',M,y);
+    y+=10;
+  })();
+  if(y>220){doc.addPage();y=M;}
   const clientesList=Object.entries(d.porCliente).sort(function(a,b){return b[1].ventas-a[1].ventas;});
   doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(27,42,74);doc.text('VENTAS POR CLIENTE',M,y);y+=6;
   if(clientesList.length>0){
@@ -5679,6 +6053,18 @@ function exportarExcel(){
   const wsProd=XLSX.utils.aoa_to_sheet([['VENTAS POR TIPO DE PRODUCTO'],['Período:',desdeStr+' al '+hastaStr],[''],['Tipo de producto','Ventas (+ IVA)','% del total'],...fluidos.map(function(f){return[f[0],f[1],f[1]/d.ventas];}),['TOTAL',d.ventas,1]]);
   wsProd['!cols']=[{wch:25},{wch:22},{wch:15}];
   XLSX.utils.book_append_sheet(wb,wsProd,'Por producto');
+  const L=d.lineas,FL=d.facturadoLinea;
+  const wsLin=XLSX.utils.aoa_to_sheet([['VENTAS POR LÍNEA DE PRODUCTO'],['Período:',desdeStr+' al '+hastaStr],[''],
+    ['Línea','Suelto (folio propio, + IVA)','Incluido en pedido de tanque (+ IVA)','Total ventas (+ IVA)','% del total','Cobrado (pedidos liquidados)','Por cobrar'],
+    ['Tanques',0,L.tanque,L.tanque,d.ventas>0?L.tanque/d.ventas:0,L.cob_tanque,Math.max(0,L.tanque-L.cob_tanque)],
+    ['Accesorios',L.acc_suelto,L.acc_incluido,L.accesorios,d.ventas>0?L.accesorios/d.ventas:0,L.cob_accesorios,Math.max(0,L.accesorios-L.cob_accesorios)],
+    ['Fletes',L.fle_suelto,L.fle_incluido,L.flete,d.ventas>0?L.flete/d.ventas:0,L.cob_flete,Math.max(0,L.flete-L.cob_flete)],
+    ['TOTAL',L.acc_suelto+L.fle_suelto,L.tanque+L.acc_incluido+L.fle_incluido,L.tanque+L.accesorios+L.flete,1,L.cob_tanque+L.cob_accesorios+L.cob_flete,Math.max(0,(L.tanque+L.accesorios+L.flete)-(L.cob_tanque+L.cob_accesorios+L.cob_flete))],
+    [''],['Cobrado = pedidos del período liquidados al 100% (facturados y pagados). Accesorios/flete "incluidos en el precio" son desglose interno del total facturado.'],
+    [''],['Facturado en el período por concepto (sin IVA, por fecha de factura)'],
+    ['Tanque',FL.Tanque],['Accesorios',FL.Accesorios],['Flete',FL.Flete],['Pedido completo (combinado)',FL.Mixto],['Total facturado',FL.total],[''],['Retención IVA 4% (fletes) en facturas del período',FL.ret]]);
+  wsLin['!cols']=[{wch:40},{wch:24},{wch:30},{wch:20},{wch:12},{wch:28},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,wsLin,'Por línea');
   const clientes=Object.entries(d.porCliente).sort(function(a,b){return b[1].ventas-a[1].ventas;});
   const wsCli=XLSX.utils.aoa_to_sheet([['VENTAS POR CLIENTE'],['Período:',desdeStr+' al '+hastaStr],[''],['Cliente','Ventas (+ IVA)','% del total'],...clientes.map(function(e){return[e[0],e[1].ventas,e[1].ventas/d.ventas];}),['TOTAL',d.ventas,1]]);
   wsCli['!cols']=[{wch:35},{wch:22},{wch:15}];
@@ -5691,8 +6077,8 @@ function exportarExcel(){
     wsMes['!cols']=[{wch:14},{wch:10},{wch:18},{wch:18},{wch:18},{wch:14}];
     XLSX.utils.book_append_sheet(wb,wsMes,'Por mes');
   }
-  const wsDetalle=XLSX.utils.aoa_to_sheet([['DETALLE DE PEDIDOS DEL PERÍODO'],[''],['Folio','Fecha recepción','Cliente','Fluido','Cantidad','Valor unit.','Total','Anticipo','Finiquito','Estado'],...pedidos.map(function(o){return[o.folio||o.id,o.received||'',o.client||'',o.fluido||'',parseInt(o.qty)||1,parseFloat(o.value)||0,ct(o.qty,o.value),o.anticipo_status||'Pendiente',o.finiquito||'Pendiente',gSt(o)];})]);
-  wsDetalle['!cols']=[{wch:14},{wch:16},{wch:30},{wch:15},{wch:10},{wch:16},{wch:16},{wch:20},{wch:15},{wch:12}];
+  const wsDetalle=XLSX.utils.aoa_to_sheet([['DETALLE DE PEDIDOS DEL PERÍODO'],[''],['Folio','Fecha recepción','Cliente','Fluido','Cantidad','Valor unit.','Desglose: tanque/servicio','Desglose: accesorios','Desglose: flete','Total (se factura)','Anticipo','Finiquito','Estado'],...pedidos.map(function(o){var vl=ventasPorLinea(o);return[o.folio||o.id,o.received||'',o.client||'',o.fluido||'',parseInt(o.qty)||1,parseFloat(o.value)||0,o.tipo==='accesorios'||o.tipo==='flete'?ct(o.qty,o.value):vl.tanque,vl.acc_incluido,vl.fle_incluido,totalPedido(o),o.anticipo_status||'Pendiente',o.finiquito||'Pendiente',gSt(o)];})]);
+  wsDetalle['!cols']=[{wch:14},{wch:16},{wch:30},{wch:15},{wch:10},{wch:16},{wch:18},{wch:16},{wch:14},{wch:16},{wch:20},{wch:15},{wch:12}];
   XLSX.utils.book_append_sheet(wb,wsDetalle,'Detalle pedidos');
   XLSX.writeFile(wb,'ALLTANSA_Reporte_'+desdeStr+'_'+hastaStr+'.xlsx');
   toast('Excel generado ✓');
@@ -5857,7 +6243,7 @@ function renderPT(){
           (fechaOrden?'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+(isSTK?'📅 Solicitud: ':'📅 Orden: ')+fechaOrden+'</div>':'')+
           alertaBadge+'</td>'+
         '<td style="position:sticky;left:110px;background:'+stickyBgProd+';z-index:1;box-shadow:2px 0 4px rgba(0,0,0,.06);min-width:140px"><div>'+(isSTK?'<em style="color:var(--muted)">Almacén interno</em>':o.client||'')+'</div>'+(o.notes?'<div class="sub">'+o.notes+'</div>':'')+'</td>'+
-        '<td>'+(o.desc||'')+'</td>'+
+        '<td>'+(o.desc||'')+badgesIncluye(o)+'</td>'+
         '<td style="text-align:center"><span class="qty-pill">'+(isFromStock?o.qty||1:(o.from_stock&&parseInt(o.qty_produccion)>0?parseInt(o.qty_produccion):o.qty||1))+'</span></td>'+
         '<td>'+(isSTK?'—':condBadge(o.condicion_pago))+'</td>'+
         '<td>'+dl+'</td>'+
@@ -5895,7 +6281,7 @@ function renderPMobile(fl){
       '</div>'+
       '<div class="m-card-body">'+
         '<div class="m-card-field"><span class="m-card-label">Ref/Cliente</span><span class="m-card-val">'+(isSTK?'STK interno':o.client||'—')+'</span></div>'+
-        '<div class="m-card-field"><span class="m-card-label">Modelo</span><span class="m-card-val">'+(o.desc||'—')+'</span></div>'+
+        '<div class="m-card-field"><span class="m-card-label">Modelo</span><span class="m-card-val">'+(o.desc||'—')+badgesIncluye(o)+'</span></div>'+
         (o.fluido||o.capacidad_litros||o.material?'<div class="m-card-field"><span class="m-card-label">Especificaciones</span><span class="m-card-val" style="font-size:11px">'+(o.fluido||'')+(o.capacidad_litros?' · '+o.capacidad_litros+'L':'')+(o.presion_psi?' · '+o.presion_psi+' psi':'')+(o.material?' · '+o.material:'')+(o.acabado?' · '+o.acabado:'')+'</span></div>':'')+
         '<div class="m-card-field"><span class="m-card-label">Cantidad</span><span class="m-card-val" style="font-weight:700;color:var(--navy)">'+(o.qty||1)+' uds</span></div>'+
         '<div class="m-card-field"><span class="m-card-label">Etapa</span><span class="m-card-val" style="color:'+(isFromStock?'#5E35B1':et.col)+'">'+(isFromStock?'📦 Surtido por almacén':et.lbl)+'</span></div>'+
@@ -6847,6 +7233,7 @@ function renderCompCardDetail(o,placas,acc,cp,ca,editable,isSTK){
     campoPlacas+
     '<div class="comp-field">'+
       '<div class="comp-field-label">🔧 Accesorios</div>'+
+      (tieneAccIncluido(o)&&o.acc_desc?'<div style="font-size:11px;color:var(--acc);margin:-2px 0 4px">Incluidos en el pedido: '+escAttrInc(o.acc_desc)+'</div>':'')+
       (editableFinal?
         '<div class="comp-row"><select class="sel-inline" style="background:'+ca.bg+';color:'+ca.col+';border-color:'+ca.bg+'" onchange="updCompras(\''+o.id+'\',\'accesorios\',this.value)">'+
         COMPRAS_OPTS.map(x=>'<option value="'+x+'"'+(x===acc?' selected':'')+'>'+x+'</option>').join('')+'</select></div>':
@@ -7442,6 +7829,10 @@ function openHistDetail(id){
     (isSTK?'':'<div><div class="pil">Finiquito</div><div class="piv">'+finiqBadge(o,false)+'</div></div>')+
     '<div><div class="pil">Placas</div><div class="piv">'+comprasStatBadge(o.compras_placas)+'</div></div>'+
     '<div><div class="pil">Accesorios</div><div class="piv">'+comprasStatBadge(o.compras_accesorios)+'</div></div>'+
+    (tieneAccIncluido(o)?'<div style="grid-column:1/-1"><div class="pil">🔧 Accesorios incluidos</div><div class="piv">'+escAttrInc(o.acc_desc||'—')+(canContab()?' · <strong>'+fm(montoAccIncluido(o))+'</strong> + IVA'+(accEnPrecio(o)?' <span style="font-size:11px;color:var(--muted)">(incluido en el precio)</span>':' <span style="font-size:11px;color:var(--muted)">(se suma al precio)</span>'):'')+'</div></div>':'')+
+    (tieneFleIncluido(o)?'<div style="grid-column:1/-1"><div class="pil">🚚 Flete incluido</div><div class="piv">'+escAttrInc(o.ciudad_destino||'—')+(o.fle_desc?' — '+escAttrInc(o.fle_desc):'')+(canContab()?' · <strong>'+fm(montoFleIncluido(o))+'</strong> + IVA'+(fleEnPrecio(o)?' <span style="font-size:11px;color:var(--muted)">(incluido en el precio)</span>':' <span style="font-size:11px;color:var(--muted)">(se suma al precio)</span>'):'')+'</div></div>':'')+
+    ((o.tipo==='accesorios'||o.tipo==='flete')&&o.pedido_ligado?'<div><div class="pil">Ligado a</div><div class="piv">🔗 '+escAttrInc(o.pedido_ligado)+'</div></div>':'')+
+    (canContab()&&tieneDesglose(o)?'<div style="grid-column:1/-1"><div class="pil">Total del pedido (se factura)</div><div class="piv"><strong>'+fm(totalPedido(o))+'</strong> + IVA <span style="font-size:11px;color:var(--muted)">(Tanque '+fm(ventasPorLinea(o).tanque)+(montoAccIncluido(o)>0?' + Acc. '+fm(montoAccIncluido(o)):'')+(montoFleIncluido(o)>0?' + Flete '+fm(montoFleIncluido(o)):'')+')</span></div></div>':'')+
     (o.notes?'<div style="grid-column:1/-1"><div class="pil">Notas</div><div class="piv">'+o.notes+'</div></div>':'');
 
   document.getElementById('hDetailGestion').innerHTML=STAGES.map(st=>{
@@ -7518,7 +7909,7 @@ function openHistDetail(id){
     const cobrado = ctTotalCobrado(folio);
     const saldo = ctSaldoEfectivo(o);
     const tieneAct = ctTieneActividad(folio);
-    const valorConIva = ctValorPedido(o)*1.16;
+    const valorConIva = totalConIvaPedido(o);
     const pctCob = valorConIva>0?Math.min(100,Math.round((cobrado/valorConIva)*100)):0;
     if (tieneAct) {
       hContEl.innerHTML =
@@ -7852,7 +8243,8 @@ async function loadContab(force=false) {
 function ctValorPedido(o) {
   const qty = parseFloat(o.qty) || 0;
   const val = parseFloat(o.value) || 0;
-  return qty > 0 && val > 0 ? qty * val : val;
+  // + accesorios/flete incluidos en el mismo pedido de tanque (0 si no hay)
+  return (qty > 0 && val > 0 ? qty * val : val) + extrasPedido(o);
 }
 
 function ctFacturasDePedido(folio) {
@@ -7902,8 +8294,10 @@ function ctSaldoEfectivo(o) {
     // Nunca habrá factura — sin IVA, el valor pactado es el del pedido tal cual.
     return Math.max(0, ctValorPedido(o) - cobrado);
   } else {
-    // Anticipo antes de una factura futura — sí se espera IVA eventualmente.
-    const valorPedidoConIva = ctValorPedido(o) * 1.16;
+    // Anticipo antes de una factura futura — sí se espera IVA eventualmente,
+    // menos la retención del 4% sobre el flete (oct 2026). Sin esto quedaba
+    // un saldo "fantasma" del 4% del flete que el cliente nunca deposita.
+    const valorPedidoConIva = totalConIvaPedido(o);
     return Math.max(0, valorPedidoConIva - cobrado);
   }
 }
@@ -8636,6 +9030,7 @@ function ctRenderFactList() {
       '<span style="font-weight:700;color:var(--navy);font-size:14px">FAC-'+f.num_factura+'</span>' +
       '<span style="margin-left:8px;background:#F1F3F4;color:var(--muted);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'+f.tipo_factura+'</span>' +
       (f.pct_pedido?'<span style="margin-left:6px;font-size:12px;color:var(--muted)">'+f.pct_pedido+'% del pedido</span>':'') +
+      (f.concepto&&f.concepto!=='General'?'<span style="margin-left:6px;background:'+(f.concepto==='Accesorios'?'var(--acc-bg)':f.concepto==='Flete'?'var(--fle-bg)':'#E8F0FE')+';color:'+(f.concepto==='Accesorios'?'var(--acc)':f.concepto==='Flete'?'var(--fle)':'#1a73e8')+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'+({General:'Pedido completo',Tanque:'Solo tanque',Accesorios:'Solo accesorios',Flete:'Solo flete'}[f.concepto]||f.concepto)+'</span>':'') +
       '</div>' +
       '<div style="display:flex;gap:6px">' +
       '<button data-id="'+f.id+'" onclick="editarFactura(this.dataset.id)" style="background:none;border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">✏ Editar</button>' +
@@ -8645,6 +9040,7 @@ function ctRenderFactList() {
       '<div><span style="color:var(--muted)">Fecha emisión</span><br><strong>'+ctFmtFecha(f.fecha_factura)+'</strong></div>' +
       '<div><span style="color:var(--muted)">Sin IVA</span><br><strong>'+ctFmt(f.monto_sin_iva)+'</strong></div>' +
       '<div><span style="color:var(--muted)">IVA</span><br><strong>'+ctFmt(f.iva)+'</strong></div>' +
+      ((parseFloat(f.ret_iva)||0)>0?'<div><span style="color:var(--muted)">Ret. IVA 4%</span><br><strong style="color:#C0391B">−'+ctFmt(f.ret_iva)+'</strong></div>':'') +
       '<div><span style="color:var(--muted)">Total</span><br><strong>'+ctFmt(f.monto_total)+'</strong></div>' +
       '<div><span style="color:var(--muted)">Vencimiento</span><br><strong>'+ctFmtFecha(f.fecha_vencimiento)+'</strong></div>' +
       '<div><span style="color:var(--muted)">Días crédito</span><br><strong>'+(f.dias_credito||'0')+' días</strong></div>' +
@@ -8740,6 +9136,15 @@ function ctRenderTimeline() {
 }
 
 // ── Formulario factura ────────────────────────────
+// Selector "¿Qué se está facturando?": solo aparece en pedidos combinados
+// (tanque A- con accesorios y/o flete incluidos). En tanque solo, AC- o FLE-
+// la línea se deduce automáticamente y no se le pide nada a Contabilidad.
+function _ctPedidoCombinado(o){return !!o&&(tieneAccIncluido(o)||tieneFleIncluido(o));}
+function _ctToggleConcepto(){
+  const w=document.getElementById('ctFConceptoWrap');
+  if(w)w.style.display=_ctPedidoCombinado(ctOrderActivo)?'':'none';
+}
+
 function openFormFactura() {
   _ctGuardandoFact = false;
   document.getElementById('ctFEditId').value = '';
@@ -8748,8 +9153,13 @@ function openFormFactura() {
   document.getElementById('ctFFecha').value = new Date().toISOString().split('T')[0];
   document.getElementById('ctFTipo').value = 'Anticipo';
   document.getElementById('ctFPct').value = '';
+  document.getElementById('ctFConcepto').value = 'General';
+  _ctToggleConcepto();
   document.getElementById('ctFMonto').value = '';
   document.getElementById('ctFIva').value = '';
+  document.getElementById('ctFRet').value = '';
+  document.getElementById('ctFTotal').value = '';
+  _ctToggleRet();
   document.getElementById('ctFDias').value = '0';
   document.getElementById('ctFVenc').value = '';
   document.getElementById('ctFNotas').value = '';
@@ -8772,8 +9182,13 @@ function editarFactura(id) {
   document.getElementById('ctFFecha').value = f.fecha_factura||'';
   document.getElementById('ctFTipo').value = f.tipo_factura||'Anticipo';
   document.getElementById('ctFPct').value = f.pct_pedido||'';
+  document.getElementById('ctFConcepto').value = f.concepto||'General';
+  _ctToggleConcepto();
   document.getElementById('ctFMonto').value = f.monto_sin_iva||'';
   document.getElementById('ctFIva').value = f.iva||'';
+  document.getElementById('ctFRet').value = (parseFloat(f.ret_iva)||0)>0 ? f.ret_iva : '';
+  _ctToggleRet(parseFloat(f.ret_iva)||0);
+  ctCalcTotalFact();
   document.getElementById('ctFDias').value = f.dias_credito||'0';
   document.getElementById('ctFVenc').value = f.fecha_vencimiento||'';
   document.getElementById('ctFNotas').value = f.notas||'';
@@ -8786,7 +9201,48 @@ function editarFactura(id) {
 function ctCalcIva() {
   const monto = parseFloat(document.getElementById('ctFMonto').value)||0;
   document.getElementById('ctFIva').value = (monto * 0.16).toFixed(2);
+  // Retención sugerida (editable — capturar la del CFDI si difiere en centavos)
+  const sug = ctRetSugerida(ctOrderActivo, monto);
+  const w = document.getElementById('ctFRetWrap');
+  if (w && w.style.display !== 'none') document.getElementById('ctFRet').value = sug > 0 ? sug.toFixed(2) : '0';
+  ctCalcTotalFact();
   ctCalcVenc();
+}
+// Retención 4% sugerida para una factura de este pedido:
+//  • FLE- independiente → 4% de todo el subtotal de la factura.
+//  • Pedido combinado con concepto "Solo flete" → 4% del subtotal.
+//  • "Solo tanque" / "Solo accesorios" → 0.
+//  • Pedido completo / anticipo / finiquito → PROPORCIONAL: 4% × flete ×
+//    (subtotal de esta factura ÷ subtotal del pedido). Así anticipo y
+//    finiquito suman entre los dos la retención total del flete.
+function ctRetSugerida(o, monto) {
+  if (!o || !monto) return 0;
+  const fle = fleteSujetoRet(o);
+  if (fle <= 0) return 0;
+  if (o.tipo === 'flete') return _r2(monto * RET_IVA_FLETE);
+  const w = document.getElementById('ctFConceptoWrap');
+  const conc = (w && w.style.display !== 'none') ? document.getElementById('ctFConcepto').value : 'General';
+  if (conc === 'Flete') return _r2(monto * RET_IVA_FLETE);
+  if (conc === 'Tanque' || conc === 'Accesorios') return 0;
+  const valor = ctValorPedido(o);
+  if (valor <= 0) return 0;
+  return _r2(fle * RET_IVA_FLETE * Math.min(1, monto / valor));
+}
+// El campo de retención solo aparece si el pedido lleva flete sujeto a
+// retención (o si la factura que se edita ya trae retención capturada).
+function _ctToggleRet(retExistente) {
+  const w = document.getElementById('ctFRetWrap'); if (!w) return;
+  const aplica = fleteSujetoRet(ctOrderActivo) > 0 || (retExistente||0) > 0;
+  w.style.display = aplica ? '' : 'none';
+  const h = document.getElementById('ctFRetHint');
+  if (h) h.textContent = aplica ? 'Retención total del pedido: ' + ctFmt(retIvaPedido(ctOrderActivo)) + ' — sugerida proporcional, editable' : '';
+}
+function ctCalcTotalFact() {
+  const monto = parseFloat(document.getElementById('ctFMonto').value)||0;
+  const iva = parseFloat(document.getElementById('ctFIva').value)||0;
+  const w = document.getElementById('ctFRetWrap');
+  const ret = (w && w.style.display !== 'none') ? (parseFloat(document.getElementById('ctFRet').value)||0) : 0;
+  document.getElementById('ctFTotal').value = monto > 0 ? ctFmt(_r2(monto + iva - ret)) : '';
 }
 
 function ctCalcVenc() {
@@ -8828,6 +9284,9 @@ async function guardarFactura() {
     const factsDup = ctFacturasDePedido(folio).filter(f => f.num_factura === num && f.id !== editId2);
     if (factsDup.length > 0) { showAlert('Ya existe una factura con el número ' + num + ' en este pedido.','⚠️'); return; }
     const iva = parseFloat(document.getElementById('ctFIva').value)||0;
+    const retWrap = document.getElementById('ctFRetWrap');
+    const retIva = (retWrap && retWrap.style.display !== 'none') ? _r2(parseFloat(document.getElementById('ctFRet').value)||0) : 0;
+    if (retIva < 0 || retIva > iva + 0.01) { showAlert('La retención no puede ser negativa ni mayor que el IVA de la factura.','⚠️'); return; }
     const editId = document.getElementById('ctFEditId').value;
     const data = {
       id: editId || '',
@@ -8838,9 +9297,14 @@ async function guardarFactura() {
       fecha_factura: fecha,
       monto_sin_iva: monto,
       iva: iva,
-      monto_total: monto + iva,
+      ret_iva: retIva,
+      // Total del CFDI = subtotal + IVA − retención IVA 4% del flete
+      monto_total: _r2(monto + iva - retIva),
       tipo_factura: document.getElementById('ctFTipo').value,
       pct_pedido: document.getElementById('ctFPct').value||'',
+      // Solo pedidos combinados llevan concepto capturado; en el resto se
+      // deduce solo (conceptoFacturaLinea) — se guarda vacío.
+      concepto: _ctPedidoCombinado(ctOrderActivo) ? (document.getElementById('ctFConcepto').value||'General') : '',
       dias_credito: parseInt(document.getElementById('ctFDias').value)||0,
       fecha_vencimiento: document.getElementById('ctFVenc').value||'',
       notas: document.getElementById('ctFNotas').value.trim(),
@@ -9281,7 +9745,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-09-18-1800';
+const APP_VERSION = '2026-10-08-2300';
 
 let _versionCheckTimer = null;
 
