@@ -778,6 +778,7 @@ textarea{resize:vertical;min-height:58px}
       </div>
       <div class="fg" id="fDLWrap"><label>Fecha compromiso de entrega</label><input id="fDL" type="date"></div>
       <div class="fg" id="fCiudadWrap"><label>Ciudad destino</label><input id="fCiudad" type="text" placeholder="Ej. Saltillo, Coah."></div>
+      <div class="fg" id="fTransporteWrap"><label>Transporte</label><select id="fTransporte"><option value="propio">🚚 Propio (camión ALLTANSA)</option><option value="externo">🤝 Externo (subcontratado → Compras)</option></select></div>
       <div class="fg"><label>Fecha de recepción</label><input id="fDate" type="date"></div>
     </div>
 
@@ -816,7 +817,10 @@ textarea{resize:vertical;min-height:58px}
               <div><label style="font-size:11px">Descripción del servicio</label><input id="fFleDesc" type="text" placeholder="Ej. Entrega en planta del cliente"></div>
               <div class="fExtraMontoWrap"><label style="font-size:11px">Monto (MXN, antes de IVA)</label><input id="fFleMonto" type="number" min="0" placeholder="0.00" oninput="updT()"></div>
             </div>
-            <div class="fExtraMontoWrap" style="font-size:11px;color:var(--fle);margin-top:6px">Se factura como partida propia — lleva retención de IVA del 4%.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 160px;gap:8px;margin-top:8px">
+              <div><label style="font-size:11px">Transporte</label><select id="fFleTransporte"><option value="propio">🚚 Propio (camión ALLTANSA)</option><option value="externo">🤝 Externo (subcontratado → Compras)</option></select></div>
+            </div>
+            <div class="fExtraMontoWrap" style="font-size:11px;color:var(--fle);margin-top:6px">Se factura como partida propia — lleva retención de IVA del 4%. Transporte externo = Compras debe contratarlo.</div>
           </div>
           <div style="font-size:10px;color:var(--muted);margin-top:8px">Montos globales (no por unidad), antes de IVA; se suman al total del pedido como partidas de la factura. Total con IVA = subtotal × 1.16 − 4% del flete (igual que el CFDI). Accesorios "incluidos en el precio" = solo desglose interno. Los accesorios se compran en el mismo pedido (Compras → Accesorios).</div>
         </div>
@@ -1816,6 +1820,16 @@ function accEnPrecio(o){return String(o&&o.acc_en_precio||'')==='1';}
 function fleEnPrecio(o){return String(o&&o.fle_en_precio||'')==='1';}
 function tieneAccIncluido(o){return esPedidoTanque(o)&&!!((o.acc_desc||'').toString().trim()||montoAccIncluido(o)>0);}
 function tieneFleIncluido(o){return esPedidoTanque(o)&&!!((o.fle_desc||'').toString().trim()||(o.ciudad_destino||'').toString().trim()||montoFleIncluido(o)>0);}
+// ===== TRANSPORTE DEL FLETE (oct 2026) =====
+// 'propio' (camión ALLTANSA, default — incluye todo pedido anterior sin el
+// campo) o 'externo' (transportista subcontratado). Solo el externo es una
+// compra de servicio y aparece en Compras (campo compras_flete:
+// Pendiente → Contratado). El propio es logística, no compras.
+// Aplica a FLE- suelto y a la partida de flete de un A- combinado.
+function tieneFlete(o){return !!o&&(o.tipo==='flete'||tieneFleIncluido(o));}
+function fleteExterno(o){return tieneFlete(o)&&String(o.transporte||'propio')==='externo';}
+function fleteContratado(o){return (o.compras_flete||'Pendiente')==='Contratado';}
+const COMPRAS_FLETE_OPTS=['Pendiente','Contratado'];
 // Solo lo que SE SUMA al precio capturado (lo incluido en precio no suma)
 function extrasPedido(o){return (accEnPrecio(o)?0:montoAccIncluido(o))+(fleEnPrecio(o)?0:montoFleIncluido(o));}
 // ¿El pedido trae algún desglose (sume o no)?
@@ -1989,6 +2003,8 @@ function _resetExtrasModal(){
   ['fAccDesc','fAccMonto','fFleCiudad','fFleDesc','fFleMonto','fLigado'].forEach(id=>{const el=document.getElementById(id);el.value='';el.disabled=false;});
   document.getElementById('fIncAcc').disabled=false;
   document.getElementById('fIncFle').disabled=false;
+  document.getElementById('fFleTransporte').value='propio';
+  document.getElementById('fFleTransporte').disabled=false;
   // Default: accesorios se suman al precio (venta adicional)
   document.getElementById('fAccEnPrecio').checked=false;
   document.getElementById('fAccEnPrecio').disabled=false;
@@ -2350,13 +2366,33 @@ function gDias(o){
   const d=Math.round((t-mx)/86400000);return d<0?0:d;
 }
 
+// Fuente única de verdad: ¿este pedido llega a necesitar ALGO de Compras?
+// (independiente de si ya está liberado). Lo usan comprasHabilitado y el
+// panel "En camino" de Compras — antes el panel usaba solo !comprasHabilitado
+// y por eso todo FLE con Ingeniería marcada se quedaba ahí para siempre.
+//  · Flete propio: nunca (es logística).  · Flete externo: sí (contratar transporte).
+//  · 100% del almacén: no.  · Todo lo demás: sí.
+function requiereCompras(o){
+  if(!o)return false;
+  if(o.tipo==='flete')return fleteExterno(o);
+  if(o.from_stock&&(parseInt(o.qty_produccion)||0)===0)return false;
+  return true;
+}
+
+// Anticipo cubierto (o no pactado) — mismo criterio que autorizarEtapa/luzVerde.
+function _anticipoOk(o){
+  const antic=o.anticipo_status||'Pendiente';
+  const pA=parseInt(o.pct_anticipo)||0;
+  return pA===0||antic==='Anticipo recibido'||antic==='Sin anticipo';
+}
+
 function comprasHabilitado(o){
-  // Flete no tiene nada que comprar jamás (ver embarqueHabilitado, mismo criterio).
+  if(!requiereCompras(o))return false;
+  // FLE externo suelto: no pasa por Ingeniería ni requisición — se libera a
+  // Compras en cuanto el anticipo está cubierto (o no hay anticipo pactado).
+  if(o.tipo==='flete')return _anticipoOk(o);
   // Accesorios SÍ puede requerir compra real (el accesorio en sí) — se deja tal
   // cual hasta que exista el gate de Ingeniería + catálogo SKU de Fase 2.
-  if(o.tipo==='flete')return false;
-  // Si el pedido se cubrió 100% del almacén, no hay nada que comprar
-  if(o.from_stock&&(parseInt(o.qty_produccion)||0)===0)return false;
   if(o.tipo==='stk'){
     const ing=o.stages&&o.stages.ingenieria&&o.stages.ingenieria.done;
     const req=o.stages&&o.stages.requisicion&&o.stages.requisicion.done;
@@ -2366,13 +2402,8 @@ function comprasHabilitado(o){
   const req=o.stages&&o.stages.requisicion&&o.stages.requisicion.done;
   // Para pedidos parciales del almacén: no requerir anticipo (el pedido ya está autorizado)
   if(o.from_stock&&(parseInt(o.qty_produccion)||0)>0)return !!(ing&&req);
-  const antic=o.anticipo_status||'Pendiente';
-  const pA=parseInt(o.pct_anticipo)||0;
   // Si no hay anticipo pactado (0%), nunca debe bloquear — igual que en autorizarEtapa/luzVerde.
-  // El badge de Admin ya muestra "Sin anticipo" con pA===0 sin necesidad de que alguien
-  // confirme nada manualmente; comprasHabilitado debe respetar la misma regla.
-  const anticOk=pA===0||antic==='Anticipo recibido'||antic==='Sin anticipo';
-  return !!(ing&&req&&anticOk);
+  return !!(ing&&req&&_anticipoOk(o));
 }
 
 function recepcionStatus(o){
@@ -3380,6 +3411,7 @@ function _aplicarVisibilidadPorTipo(){
   document.getElementById('fQtyWrap').style.display=esFle?'none':'';
   document.getElementById('fQtyLabel').textContent=esAcc?'Cantidad':'Cantidad de tanques';
   document.getElementById('fCiudadWrap').style.display=esFle?'':'none';
+  document.getElementById('fTransporteWrap').style.display=esFle?'':'none';
   // Pedido combinado: la sección de accesorios/flete incluidos solo aplica a
   // pedidos de tanque (folio A-). AC-/FLE- muestran en su lugar la liga
   // opcional a un pedido de tanque existente.
@@ -3418,6 +3450,8 @@ function _prepModal(folio,title,subtitle,stkMode){
   document.getElementById('fDate').disabled=false;
   document.getElementById('fDL').value='';
   document.getElementById('fCiudad').value='';
+  document.getElementById('fTransporte').value='propio';
+  document.getElementById('fTransporte').disabled=false;
   _resetExtrasModal();
   document.getElementById('tPrev').textContent='$0';
   const elD=document.getElementById('tPrevDesglose');if(elD)elD.style.display='none';
@@ -3487,8 +3521,10 @@ function openEdit(id){
   document.getElementById('fDate').disabled=!!rv||soloIngenieria;
   document.getElementById('fDL').value=normDate(o.deadline);
   document.getElementById('fCiudad').value=o.ciudad_destino||'';
+  document.getElementById('fTransporte').value=(o.transporte==='externo')?'externo':'propio';
   // Pedido combinado / liga — cargar lo guardado
   _resetExtrasModal();
+  document.getElementById('fFleTransporte').value=(o.transporte==='externo')?'externo':'propio';
   if(esPedidoTanque(o)){
     const incAcc=tieneAccIncluido(o),incFle=tieneFleIncluido(o);
     document.getElementById('fIncAcc').checked=incAcc;
@@ -3519,7 +3555,7 @@ function openEdit(id){
   updT();
 
   // Deshabilitar campos de datos del pedido para Ingeniería de ventas
-  ['fNum','fClient','fDesc','fQty','fVal','fNotes','fDL','fIncAcc','fIncFle','fAccDesc','fAccMonto','fFleCiudad','fFleDesc','fFleMonto','fLigado','fAccEnPrecio'].forEach(fid=>{
+  ['fNum','fClient','fDesc','fQty','fVal','fNotes','fDL','fIncAcc','fIncFle','fAccDesc','fAccMonto','fFleCiudad','fFleDesc','fFleMonto','fLigado','fAccEnPrecio','fTransporte','fFleTransporte'].forEach(fid=>{
     const el=document.getElementById(fid);
     if(el)el.disabled=soloIngenieria;
   });
@@ -3857,6 +3893,10 @@ async function saveOrder(){
   const accMonto=esTanqueModal&&exM.incAcc?(parseFloat(accMontoRaw)||0):'';
   const fleMonto=esTanqueModal&&exM.incFle?(parseFloat(fleMontoRaw)||0):'';
   const pedidoLigado=(!isStk&&(tipoPedido==='accesorios'||tipoPedido==='flete'))?document.getElementById('fLigado').value.trim().toUpperCase():'';
+  // Transporte del flete: FLE suelto → selector de datos; A- combinado → selector
+  // dentro de "Incluye flete". Sin flete = '' (no aplica).
+  const transporteF=(!isStk&&tipoPedido==='flete')?(document.getElementById('fTransporte').value||'propio')
+    :(esTanqueModal&&exM.incFle?(document.getElementById('fFleTransporte').value||'propio'):'');
   const useFromStock=!!(fromStockData&&!isStk&&!editId);
   let jaleInvId=null; // capturado si useFromStock, para completar historial/movimiento tras guardar (ver completarJaleAlmacenPostSave)
 
@@ -3890,6 +3930,8 @@ async function saveOrder(){
       acc_desc:accDesc,acc_monto:accMonto,acc_en_precio:accEnPrecioF,
       fle_desc:fleDesc,fle_monto:fleMonto,fle_en_precio:fleEnPrecioF,
       pedido_ligado:pedidoLigado,
+      transporte:transporteF,
+      compras_flete:transporteF==='externo'?'Pendiente':'',compras_flete_fecha:'',
       notes:document.getElementById('fNotes').value.trim(),
       stages:initStages,
       prod_stages:initPS(),
@@ -3953,6 +3995,8 @@ async function saveOrder(){
     }else if(!isStk&&(o.pedido_ligado||'')!==pedidoLigado){
       ch.push(pedidoLigado?'Ligado a '+pedidoLigado:'Se quitó la liga a pedido de tanque');
     }
+    const transporteAntes=tieneFlete(o)?(o.transporte==='externo'?'externo':'propio'):'';
+    if(!isStk&&transporteF&&transporteF!==transporteAntes)ch.push('Transporte del flete: '+transporteF);
     // Auto-activar orden de producción si ambas están done — no aplica a Accesorios/Flete
     if(o.tipo!=='accesorios'&&o.tipo!=='flete'&&tSt.ingenieria&&tSt.ingenieria.done&&tSt.requisicion&&tSt.requisicion.done&&!tSt.orden_prod.done){
       tSt.orden_prod={done:true,date:today(),by:'Sistema (auto'+(isStk?' STK':'')+')'};
@@ -3997,6 +4041,10 @@ async function saveOrder(){
       fle_desc:esTanqueModal?fleDesc:(o.fle_desc||''),fle_monto:esTanqueModal?fleMonto:(o.fle_monto!=null?o.fle_monto:''),
       acc_en_precio:esTanqueModal?accEnPrecioF:(o.acc_en_precio||''),fle_en_precio:esTanqueModal?fleEnPrecioF:(o.fle_en_precio||''),
       pedido_ligado:(!isStk&&!esTanqueModal)?pedidoLigado:(o.pedido_ligado||''),
+      transporte:isStk?(o.transporte||''):transporteF,
+      // Pasar a externo abre el pendiente en Compras; regresar a propio lo limpia.
+      compras_flete:transporteF==='externo'?(o.compras_flete||'Pendiente'):'',
+      compras_flete_fecha:transporteF==='externo'?(o.compras_flete_fecha||''):'',
       notes:document.getElementById('fNotes').value.trim(),
       stages:tSt,
       // Si se devolvió stock por cambio de modelo, este pedido deja de estar
@@ -4210,7 +4258,9 @@ function renderIngBody(){
   const body=document.getElementById('ingBody');
   if(!body)return;
   try{
-    const activosAll=orders.filter(o=>!['closed','stk_done','cancelado'].includes(gSt(o)));
+    // FLE suelto no pasa por Ingeniería (oct 2026): no hay dibujo ni requisición
+    // que autorizar — se libera solo con anticipo / Dirección.
+    const activosAll=orders.filter(o=>o.tipo!=='flete'&&!['closed','stk_done','cancelado'].includes(gSt(o)));
     const activos=iSearch?activosAll.filter(function(o){return matchSearch(o,iSearch);}):activosAll;
 
     function luzVerde(o){
@@ -4336,6 +4386,7 @@ async function autorizarEtapa(orderId, etapa){
   const o=orders.find(x=>x.id===orderId);
   if(!o){showAlert('Pedido no encontrado.','❌');return;}
   if(!canIngView()){showAlert('Sin permiso para autorizar.','🚫');return;}
+  if(o.tipo==='flete'){showAlert('Los servicios de flete no pasan por Ingeniería.','ℹ️');return;}
 
   // Verificar anticipo si aplica
   if(etapa==='ingenieria'||etapa==='requisicion'){
@@ -7084,20 +7135,25 @@ function renderComp(){
 // Accesorios no tiene "Placas" (queda en 'N/A' — ver saveOrder) — su
 // completitud depende solo de si el accesorio mismo ya se recibió. Para
 // cualquier otro tipo, se mantiene el criterio de siempre (placas Y accesorios).
+// Flete externo: además debe estar Contratado (FLE suelto: solo eso cuenta).
 function esMaterialCompleto(o){
+  const fleOk=!fleteExterno(o)||fleteContratado(o);
+  if(o.tipo==='flete')return fleOk;
   const acc=o.compras_accesorios||'Pendiente';
-  if(o.tipo==='accesorios')return acc==='Recibido';
+  if(o.tipo==='accesorios')return acc==='Recibido'&&fleOk;
   const placas=o.compras_placas||'Pendiente';
-  return placas==='Recibido'&&acc==='Recibido';
+  return placas==='Recibido'&&acc==='Recibido'&&fleOk;
 }
 
 function renderCS(){
-  // Panel "En camino" — ingeniería marcada pero aún no habilitados en Compras
+  // Panel "En camino" — van a necesitar Compras pero aún no están liberados.
+  // requiereCompras() saca flete propio y pedidos 100% del almacén. El FLE
+  // externo suelto no pasa por Ingeniería: entra aquí solo esperando anticipo.
   const proxComp=orders.filter(o=>
     !['closed','stk_done','cancelado'].includes(gSt(o))&&
     o.tipo!=='stk'&&
-    !(o.from_stock&&(parseInt(o.qty_produccion)||0)===0)&& // excluir pedidos 100% del almacén
-    o.stages&&o.stages.ingenieria&&o.stages.ingenieria.done&&
+    requiereCompras(o)&&
+    (o.tipo==='flete'||(o.stages&&o.stages.ingenieria&&o.stages.ingenieria.done))&&
     !comprasHabilitado(o)
   );
   const panelComp=document.getElementById('cPanelProximo');
@@ -7105,11 +7161,12 @@ function renderCS(){
     if(proxComp.length>0){
       panelComp.style.display='block';
       panelComp.innerHTML='<div style="background:#FFF8E1;border:1px solid #F9AB00;border-left:4px solid #F9AB00;border-radius:8px;padding:10px 16px;margin-bottom:12px">'+
-        '<div style="font-size:12px;font-weight:700;color:#854F0B;margin-bottom:6px">⏳ En camino ('+proxComp.length+') — Ingeniería autorizada, pendiente de liberación</div>'+
+        '<div style="font-size:12px;font-weight:700;color:#854F0B;margin-bottom:6px">⏳ En camino ('+proxComp.length+') — pendientes de liberación a Compras</div>'+
         proxComp.map(o=>'<div style="font-size:12px;color:#1B2A4A;padding:3px 0;border-bottom:1px solid rgba(0,0,0,.06)">'+
           '<strong>'+(o.folio||'—')+'</strong> · '+(o.client||'')+(o.desc?' — '+o.desc:'')+
+          (o.tipo==='flete'?' <span style="color:var(--fle);font-size:11px">🚚 transporte externo</span>':'')+
           ' <span style="color:#854F0B;font-size:11px">('+
-          (!(o.stages&&o.stages.requisicion&&o.stages.requisicion.done)?'Falta Requisición':'Falta confirmar anticipo')+
+          (o.tipo!=='flete'&&!(o.stages&&o.stages.requisicion&&o.stages.requisicion.done)?'Falta Requisición':'Falta confirmar anticipo')+
           ')</span></div>').join('')+
         '</div>';
     }else{panelComp.style.display='none';panelComp.innerHTML='';}
@@ -7185,7 +7242,8 @@ function renderCCards(){
             (isSTK?'&nbsp;'+stkBadge():'')+
           '</div>'+
           '<div class="comp-card-client">'+(isSTK?'Almacén interno':o.client)+' — '+o.desc+
-          ' ('+(o.from_stock&&parseInt(o.qty_produccion)>0?parseInt(o.qty_produccion):o.qty)+' uds'+(isSTK?' — reabastecimiento':(o.tipo==='accesorios'?' a comprar':' a producir'))+')</div>'+
+          (o.tipo==='flete'?' (🚚 servicio de flete — transporte externo'+(o.ciudad_destino?' a '+o.ciudad_destino:'')+')':
+          ' ('+(o.from_stock&&parseInt(o.qty_produccion)>0?parseInt(o.qty_produccion):o.qty)+' uds'+(isSTK?' — reabastecimiento':(o.tipo==='accesorios'?' a comprar':' a producir'))+')')+'</div>'+
           (isSTK?'<div style="font-size:11px;background:#E8F0FE;color:#1a73e8;border-radius:6px;padding:4px 8px;margin-top:4px">🏭 Pedido de reabastecimiento de inventario — no es venta</div>':'')+
           (o.from_stock&&parseInt(o.qty_almacen)>0?
             '<div style="font-size:11px;background:#E6F4EA;color:#137333;border-radius:6px;padding:4px 8px;margin-top:4px">'+
@@ -7201,13 +7259,15 @@ function renderCCards(){
 
 function renderCompCardDetail(o,placas,acc,cp,ca,editable,isSTK){
   // Banner de requisición pendiente (no aplica a STK)
-  const reqPendiente=!isSTK&&!o.requisicion_confirmada;
+  // FLE suelto (externo): no hay requisición de Ingeniería — nunca se bloquea por ella.
+  const esFleSuelto=o.tipo==='flete';
+  const reqPendiente=!isSTK&&!esFleSuelto&&!o.requisicion_confirmada;
   const bannerReq=reqPendiente?
     '<div style="background:#FF6D00;color:#fff;border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+
       '<div><strong>📋 Pendiente: Recepción de requisición</strong><div style="font-size:11px;margin-top:2px">Confirma que recibiste la requisición de Ingeniería para habilitar los campos de material.</div></div>'+
       '<button onclick="event.stopPropagation();confirmarRequisicion(\'' +o.id+ '\')" style="background:#fff;color:#FF6D00;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✓ Confirmar</button>'+
     '</div>':
-    (!isSTK&&o.requisicion_confirmada?
+    (!isSTK&&!esFleSuelto&&o.requisicion_confirmada?
       '<div style="background:#E6F4EA;color:#137333;border-radius:6px;padding:6px 12px;margin-bottom:8px;font-size:11px">✅ Requisición recibida el '+fd(o.requisicion_confirmada_date)+(o.requisicion_confirmada_by?' · '+o.requisicion_confirmada_by:'')+'</div>':
       '');
   // Si la requisición no está confirmada, bloquear los selectores
@@ -7216,7 +7276,7 @@ function renderCompCardDetail(o,placas,acc,cp,ca,editable,isSTK){
   // para un accesorio) — se omite el campo entero en vez de mostrar un
   // "Pendiente" que nunca se va a resolver.
   const esAccPedido=o.tipo==='accesorios';
-  const campoPlacas=esAccPedido?'':(
+  const campoPlacas=(esAccPedido||esFleSuelto)?'':(
     '<div class="comp-field">'+
       '<div class="comp-field-label">🔩 Placas</div>'+
       (editableFinal?
@@ -7228,6 +7288,21 @@ function renderCompCardDetail(o,placas,acc,cp,ca,editable,isSTK){
       (editableFinal&&placas==='Pedido'?'<div class="comp-row"><input type="date" id="fp_'+o.id+'" value="'+(normDate(o.compras_placas_fecha)||'')+'" style="border-radius:8px;padding:4px 8px;font-size:11px;width:auto" onchange="updComprasFecha(\''+o.id+'\',\'placas\',this.value)"><label style="font-size:10px;color:var(--muted)"> Fecha est.</label></div>':'')+
     '</div>'
   );
+  // Servicio de flete: solo si el transporte es externo (el propio no es compra).
+  const fleSt=o.compras_flete||'Pendiente';
+  const fleBg=fleSt==='Contratado'?'#E6F4EA':'#FCE8E6';const fleCol=fleSt==='Contratado'?'#137333':'#C5221F';
+  const campoFlete=!fleteExterno(o)?'':(
+    '<div class="comp-field">'+
+      '<div class="comp-field-label">🚚 Servicio de flete</div>'+
+      '<div style="font-size:11px;color:var(--fle);margin:-2px 0 4px">Transporte externo'+(o.ciudad_destino?' — destino: '+escAttrInc(o.ciudad_destino):'')+(o.fle_desc?' · '+escAttrInc(o.fle_desc):'')+'</div>'+
+      (editableFinal?
+        '<div class="comp-row"><select class="sel-inline" style="background:'+fleBg+';color:'+fleCol+';border-color:'+fleBg+'" onchange="updCompras(\''+o.id+'\',\'flete\',this.value)">'+
+        COMPRAS_FLETE_OPTS.map(x=>'<option value="'+x+'"'+(x===fleSt?' selected':'')+'>'+x+'</option>').join('')+'</select></div>':
+        '<div class="comp-row"><span class="badge" style="background:'+fleBg+';color:'+fleCol+'">'+(reqPendiente?'🔒 Bloqueado':fleSt)+'</span></div>')+
+      (fleSt==='Contratado'&&o.compras_flete_fecha?'<div class="comp-date" style="color:#137333">✅ Contratado: '+fd(o.compras_flete_fecha)+'</div>':'')+
+    '</div>'
+  );
+  if(esFleSuelto)return bannerReq+'<div class="comp-fields">'+campoFlete+'</div>';
   return bannerReq+
   '<div class="comp-fields">'+
     campoPlacas+
@@ -7242,6 +7317,7 @@ function renderCompCardDetail(o,placas,acc,cp,ca,editable,isSTK){
       (acc==='Pedido'&&o.compras_accesorios_fecha?'<div class="comp-date">📅 Est. recepción: '+fd(o.compras_accesorios_fecha)+'</div>':'')+
       (editableFinal&&acc==='Pedido'?'<div class="comp-row"><input type="date" id="fa_'+o.id+'" value="'+(normDate(o.compras_accesorios_fecha)||'')+'" style="border-radius:8px;padding:4px 8px;font-size:11px;width:auto" onchange="updComprasFecha(\''+o.id+'\',\'accesorios\',this.value)"><label style="font-size:10px;color:var(--muted)"> Fecha est.</label></div>':'')+
     '</div>'+
+    campoFlete+
   '</div>';
 }
 
@@ -7308,11 +7384,12 @@ async function updCompras(oid,campo,val){
   const o=orders.find(x=>x.id===oid);if(!o)return;
   const n=new Date();const ts=n.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const by=CU.name+' ('+CU.area+')';
-  const key=campo==='placas'?'compras_placas':'compras_accesorios';
-  const keyFecha=campo==='placas'?'compras_placas_fecha':'compras_accesorios_fecha';
-  // Si se marca Recibido, guardar la fecha actual automáticamente
-  const fechaAuto=val==='Recibido'?today():(o[keyFecha]||'');
-  const upd={...o,[key]:val,[keyFecha]:fechaAuto,log:[...(o.log||[]),{by,msg:'Compras '+campo+': "'+val+'"'+(val==='Recibido'?' — '+fechaAuto:''),ts}]};
+  const key={placas:'compras_placas',accesorios:'compras_accesorios',flete:'compras_flete'}[campo];
+  const keyFecha=key+'_fecha';
+  if(!key)return;
+  // Si se marca Recibido / Contratado, guardar la fecha actual automáticamente
+  const fechaAuto=(val==='Recibido'||val==='Contratado')?today():(campo==='flete'?'':(o[keyFecha]||''));
+  const upd={...o,[key]:val,[keyFecha]:fechaAuto,log:[...(o.log||[]),{by,msg:'Compras '+campo+': "'+val+'"'+((val==='Recibido'||val==='Contratado')?' — '+fechaAuto:''),ts}]};
   try{await apiSave(upd);const idx=orders.findIndex(x=>x.id===oid);if(idx>=0)orders[idx]=upd;toast(campo+' actualizado ✓');renderActiveView();}catch(e){showAlert('Error.','❌');}
 }
 
@@ -9745,7 +9822,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-08-2300';
+const APP_VERSION = '2026-10-12-1200';
 
 let _versionCheckTimer = null;
 
