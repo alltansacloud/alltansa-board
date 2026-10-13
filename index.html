@@ -2379,6 +2379,21 @@ function requiereCompras(o){
   return true;
 }
 
+// LUZ VERDE para Ingeniería — fuente única (oct 2026). Antes la badge de
+// Estatus de Admin solo leía anticipo_status y un pedido de contado con 0% de
+// anticipo (o de crédito) se mostraba "⏳ Pend. anticipo" para siempre, aunque
+// Ingeniería ya lo tenía liberado. Mismo criterio que autorizarEtapa y que el
+// correo de luz verde al crear el pedido (apps_script saveOrder).
+function anticipoLiberado(o){
+  if(!o)return false;
+  if(o.tipo==='stk')return true;
+  const cond=String(o.condicion_pago||'').toLowerCase();
+  if(cond.includes('crédito')||cond.includes('credito'))return true;
+  if((parseInt(o.pct_anticipo)||0)===0)return true;
+  const a=o.anticipo_status||'Pendiente';
+  return a==='Anticipo recibido'||a==='Sin anticipo';
+}
+
 // Anticipo cubierto (o no pactado) — mismo criterio que autorizarEtapa/luzVerde.
 function _anticipoOk(o){
   const antic=o.anticipo_status||'Pendiente';
@@ -2696,9 +2711,8 @@ function estasBadge(o){
   if(!o.stages)return'<span class="badge b-pend">En curso</span>';
   const ing=o.stages.ingenieria&&o.stages.ingenieria.done;
   const req=o.stages.requisicion&&o.stages.requisicion.done;
-  const antic=o.anticipo_status||'Pendiente';
-  const anticOk=antic==='Anticipo recibido'||antic==='Sin anticipo';
-  if(!anticOk&&o.tipo!=='stk')return'<span class="badge b-pend">⏳ Pend. anticipo</span>';
+  const anticOk=anticipoLiberado(o);
+  if(!anticOk)return'<span class="badge b-pend">⏳ Pend. anticipo</span>';
   if(!ing)return'<span class="badge b-pend">⏳ Pend. ingeniería</span>';
   if(!req)return'<span class="badge b-pend">⏳ Pend. requisición</span>';
   if(ing&&req&&anticOk)return'<span class="badge" style="background:#FEF3CD;color:#854F0B">⚡ Lista para producción</span>';
@@ -4263,13 +4277,7 @@ function renderIngBody(){
     const activosAll=orders.filter(o=>o.tipo!=='flete'&&!['closed','stk_done','cancelado'].includes(gSt(o)));
     const activos=iSearch?activosAll.filter(function(o){return matchSearch(o,iSearch);}):activosAll;
 
-    function luzVerde(o){
-      const pct=Number(o.pct_anticipo||0);
-      const cond=String(o.condicion_pago||'').toLowerCase();
-      if(o.tipo==='stk')return true;
-      if(cond.includes('crédito')||cond.includes('credito')||pct===0)return true;
-      return (o.anticipo_status||'Pendiente')==='Anticipo recibido';
-    }
+    const luzVerde=anticipoLiberado; // fuente única (ver definición global)
     const ingDone=function(o){return !!(o.stages&&o.stages.ingenieria&&o.stages.ingenieria.done);};
     const reqDone=function(o){return !!(o.stages&&o.stages.requisicion&&o.stages.requisicion.done);};
 
@@ -9822,7 +9830,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-12-1200';
+const APP_VERSION = '2026-10-12-1500';
 
 let _versionCheckTimer = null;
 
