@@ -1274,6 +1274,7 @@ textarea{resize:vertical;min-height:58px}
         <option value="liquidado">Liquidado</option>
         <option value="vencido">Vencido</option>
         <option value="cancelado">Cancelado</option>
+        <option value="con_alerta">⚠ Con discrepancias</option>
       </select>
       <div class="search-wrap">
         <input class="search-inp" id="ctSearch" placeholder="Buscar folio, cliente, pedido cliente, factura..." oninput="renderContab()" style="width:280px">
@@ -1337,6 +1338,7 @@ textarea{resize:vertical;min-height:58px}
       <button style="background:#E37400;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔑 Autorizar embarque sin pago completo (Dirección)</button>
     </div>
     <div id="ctBannerSinFactura" style="margin-bottom:12px"></div>
+    <div id="ctBannerDiscrep"></div>
       <!-- Tabs internas -->
       <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">
         <button id="ctMTabFact" onclick="ctMTab('fact')" style="padding:8px 18px;border:none;background:none;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid var(--navy);color:var(--navy);margin-bottom:-2px">Facturas</button>
@@ -8846,8 +8848,80 @@ function ctFacturaEnMes(f, filtMes) {
 // (o con cualquier factura si es "Todos los meses"), sin importar si ya se
 // cobró, venció o le falta facturar algo. La vista anterior se conserva
 // como "Al corriente" (value 'facturado').
+// ── Discrepancias (oct 2026, pedido de Alex: "alertas en todo lo que no
+// coincida") ──────────────────────────────────────────────────────────────
+// Fuente única de las alertas por pedido. Solo usa las funciones base
+// (ctTotalFacturado, ctTotalSinIvaFacturado, ctTotalCobrado, ctValorPedido),
+// así que respeta notas de crédito y facturas canceladas. Umbral de $1 para
+// no alertar por centavos de redondeo. Niveles:
+//   'error' → algo está mal capturado o pendiente de corregir (rojo)
+//   'info'  → no es error pero no cuadra y conviene revisarlo (ámbar)
+const CT_TOL = 1;
+function ctDiscrepancias(o) {
+  if (!o || o.tipo === 'stk') return [];
+  const out = [];
+  const folio = o.folio || o.id;
+  const facts = ctFacturasDePedido(folio);
+  const regs = ctRegistrosDePedido(folio);
+  const cobrado = ctTotalCobrado(folio);
+  const valor = ctValorPedido(o);
+  const sinIvaFact = ctTotalSinIvaFacturado(folio);
+  const totalFact = ctTotalFacturado(folio);
+  const st = gSt(o);
+  const sinFact = !!(o.sin_factura && o.sin_factura.done);
+  const lbl = f => ctLblCfdi(f);
+
+  if (st === 'cancelado') {
+    if (facts.length) out.push({nivel:'error', corto:'Cancelado con factura vigente',
+      detalle:'El pedido está cancelado pero '+facts.map(lbl).join(', ')+' sigue vigente ('+ctFmt(totalFact)+' c/IVA) y cuenta en Facturado. Si ya se canceló en el SAT, regístralo con 🚫 Cancelar SAT; si no, es deuda real.'});
+    if (cobrado > CT_TOL) out.push({nivel:'error', corto:'Cancelado con pagos '+ctFmt(cobrado),
+      detalle:'El pedido está cancelado pero tiene '+ctFmt(cobrado)+' en pagos. ¿Se devolvió el dinero o se aplicó a otro pedido? Corrige el abono.'});
+  } else {
+    // Cobrado vs facturado (con IVA)
+    if (facts.length && cobrado - totalFact > CT_TOL) out.push({nivel:'error', corto:'Cobrado de más '+ctFmt(cobrado - totalFact),
+      detalle:'Se cobró '+ctFmt(cobrado)+' y lo facturado (neto, c/IVA) es '+ctFmt(totalFact)+'. Revisa si un abono está duplicado, capturado en el pedido equivocado, o si falta capturar una factura.'});
+    // Facturado vs valor del pedido (sin IVA)
+    if (sinIvaFact - valor > CT_TOL) out.push({nivel:'error', corto:'Facturado de más '+ctFmt(sinIvaFact - valor),
+      detalle:'Lo facturado (neto, sin IVA) es '+ctFmt(sinIvaFact)+' y el pedido vale '+ctFmt(valor)+'. Si hubo cancelación parcial, emite una nota de crédito o cancela/sustituye la factura; si el pedido creció, ajusta su valor.'});
+    // Pedido "Sin factura" cobrado de más (base sin IVA)
+    if (sinFact && !facts.length && cobrado - valor > CT_TOL) out.push({nivel:'error', corto:'Cobrado de más '+ctFmt(cobrado - valor),
+      detalle:'Pedido marcado "Sin factura": vale '+ctFmt(valor)+' y se cobró '+ctFmt(cobrado)+'.'});
+    // Pagado sin ninguna factura y sin marcar "Sin factura"
+    if (!facts.length && !sinFact && cobrado > CT_TOL && ctSaldoEfectivo(o) <= 0.01) out.push({nivel:'info', corto:'Pagado sin factura '+ctFmt(cobrado),
+      detalle:'Se cobró '+ctFmt(cobrado)+' y no hay ninguna factura vigente. Captura la factura, o si nunca se va a facturar márcalo "Sin factura" (Dirección). Por eso Cobrado supera a Facturado en los totales.'});
+    // Pagos de más sobre lo que se esperaría con factura futura (anticipos > valor c/IVA)
+    if (!facts.length && !sinFact && cobrado - totalConIvaPedido(o) > CT_TOL) out.push({nivel:'error', corto:'Cobrado de más '+ctFmt(cobrado - totalConIvaPedido(o)),
+      detalle:'Sin factura todavía, pero lo cobrado ('+ctFmt(cobrado)+') supera el valor del pedido con IVA ('+ctFmt(totalConIvaPedido(o))+').'});
+    // Marcado "Sin factura" pero tiene facturas vigentes
+    if (sinFact && facts.length) out.push({nivel:'error', corto:'"Sin factura" con facturas',
+      detalle:'El pedido está marcado "Sin factura" pero tiene '+facts.map(lbl).join(', ')+' vigente(s). Quita la marca o cancela la factura.'});
+  }
+  // Cancelación con motivo 01 cuya factura sustituta no está capturada
+  regs.filter(f => ctEsCancelada(f) && String(f.motivo_cancelacion) === '01' && f.sustituida_por).forEach(f => {
+    const existe = ctFacturas.some(x => String(x.num_factura) === String(f.sustituida_por) && !ctEsCancelada(x));
+    if (!existe) out.push({nivel:'error', corto:'Falta sustituta '+f.sustituida_por,
+      detalle:lbl(f)+' se canceló con motivo 01 (sustituida por '+f.sustituida_por+'), pero esa factura no está capturada en el Board.'});
+  });
+  return out;
+}
+function ctChipsDiscrepancia(o) {
+  const d = ctDiscrepancias(o);
+  if (!d.length) return '';
+  return d.map(x => '<div title="'+String(x.detalle).replace(/"/g,'&quot;')+'" style="margin-top:4px;display:inline-block;cursor:help;background:'+(x.nivel==='error'?'#FFEBEE':'#FFF8E1')+';color:'+(x.nivel==='error'?'#C0391B':'#8D6E00')+';border:1px solid '+(x.nivel==='error'?'#FFCDD2':'#FFE082')+';padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:700;white-space:nowrap">'+(x.nivel==='error'?'⚠ ':'ⓘ ')+x.corto+'</div>').join('<br>');
+}
+function ctBannerDiscrepancias(o) {
+  const d = ctDiscrepancias(o);
+  if (!d.length) return '';
+  const hayError = d.some(x => x.nivel === 'error');
+  return '<div style="background:'+(hayError?'#FFF5F5':'#FFFBEA')+';border:1px solid '+(hayError?'#FFCDD2':'#FFE082')+';border-radius:8px;padding:10px 14px;margin-bottom:12px">' +
+    '<div style="font-weight:700;font-size:13px;color:'+(hayError?'#C0391B':'#8D6E00')+';margin-bottom:4px">'+(hayError?'⚠':'ⓘ')+' Este pedido no cuadra</div>' +
+    d.map(x => '<div style="font-size:12px;margin-top:4px;color:var(--text)"><strong style="color:'+(x.nivel==='error'?'#C0391B':'#8D6E00')+'">'+x.corto+':</strong> '+x.detalle+'</div>').join('') +
+    '</div>';
+}
+
 function ctPasaFiltroEstatus(o, filtEst, filtMes) {
   if (!filtEst) return true;
+  if (filtEst === 'con_alerta') return ctDiscrepancias(o).length > 0;
   if (filtEst === 'con_factura') {
     // Incluye notas de crédito: si en el mes hubo una NC, ese pedido movió el
     // Facturado del mes y debe aparecer para que el pie cuadre con la tarjeta.
@@ -8996,7 +9070,7 @@ function renderContab() {
         ? '<td style="font-size:13px;font-weight:700;color:'+(saldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(Math.max(0,saldo))+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+pctSaldoCobro+'% pend.</span></td>'
         : '<td style="font-size:13px;color:var(--muted)">—<br><span style="font-size:10px;color:var(--muted)">sin facturar</span></td>') +
       '<td style="font-size:12px">'+vencTxt+'</td>' +
-      '<td>'+semaforo+' '+badgeEstDinamico(est, pctPend)+badgeSinFactura+'</td>' +
+      '<td>'+semaforo+' '+badgeEstDinamico(est, pctPend)+badgeSinFactura+ctChipsDiscrepancia(o)+'</td>' +
       '<td><button data-folio="'+folio+'" onclick="event.stopPropagation();openCTModal(this.dataset.folio)" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">Abrir</button></td>' +
       '</tr>';
   }).join('');
@@ -9078,7 +9152,9 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
   });
 
   const n = pedidos.length;
-  const etiqueta = 'TOTAL — ' + n + ' pedido' + (n===1?'':'s') + ' filtrado' + (n===1?'':'s');
+  const nDisc = pedidos.filter(o => ctDiscrepancias(o).length).length;
+  const etiqueta = 'TOTAL — ' + n + ' pedido' + (n===1?'':'s') + ' filtrado' + (n===1?'':'s') +
+    (nDisc ? '<br><span style="font-size:10.5px;font-weight:700;color:#C0391B;cursor:pointer" title="Filtrar solo los pedidos con discrepancias" onclick="document.getElementById(\'ctFiltroEstatus\').value=\'con_alerta\';renderContab()">⚠ '+nDisc+' con discrepancias</span>' : '');
   const subFact    = filtMes
     ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)">sin IVA · '+labelMesCorto+'</span>' +
       (Math.abs(sumFactOtros) > 0.01
@@ -9207,6 +9283,8 @@ function openCTModal(folio) {
   // Banner / botón de "Sin factura"
   const bannerSFEl = document.getElementById('ctBannerSinFactura');
   if (bannerSFEl) bannerSFEl.innerHTML = ctBannerSinFactura(o);
+  const bannerDiscEl = document.getElementById('ctBannerDiscrep');
+  if (bannerDiscEl) bannerDiscEl.innerHTML = ctBannerDiscrepancias(o);
   const sinIvaFact2  = ctTotalSinIvaFacturado(folio2);
   const porFacturar2 = ctPorFacturar(o);
   const pctFact2     = valorPedido > 0 ? Math.round((sinIvaFact2 / valorPedido) * 100) : 0;
@@ -9300,6 +9378,7 @@ function ctMTab(tab) {
 // ── Render lista facturas ─────────────────────────
 function ctRenderFactList() {
   if (!ctOrderActivo) return;
+  { const _bd = document.getElementById('ctBannerDiscrep'); if (_bd) _bd.innerHTML = ctBannerDiscrepancias(ctOrderActivo); }
   const folio = ctOrderActivo.folio||ctOrderActivo.id;
   // Historial completo: facturas vigentes y canceladas, cada una con sus
   // notas de crédito debajo (oct 2026). Solo las vigentes cuentan en cifras.
@@ -9386,6 +9465,7 @@ function ctRenderFactList() {
 // ── Render lista abonos ───────────────────────────
 function ctRenderAbonoList() {
   if (!ctOrderActivo) return;
+  { const _bd = document.getElementById('ctBannerDiscrep'); if (_bd) _bd.innerHTML = ctBannerDiscrepancias(ctOrderActivo); }
   const folio = ctOrderActivo.folio||ctOrderActivo.id;
   const abonos = ctAbonosDePedido(folio).sort((a,b)=>new Date(a.fecha_abono)-new Date(b.fecha_abono));
   const el = document.getElementById('ctAbonoList');
@@ -10350,7 +10430,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-17-1800';
+const APP_VERSION = '2026-10-17-2000';
 
 let _versionCheckTimer = null;
 
