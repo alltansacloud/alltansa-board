@@ -1362,7 +1362,7 @@ textarea{resize:vertical;min-height:58px}
       <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:14px" id="ctFormFactTitle">Nueva factura</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="fg"><label>No. Factura (ContPAQ)</label><input id="ctFNum" type="text" placeholder="Ej. 0234"></div>
-        <div class="fg"><label>Fecha emisión</label><input id="ctFFecha" type="date"></div>
+        <div class="fg"><label>Fecha emisión</label><input id="ctFFecha" type="date" onchange="ctCalcVenc()"></div>
         <div class="fg"><label>Tipo</label>
           <select id="ctFTipo">
             <option value="Anticipo">Anticipo</option>
@@ -8481,6 +8481,42 @@ function ctFacturasConSaldoFIFO(folio) {
   return facts;
 }
 
+// FIX (oct 2026, caso GOMAN A-2609-19): las fechas que regresan del Sheet
+// pueden venir como 'YYYY-MM-DD' o como ISO con hora ('2026-10-08T06:00:00.000Z',
+// cuando Sheets las convierte a fecha). Un <input type="date"> RECHAZA el ISO
+// con hora y se queda vacío — así, al editar una factura, "Fecha vencimiento"
+// (readonly) quedaba en blanco y se guardaba vacía, y el pedido dejaba de
+// poder marcarse "Vencido". ctFechaISO() normaliza cualquier formato a
+// 'YYYY-MM-DD' (día local) para llenar inputs de fecha.
+function ctFechaISO(v) {
+  if (!v) return '';
+  const str = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const d = new Date(v);
+  if (isNaN(d)) return '';
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// Fuente única de la fecha de vencimiento de UNA factura (Date a medianoche
+// local, o null). Si la factura no trae fecha_vencimiento capturada, se
+// deriva de fecha_factura + dias_credito (0 = contado → vence el día de
+// emisión), igual que hace ctCalcVenc() en el formulario. Antes, una factura
+// sin vencimiento quedaba fuera del semáforo y su saldo se sumaba en
+// silencio a "Cartera vigente" aunque ya estuviera vencida.
+function ctFechaVencFactura(f) {
+  const iso = ctFechaISO(f.fecha_vencimiento);
+  if (iso) {
+    const [y,m,d] = iso.split('-').map(Number);
+    return new Date(y, m-1, d);
+  }
+  const isoF = ctFechaISO(f.fecha_factura);
+  if (!isoF) return null;
+  const [y,m,d] = isoF.split('-').map(Number);
+  return new Date(y, m-1, d + (parseInt(f.dias_credito)||0));
+}
+// true si la fecha se dedujo (no estaba capturada en la factura)
+function ctVencEsDerivado(f) { return !ctFechaISO(f.fecha_vencimiento); }
+
 function ctEstatusCartera(o) {
   // Un pedido cancelado se marca así SIEMPRE, sin importar si tiene o no
   // facturas/abonos previos — para que Contabilidad lo vea de inmediato y no
@@ -8503,10 +8539,9 @@ function ctEstatusCartera(o) {
   // Checar vencidos (hay una factura con saldo FIFO real y su fecha ya pasó)
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const vencida = ctFacturasConSaldoFIFO(folio).some(f => {
-    if (!f.fecha_vencimiento) return false;
     if (f._saldoFifo <= 0.01) return false; // esta factura en particular ya está pagada (FIFO)
-    const vd = new Date(f.fecha_vencimiento);
-    return vd < hoy;
+    const vd = ctFechaVencFactura(f);
+    return !!vd && vd < hoy;
   });
   if (vencida) return 'vencido';
   // Facturado completo pero pendiente de cobro
@@ -8525,8 +8560,9 @@ function ctProximoVencimiento(folio) {
   // real pendiente — y toma la más próxima a vencer entre esas (puede ser
   // pasada o futura; si ya venció, el badge/semáforo rojo lo indica aparte).
   const fechas = ctFacturasConSaldoFIFO(folio)
-    .filter(f => f.fecha_vencimiento && f._saldoFifo > 0.01)
-    .map(f => new Date(f.fecha_vencimiento))
+    .filter(f => f._saldoFifo > 0.01)
+    .map(f => ctFechaVencFactura(f))
+    .filter(Boolean)
     .sort((a,b) => a-b);
   return fechas.length ? fechas[0] : null;
 }
@@ -8547,11 +8583,11 @@ function ctSemaforoVenc(folio, saldo) {
   // Ahora se aplican los abonos en orden FIFO (ver ctFacturasConSaldoFIFO)
   // y solo cuentan las fechas de las facturas que, después de aplicar los
   // pagos en ese orden, siguen con saldo real pendiente.
-  const facts = ctFacturasConSaldoFIFO(folio).filter(f => f.fecha_vencimiento && f._saldoFifo > 0.01);
+  const facts = ctFacturasConSaldoFIFO(folio).filter(f => f._saldoFifo > 0.01 && ctFechaVencFactura(f));
   if (!facts.length) return '';
   let minDiff = Infinity;
   facts.forEach(f => {
-    const diff = Math.floor((new Date(f.fecha_vencimiento) - hoy) / 86400000);
+    const diff = Math.round((ctFechaVencFactura(f) - hoy) / 86400000);
     if (diff < minDiff) minDiff = diff;
   });
   if (minDiff < 0) return '<span style="color:#C0391B;font-weight:700">● Vencido '+Math.abs(minDiff)+'d</span>';
@@ -8811,7 +8847,14 @@ function renderContab() {
       '<td style="font-size:13px">'+ctFmt(totalFact)+'<br><span style="font-size:10px;color:var(--muted)">'+pctFact+'% fact.</span></td>' +
       '<td style="font-size:13px;font-weight:700;color:'+(porFacturar>0?'#E37400':'#34A853')+'">'+ctFmt(porFacturar)+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+pctPend+'% pend.</span></td>' +
       '<td style="font-size:13px;color:#34A853;font-weight:600">'+ctFmt(cobrado)+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+pctCobrado+'% cob.</span></td>' +
-      '<td style="font-size:13px;font-weight:700;color:'+(saldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(Math.max(0,saldo))+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+pctSaldoCobro+'% pend.</span></td>' +
+      // FIX (oct 2026, caso CLEVELAND A-2609-16): un pedido sin ninguna factura
+      // ni abono no es deuda formal todavía — la celda mostraba el valor del
+      // pedido con IVA como "Saldo x cobrar de lo facturado", contradiciendo
+      // el pie de tabla y los KPIs (que ya usan ctSaldoCarteraReal). Ahora
+      // muestra "—" con la nota "sin facturar", igual que el resto del sistema.
+      (ctTieneActividad(folio)
+        ? '<td style="font-size:13px;font-weight:700;color:'+(saldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(Math.max(0,saldo))+'<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+pctSaldoCobro+'% pend.</span></td>'
+        : '<td style="font-size:13px;color:var(--muted)">—<br><span style="font-size:10px;color:var(--muted)">sin facturar</span></td>') +
       '<td style="font-size:12px">'+vencTxt+'</td>' +
       '<td>'+semaforo+' '+badgeEstDinamico(est, pctPend)+badgeSinFactura+'</td>' +
       '<td><button data-folio="'+folio+'" onclick="event.stopPropagation();openCTModal(this.dataset.folio)" style="background:var(--navy);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">Abrir</button></td>' +
@@ -9127,7 +9170,7 @@ function ctRenderFactList() {
       '<div><span style="color:var(--muted)">IVA</span><br><strong>'+ctFmt(f.iva)+'</strong></div>' +
       ((parseFloat(f.ret_iva)||0)>0?'<div><span style="color:var(--muted)">Ret. IVA 4%</span><br><strong style="color:#C0391B">−'+ctFmt(f.ret_iva)+'</strong></div>':'') +
       '<div><span style="color:var(--muted)">Total</span><br><strong>'+ctFmt(f.monto_total)+'</strong></div>' +
-      '<div><span style="color:var(--muted)">Vencimiento</span><br><strong>'+ctFmtFecha(f.fecha_vencimiento)+'</strong></div>' +
+      '<div><span style="color:var(--muted)">Vencimiento</span><br><strong>'+(ctFechaVencFactura(f)?ctFmtFecha(ctFechaVencFactura(f).toISOString()):'—')+'</strong>'+(ctVencEsDerivado(f)&&ctFechaVencFactura(f)?' <span title="La factura no tiene fecha de vencimiento capturada — se calculó con emisión + días de crédito. Edita y guarda la factura para fijarla." style="color:#E37400;font-size:11px;cursor:help">⚠ calc.</span>':'')+'</div>' +
       '<div><span style="color:var(--muted)">Días crédito</span><br><strong>'+(f.dias_credito||'0')+' días</strong></div>' +
 
       '</div>' +
@@ -9182,11 +9225,11 @@ function ctRenderTimeline() {
         texto: 'Factura emitida — FAC-'+f.num_factura+' · '+f.tipo_factura+' · '+ctFmt(f.monto_total)});
     }
 
-    if (f.fecha_vencimiento) {
-      const vd = new Date(f.fecha_vencimiento);
+    const vd = ctFechaVencFactura(f);
+    if (vd) {
       const hoy = new Date(); hoy.setHours(0,0,0,0);
       events.push({fecha: vd, tipo: vd < hoy ? 'vencido' : 'vencimiento',
-        texto: (vd < hoy ? 'VENCIDO — ' : 'Vence — ') + 'FAC-'+f.num_factura+' · '+ctFmtFecha(f.fecha_vencimiento)});
+        texto: (vd < hoy ? 'VENCIDO — ' : 'Vence — ') + 'FAC-'+f.num_factura+' · '+ctFmtFecha(vd.toISOString())});
     }
   });
 
@@ -9264,7 +9307,7 @@ function editarFactura(id) {
   document.getElementById('ctFEditId').value = f.id;
   document.getElementById('ctFormFactTitle').textContent = 'Editar factura';
   document.getElementById('ctFNum').value = f.num_factura||'';
-  document.getElementById('ctFFecha').value = f.fecha_factura||'';
+  document.getElementById('ctFFecha').value = ctFechaISO(f.fecha_factura);
   document.getElementById('ctFTipo').value = f.tipo_factura||'Anticipo';
   document.getElementById('ctFPct').value = f.pct_pedido||'';
   document.getElementById('ctFConcepto').value = f.concepto||'General';
@@ -9275,7 +9318,10 @@ function editarFactura(id) {
   _ctToggleRet(parseFloat(f.ret_iva)||0);
   ctCalcTotalFact();
   document.getElementById('ctFDias').value = f.dias_credito||'0';
-  document.getElementById('ctFVenc').value = f.fecha_vencimiento||'';
+  document.getElementById('ctFVenc').value = ctFechaISO(f.fecha_vencimiento);
+  // Si la factura venía sin vencimiento (caso GOMAN), calcularlo ya con
+  // emisión + días de crédito para que al guardar quede fijado.
+  if (!document.getElementById('ctFVenc').value) ctCalcVenc();
   document.getElementById('ctFNotas').value = f.notas||'';
   document.getElementById('ctFormFact').classList.remove('hidden');
   document.getElementById('ctFormAbono').classList.add('hidden');
@@ -9373,6 +9419,10 @@ async function guardarFactura() {
     const retIva = (retWrap && retWrap.style.display !== 'none') ? _r2(parseFloat(document.getElementById('ctFRet').value)||0) : 0;
     if (retIva < 0 || retIva > iva + 0.01) { showAlert('La retención no puede ser negativa ni mayor que el IVA de la factura.','⚠️'); return; }
     const editId = document.getElementById('ctFEditId').value;
+    // Garantía: la fecha de vencimiento SIEMPRE se recalcula con la emisión y
+    // los días de crédito actuales antes de guardar — nunca se guarda vacía
+    // ni desfasada si se cambió la fecha de emisión.
+    ctCalcVenc();
     const data = {
       id: editId || '',
       tipo: 'factura',
@@ -9451,7 +9501,7 @@ function editarAbono(id) {
   _ctGuardandoAbono = false;
   document.getElementById('ctAEditId').value = a.id;
   document.getElementById('ctFormAbonoTitle').textContent = 'Editar abono';
-  document.getElementById('ctAFecha').value = a.fecha_abono||'';
+  document.getElementById('ctAFecha').value = ctFechaISO(a.fecha_abono);
   document.getElementById('ctAMonto').value = a.monto||'';
   document.getElementById('ctAForma').value = a.forma_pago||'Transferencia';
   document.getElementById('ctARef').value = a.referencia||'';
@@ -9830,7 +9880,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-12-1500';
+const APP_VERSION = '2026-10-17-1200';
 
 let _versionCheckTimer = null;
 
