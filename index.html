@@ -1269,7 +1269,8 @@ textarea{resize:vertical;min-height:58px}
         <option value="">Todos los estatus</option>
         <option value="sin_facturar">Sin facturar</option>
         <option value="parcial">Parcial</option>
-        <option value="facturado">Facturado</option>
+        <option value="con_factura">Facturado</option>
+        <option value="facturado">Al corriente</option>
         <option value="liquidado">Liquidado</option>
         <option value="vencido">Vencido</option>
         <option value="cancelado">Cancelado</option>
@@ -8721,6 +8722,33 @@ function ctCoincideBusqueda(o, s) {
   return folio.includes(s) || cliente.includes(s) || numCliente.includes(s) || facturas.includes(s);
 }
 
+// ¿La factura f se emitió en el mes filtMes ('YYYY-MM')? Mismo criterio que
+// ya usaba el filtro de mes de la tabla (fecha_factura, día local).
+function ctFacturaEnMes(f, filtMes) {
+  if (!f.fecha_factura) return false;
+  const d = new Date(f.fecha_factura);
+  if (isNaN(d)) return false;
+  return (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')) === filtMes;
+}
+
+// Predicado del dropdown de Estatus — compartido por la tabla y las tarjetas.
+// FIX (oct 2026, decisión de Alex): "Facturado" (con_factura) ya NO es el
+// estatus 'facturado' de ctEstatusCartera (facturado 100%, pendiente de
+// cobro y NO vencido — casi siempre vacío, porque en cuanto se paga pasa a
+// Liquidado y en cuanto vence pasa a Vencido). Ahora significa "todo lo que
+// se facturó": pedidos con al menos una factura emitida en el mes elegido
+// (o con cualquier factura si es "Todos los meses"), sin importar si ya se
+// cobró, venció o le falta facturar algo. La vista anterior se conserva
+// como "Al corriente" (value 'facturado').
+function ctPasaFiltroEstatus(o, filtEst, filtMes) {
+  if (!filtEst) return true;
+  if (filtEst === 'con_factura') {
+    const facts = ctFacturasDePedido(o.folio || o.id);
+    return filtMes ? facts.some(f => ctFacturaEnMes(f, filtMes)) : facts.length > 0;
+  }
+  return ctEstatusCartera(o) === filtEst;
+}
+
 function renderContab() {
   const s = (document.getElementById('ctSearch').value||'').toLowerCase().trim();
   const filtMes = document.getElementById('ctFiltroMes').value;
@@ -8752,7 +8780,7 @@ function renderContab() {
     return true;
   });
   if (s) pedidos = pedidos.filter(o => ctCoincideBusqueda(o, s));
-  if (filtEst) pedidos = pedidos.filter(o => ctEstatusCartera(o) === filtEst);
+  if (filtEst) pedidos = pedidos.filter(o => ctPasaFiltroEstatus(o, filtEst, filtMes));
 
   // ── Base para CARTERA (tarjetas KPI): independiente del checkbox "Ver
   // pedidos cerrados" — Cartera es "cuánto me deben HOY", sin importar qué
@@ -8763,9 +8791,11 @@ function renderContab() {
   // poder ver la cartera de un cliente o estatus puntual.
   let pedidosParaCartera = orders.filter(o => o.tipo !== 'stk' && gSt(o) !== 'cancelado');
   if (s) pedidosParaCartera = pedidosParaCartera.filter(o => ctCoincideBusqueda(o, s));
-  if (filtEst) pedidosParaCartera = pedidosParaCartera.filter(o => ctEstatusCartera(o) === filtEst);
-  // SIN el filtro de mes — Cartera vigente/vencida/por-facturar es "lo que
-  // se debe hoy", no debe moverse según qué mes elijas en el dropdown.
+  // Con "Facturado" + un mes, las tarjetas de Cartera/Por facturar responden
+  // "¿cuánto me falta de lo que facturé en ese mes?" (ctPasaFiltroEstatus ya
+  // aplica el mes en ese caso). Con cualquier otro estatus siguen SIN el
+  // filtro de mes — Cartera es "lo que se debe hoy".
+  if (filtEst) pedidosParaCartera = pedidosParaCartera.filter(o => ctPasaFiltroEstatus(o, filtEst, filtMes));
 
   // Filtro mes — aspecto FISCAL: un pedido entra si tiene al menos una
   // factura con fecha_factura dentro del mes elegido (no por fecha de
@@ -8774,11 +8804,7 @@ function renderContab() {
   if (filtMes) {
     pedidosTabla = pedidos.filter(o => {
       const folio = o.folio||o.id;
-      return ctFacturasDePedido(folio).some(f => {
-        if (!f.fecha_factura) return false;
-        const d = new Date(f.fecha_factura);
-        return (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')) === filtMes;
-      });
+      return ctFacturasDePedido(folio).some(f => ctFacturaEnMes(f, filtMes));
     });
   }
 
@@ -9880,7 +9906,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-17-1200';
+const APP_VERSION = '2026-10-17-1330';
 
 let _versionCheckTimer = null;
 
