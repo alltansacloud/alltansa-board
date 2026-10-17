@@ -1395,6 +1395,56 @@ textarea{resize:vertical;min-height:58px}
         <button onclick="cancelarFormFact()" style="background:#F1F3F4;color:var(--text);border:none;padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer">Cancelar</button>
       </div>
     </div>
+    <!-- Formulario nota de crédito (oct 2026) -->
+    <div id="ctFormNC" class="hidden" style="border-top:1px solid var(--border);padding:20px 24px;background:#FFF8F7">
+      <div style="font-size:14px;font-weight:700;color:#C0391B;margin-bottom:4px" id="ctFormNCTitle">Nota de crédito</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px" id="ctNCHint"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg"><label>Folio de la nota de crédito</label><input id="ctNCNum" type="text" placeholder="Ej. NC12"></div>
+        <div class="fg"><label>Fecha de emisión</label><input id="ctNCFecha" type="date"></div>
+        <div class="fg" style="grid-column:1/-1"><label>Motivo</label>
+          <select id="ctNCMotivo">
+            <option>Devolución / cancelación parcial</option>
+            <option>Descuento / bonificación</option>
+            <option>Error de precio</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="fg"><label>Monto sin IVA ($)</label><input id="ctNCMonto" type="number" min="0" step="0.01" placeholder="0.00" oninput="ctNCCalc()"></div>
+        <div class="fg"><label>IVA (16%)</label><input id="ctNCIva" type="number" readonly style="background:#F8F9FC;color:var(--muted)"></div>
+        <div class="fg" id="ctNCRetWrap" style="display:none"><label>Retención IVA 4% (flete)</label><input id="ctNCRet" type="number" min="0" step="0.01" oninput="ctNCCalcTotal()"><div style="font-size:10px;color:var(--muted);margin-top:2px">Sugerida proporcional a la factura, editable</div></div>
+        <div class="fg"><label>Total nota de crédito</label><input id="ctNCTotal" type="text" readonly style="background:#F8F9FC;color:#C0391B;font-weight:700"></div>
+      </div>
+      <div class="fg" style="margin-top:8px"><label>Notas</label><input id="ctNCNotas" type="text" placeholder="Opcional..."></div>
+      <input type="hidden" id="ctNCFactId"><input type="hidden" id="ctNCEditId">
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button id="ctNCBtnGuardar" onclick="guardarNotaCredito()" style="background:#C0391B;color:#fff;border:none;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Guardar nota de crédito</button>
+        <button onclick="_ctOcultarFormsCfdi()" style="background:#F1F3F4;color:var(--text);border:none;padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer">Cancelar</button>
+      </div>
+    </div>
+    <!-- Formulario cancelación ante el SAT (oct 2026) -->
+    <div id="ctFormCanc" class="hidden" style="border-top:1px solid var(--border);padding:20px 24px;background:#F5F7F8">
+      <div style="font-size:14px;font-weight:700;color:#455A64;margin-bottom:4px" id="ctFormCancTitle">Cancelar ante el SAT</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Registra aquí una cancelación que YA se hizo en el SAT. No borra el registro: queda en el historial y deja de contar en Facturado y Cartera (desaparece de su mes original).</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg"><label>Fecha de cancelación</label><input id="ctCancFecha" type="date"></div>
+        <div class="fg"><label>Motivo SAT</label>
+          <select id="ctCancMotivo" onchange="_ctToggleSust()">
+            <option value="01">01 · Con relación (hay CFDI sustituto)</option>
+            <option value="02">02 · Con errores sin relación</option>
+            <option value="03">03 · No se llevó a cabo la operación</option>
+            <option value="04">04 · Operación nominativa en factura global</option>
+          </select>
+        </div>
+        <div class="fg" id="ctCancSustWrap"><label>Folio del CFDI que la sustituye</label><input id="ctCancSust" type="text" placeholder="Ej. F560"></div>
+        <div class="fg"><label>Nota</label><input id="ctCancNota" type="text" placeholder="Opcional..."></div>
+      </div>
+      <input type="hidden" id="ctCancId">
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button id="ctCancBtnGuardar" onclick="guardarCancelacionCfdi()" style="background:#546E7A;color:#fff;border:none;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Registrar cancelación</button>
+        <button onclick="_ctOcultarFormsCfdi()" style="background:#F1F3F4;color:var(--text);border:none;padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer">Cerrar</button>
+      </div>
+    </div>
     <!-- Formulario abono inline -->
     <div id="ctFormAbono" class="hidden" style="border-top:1px solid var(--border);padding:20px 24px;background:#FAFBFC">
       <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:14px" id="ctFormAbonoTitle">Registrar abono / pago</div>
@@ -5126,16 +5176,20 @@ function calcFacturadoPorConcepto(desde,hasta){
   if(typeof ctFacturasDePedido!=='function')return r;
   orders.forEach(o=>{
     if(o.tipo==='stk')return;
-    ctFacturasDePedido(o.folio||o.id).forEach(f=>{
+    // Facturas vigentes (+) y notas de crédito (−, en el mes de la NC). La NC
+    // toma el concepto de su factura relacionada (oct 2026).
+    ctMovFiscalesDePedido(o.folio||o.id).forEach(f=>{
       const ff=cleanDate(f.fecha_factura);if(!ff)return;
       const d=new Date(ff);
       if(desde&&d<desde)return;
       if(hasta&&d>hasta)return;
-      const m=parseFloat(f.monto_sin_iva)||0;
-      const c=conceptoFacturaLinea(f,o);
+      const sg=ctSignoFiscal(f);
+      const m=sg*(parseFloat(f.monto_sin_iva)||0);
+      const base=ctEsNC(f)?(ctFacturas.find(x=>String(x.id)===String(f.factura_relacionada))||f):f;
+      const c=conceptoFacturaLinea(base,o);
       r[r[c]!==undefined?c:'Mixto']+=m;
       r.total+=m;
-      r.ret+=parseFloat(f.ret_iva)||0;
+      r.ret+=sg*(parseFloat(f.ret_iva)||0);
     });
   });
   return r;
@@ -5352,7 +5406,7 @@ function ctDesgloseFechas(items, dateField, amountField) {
     const d = new Date(raw);
     if (isNaN(d)) return;
     const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    porMes[key] = (porMes[key] || 0) + (parseFloat(it[amountField]) || 0);
+    porMes[key] = (porMes[key] || 0) + (it.tipo === 'nota_credito' ? -1 : 1) * (parseFloat(it[amountField]) || 0);
   });
   const keys = Object.keys(porMes).sort();
   if (keys.length <= 1) return '';
@@ -5509,7 +5563,7 @@ function renderCarteraGeneral(){
       // Si el Fact/Cob de este folio viene de más de un mes (ej. anticipo en
       // un mes + finiquito en otro), el tooltip lo dice explícito en vez de
       // dejar el número "pelón" — mismo caso GALLEGOS visto en Contabilidad.
-      const descFact=ctDesgloseFechas(ctFacturasDePedido(f.folio),'fecha_factura','monto_sin_iva');
+      const descFact=ctDesgloseFechas(ctMovFiscalesDePedido(f.folio),'fecha_factura','monto_sin_iva');
       const descCob=ctDesgloseFechas(ctAbonosDePedido(f.folio),'fecha_abono','monto');
       const titleFact=descFact?('Por mes (sin IVA) — '+descFact):'Monto facturado a este pedido';
       const titleCob=descCob?('Por mes — '+descCob):'Pagos ya recibidos';
@@ -8333,8 +8387,48 @@ function ctValorPedido(o) {
   return (qty > 0 && val > 0 ? qty * val : val) + extrasPedido(o);
 }
 
-function ctFacturasDePedido(folio) {
+// ── Facturas, notas de crédito y cancelaciones SAT (oct 2026) ──────────
+// La hoja Facturas guarda dos tipos de CFDI: facturas (tipo 'factura') y
+// notas de crédito (tipo 'nota_credito', ligadas a su factura por
+// factura_relacionada). Cualquiera de los dos puede quedar con
+// estatus_cfdi = 'cancelada' (cancelado ante el SAT) — en ese caso deja de
+// contar en TODO el sistema pero sigue visible en el historial del pedido.
+// Reglas fiscales (decisión de Alex, oct 2026):
+//  • Factura cancelada → desaparece de su mes ORIGINAL (como lo ve el SAT).
+//  • Nota de crédito  → resta en el mes en que se EMITE la nota.
+function ctEsNC(f) { return String((f && f.tipo) || '') === 'nota_credito'; }
+function ctEsCancelada(f) { return String((f && f.estatus_cfdi) || '').toLowerCase() === 'cancelada'; }
+// Todos los registros del pedido (facturas + NC, vigentes y canceladas) —
+// solo para historial, búsqueda y validar folios duplicados.
+function ctRegistrosDePedido(folio) {
   return ctFacturas.filter(f => f.folio_pedido === folio);
+}
+// FUENTE ÚNICA — facturas VIGENTES del pedido (sin notas de crédito, sin
+// canceladas). Todo el sistema (Contabilidad, Administración, Reportes)
+// pasa por aquí, así que una factura cancelada sale de todos lados a la vez.
+function ctFacturasDePedido(folio) {
+  return ctRegistrosDePedido(folio).filter(f => !ctEsNC(f) && !ctEsCancelada(f));
+}
+function ctNotasCreditoDePedido(folio) {
+  return ctRegistrosDePedido(folio).filter(f => ctEsNC(f) && !ctEsCancelada(f));
+}
+function ctNotasDeFactura(facturaId) {
+  return ctFacturas.filter(n => ctEsNC(n) && !ctEsCancelada(n) && String(n.factura_relacionada) === String(facturaId));
+}
+// Movimientos fiscales vigentes: facturas (+) y notas de crédito (−). Para
+// sumas por mes usar siempre con ctSignoFiscal(f).
+function ctMovFiscalesDePedido(folio) {
+  return ctFacturasDePedido(folio).concat(ctNotasCreditoDePedido(folio));
+}
+// Etiqueta legible de un CFDI: FAC-F548 / NC-12 (sin duplicar "NC" si el folio ya lo trae).
+function ctLblCfdi(f) {
+  const n = String((f && f.num_factura) || '');
+  return ctEsNC(f) ? (/^nc/i.test(n) ? n : 'NC-' + n) : 'FAC-' + n;
+}
+function ctSignoFiscal(f) { return ctEsNC(f) ? -1 : 1; }
+// Monto de una factura neto de sus notas de crédito vigentes.
+function ctNetoFactura(f, campo) {
+  return (parseFloat(f[campo]) || 0) - ctNotasDeFactura(f.id).reduce((s,n) => s + (parseFloat(n[campo]) || 0), 0);
 }
 
 function ctAbonosDePedido(folio) {
@@ -8342,12 +8436,14 @@ function ctAbonosDePedido(folio) {
 }
 
 function ctTotalFacturado(folio) {
-  return ctFacturasDePedido(folio).reduce((s,f) => s + (parseFloat(f.monto_total)||0), 0);
+  // Neto: facturas vigentes − notas de crédito vigentes (con IVA)
+  return ctMovFiscalesDePedido(folio).reduce((s,f) => s + ctSignoFiscal(f) * (parseFloat(f.monto_total)||0), 0);
 }
 
 function ctTotalSinIvaFacturado(folio) {
   // Suma solo el monto sin IVA de las facturas — para comparar contra valor del pedido
-  return ctFacturasDePedido(folio).reduce((s,f) => s + (parseFloat(f.monto_sin_iva)||0), 0);
+  // Neto de notas de crédito (oct 2026).
+  return ctMovFiscalesDePedido(folio).reduce((s,f) => s + ctSignoFiscal(f) * (parseFloat(f.monto_sin_iva)||0), 0);
 }
 
 function ctTotalCobrado(folio) {
@@ -8395,8 +8491,14 @@ function ctSaldoEfectivo(o) {
 // Fuente única usada por "Cartera activa"/cartaMes (Administración),
 // Cartera vigente/vencida (Contabilidad) y "Cartera" del Reporte Ejecutivo
 // (Reportes) — para que los 3 SIEMPRE coincidan en el número.
+// FIX (oct 2026, caso TETAKAWI A-2608-36 / AC-2608-01): un pedido CANCELADO
+// no es cartera — las tarjetas de Contabilidad y Administración ya lo
+// excluían por fuera, pero el pie de tabla de Contabilidad y algunos totales
+// de Reportes no, y mostraban su saldo como "por cobrar". La exclusión vive
+// ahora aquí, en la fuente única, para que todos coincidan.
 function ctSaldoCarteraReal(o) {
   if (o.tipo === 'stk') return 0;
+  if (gSt(o) === 'cancelado') return 0;
   const folio = o.folio || o.id;
   const tieneActividad = ctFacturasDePedido(folio).length > 0 || ctAbonosDePedido(folio).length > 0;
   return tieneActividad ? Math.max(0, ctSaldoEfectivo(o)) : 0;
@@ -8440,10 +8542,12 @@ function ctFacturadoFiscalMes(anio, mesIndex0) {
   orders.forEach(o => {
     if (o.tipo === 'stk') return;
     const folio = o.folio || o.id;
-    ctFacturasDePedido(folio).forEach(f => {
+    // Facturas vigentes del mes (+) y notas de crédito emitidas en el mes (−).
+    // Las canceladas ya no llegan aquí — salen de su mes original.
+    ctMovFiscalesDePedido(folio).forEach(f => {
       const df = f.fecha_factura ? new Date(f.fecha_factura) : null;
       if (df && df.getMonth() === mesIndex0 && df.getFullYear() === anio) {
-        fact += parseFloat(f.monto_sin_iva) || 0;
+        fact += ctSignoFiscal(f) * (parseFloat(f.monto_sin_iva) || 0);
       }
     });
   });
@@ -8470,7 +8574,9 @@ function ctFacturasConSaldoFIFO(folio) {
   });
   let pool = ctTotalCobrado(folio);
   facts.forEach(f => {
-    const monto = parseFloat(f.monto_total)||0;
+    // Neto de sus notas de crédito: la NC se aplica primero a SU factura,
+    // después entran los pagos en orden FIFO (oct 2026).
+    const monto = Math.max(0, ctNetoFactura(f, 'monto_total'));
     if (pool >= monto) {
       f._saldoFifo = 0;
       pool -= monto;
@@ -8718,7 +8824,7 @@ function ctCoincideBusqueda(o, s) {
   const folio = String(o.folio||o.id||'').toLowerCase();
   const cliente = String(o.client||'').toLowerCase();
   const numCliente = String(o.num||'').toLowerCase();
-  const facturas = ctFacturasDePedido(o.folio||o.id).map(f => String(f.num_factura||'').toLowerCase()).join(' ');
+  const facturas = ctRegistrosDePedido(o.folio||o.id).map(f => String(f.num_factura||'').toLowerCase()).join(' ');
   return folio.includes(s) || cliente.includes(s) || numCliente.includes(s) || facturas.includes(s);
 }
 
@@ -8743,8 +8849,10 @@ function ctFacturaEnMes(f, filtMes) {
 function ctPasaFiltroEstatus(o, filtEst, filtMes) {
   if (!filtEst) return true;
   if (filtEst === 'con_factura') {
-    const facts = ctFacturasDePedido(o.folio || o.id);
-    return filtMes ? facts.some(f => ctFacturaEnMes(f, filtMes)) : facts.length > 0;
+    // Incluye notas de crédito: si en el mes hubo una NC, ese pedido movió el
+    // Facturado del mes y debe aparecer para que el pie cuadre con la tarjeta.
+    const movs = ctMovFiscalesDePedido(o.folio || o.id);
+    return filtMes ? movs.some(f => ctFacturaEnMes(f, filtMes)) : movs.length > 0;
   }
   return ctEstatusCartera(o) === filtEst;
 }
@@ -8804,7 +8912,7 @@ function renderContab() {
   if (filtMes) {
     pedidosTabla = pedidos.filter(o => {
       const folio = o.folio||o.id;
-      return ctFacturasDePedido(folio).some(f => ctFacturaEnMes(f, filtMes));
+      return ctMovFiscalesDePedido(folio).some(f => ctFacturaEnMes(f, filtMes));
     });
   }
 
@@ -8838,7 +8946,13 @@ function renderContab() {
     const saldo = ctSaldoEfectivo(o);
     const est = ctEstatusCartera(o);
     const semaforo = est !== 'liquidado' && est !== 'sin_facturar' && est !== 'cancelado' ? ctSemaforoVenc(folio, saldo) : '';
-    const numFacts = facts.length ? facts.map(f => f.num_factura||'—').join(', ') : '<span style="color:var(--muted)">—</span>';
+    const _regs = ctRegistrosDePedido(folio);
+    const numFacts = _regs.length ? _regs.map(f => {
+      const n = f.num_factura || '—';
+      if (ctEsCancelada(f)) return '<s style="color:var(--muted)" title="Cancelada ante el SAT">'+(ctEsNC(f)?ctLblCfdi(f):n)+'</s>';
+      if (ctEsNC(f)) return '<span style="color:#C0391B" title="Nota de crédito">'+ctLblCfdi(f)+'</span>';
+      return n;
+    }).join(', ') : '<span style="color:var(--muted)">—</span>';
     const vencTxt = (() => {
       const vd = ctProximoVencimiento(folio);
       return vd ? ctFmtFecha(vd.toISOString()) : '—';
@@ -8925,6 +9039,7 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
   }
 
   let sumValor = 0, sumFact = 0, sumPorFact = 0, sumCobrado = 0, sumSaldo = 0;
+  let sumFactOtros = 0, nCancelSaldo = 0, sumCancelSaldo = 0;
   pedidos.forEach(o => {
     const folio = o.folio || o.id;
     sumValor   += ctValorPedido(o);
@@ -8935,15 +9050,20 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
     // pie de tabla con dinero que ni siquiera es deuda formal todavía,
     // desalineándolo de "Cartera vigente + Cartera vencida" de los KPIs de
     // arriba (que sí exigen actividad real vía ctSaldoCarteraReal). Ahora
-    // usa esa misma fuente única en los dos lados.
+    // usa esa misma fuente única en los dos lados. (oct 2026: también excluye
+    // pedidos cancelados, igual que las tarjetas de Cartera.)
     sumSaldo += ctSaldoCarteraReal(o);
 
+    if (gSt(o) === 'cancelado' && ctSaldoEfectivo(o) > 0.01) { nCancelSaldo++; sumCancelSaldo += Math.max(0, ctSaldoEfectivo(o)); }
+
     if (filtMes) {
-      ctFacturasDePedido(folio).forEach(f => {
-        const df = f.fecha_factura ? new Date(f.fecha_factura) : null;
-        if (df && df.getMonth()===mesSel && df.getFullYear()===anioSel) {
-          sumFact += parseFloat(f.monto_sin_iva)||0;
-        }
+      // Facturado del mes vs. facturado del mismo pedido en OTROS meses — así
+      // "Valor pedido" = mes + otros meses + por facturar, y queda claro por
+      // qué un pedido "100% fact." no suma completo al total del mes.
+      ctMovFiscalesDePedido(folio).forEach(f => {
+        const m = ctSignoFiscal(f) * (parseFloat(f.monto_sin_iva)||0);
+        if (ctFacturaEnMes(f, filtMes)) sumFact += m;
+        else sumFactOtros += m;
       });
       ctAbonosDePedido(folio).forEach(a => {
         const da = a.fecha_abono ? new Date(a.fecha_abono) : null;
@@ -8959,8 +9079,16 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
 
   const n = pedidos.length;
   const etiqueta = 'TOTAL — ' + n + ' pedido' + (n===1?'':'s') + ' filtrado' + (n===1?'':'s');
-  const subFact    = filtMes ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)">sin IVA · '+labelMesCorto+'</span>' : '';
-  const subCobrado = filtMes ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+labelMesCorto+'</span>' : '';
+  const subFact    = filtMes
+    ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)">sin IVA · '+labelMesCorto+'</span>' +
+      (Math.abs(sumFactOtros) > 0.01
+        ? '<div style="margin-top:4px;font-size:11px;font-weight:600;color:var(--muted)" title="Facturas de estos mismos pedidos emitidas en otros meses (anticipos/finiquitos). No cuentan en el facturado del mes.">'+(sumFactOtros<0?'− ':'+ ')+ctFmt(Math.abs(sumFactOtros))+'<br><span style="font-size:10px;font-weight:400">otros meses</span></div>'
+        : '')
+    : '';
+  const subCobrado = filtMes ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)">'+labelMesCorto+' · de estos pedidos</span>' : '';
+  const subSaldo   = nCancelSaldo > 0
+    ? '<br><span style="font-size:10px;font-weight:400;color:var(--muted)" title="Pedidos cancelados con saldo: no cuentan como cartera, igual que en las tarjetas.">excluye '+nCancelSaldo+' cancelado'+(nCancelSaldo===1?'':'s')+' ('+ctFmt(sumCancelSaldo)+')</span>'
+    : '';
 
   foot.innerHTML =
     '<tr style="background:#EEF1F7;border-top:2px solid var(--navy)">' +
@@ -8970,7 +9098,7 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
       '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap">'+ctFmt(sumFact)+subFact+'</td>' +
       '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumPorFact>0?'#E37400':'#34A853')+'">'+ctFmt(sumPorFact)+'</td>' +
       '<td style="padding:9px 12px;font-size:13px;font-weight:700;color:#34A853;white-space:nowrap">'+ctFmt(sumCobrado)+subCobrado+'</td>' +
-      '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumSaldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(sumSaldo)+'</td>' +
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;white-space:nowrap;color:'+(sumSaldo>0.01?'#C0391B':'#34A853')+'">'+ctFmt(sumSaldo)+subSaldo+'</td>' +
       '<td></td><td></td><td></td>' +
     '</tr>';
 }
@@ -9002,12 +9130,12 @@ function ctRenderNotasAclaraciones(pedidos, filtMes) {
     let sumFactFuera = 0, sumCobFuera = 0;
     const mesesFuera = new Set();
 
-    ctFacturasDePedido(folio).forEach(f => {
+    ctMovFiscalesDePedido(folio).forEach(f => {
       if (!f.fecha_factura) return;
       const d = new Date(f.fecha_factura);
       if (isNaN(d)) return;
       if (d.getMonth() === mesSel && d.getFullYear() === anioSel) return;
-      sumFactFuera += parseFloat(f.monto_sin_iva) || 0;
+      sumFactFuera += ctSignoFiscal(f) * (parseFloat(f.monto_sin_iva) || 0);
       mesesFuera.add(mesesTxt[d.getMonth()] + ' ' + d.getFullYear());
     });
     ctAbonosDePedido(folio).forEach(a => {
@@ -9019,9 +9147,9 @@ function ctRenderNotasAclaraciones(pedidos, filtMes) {
       mesesFuera.add(mesesTxt[d.getMonth()] + ' ' + d.getFullYear());
     });
 
-    if (sumFactFuera > 0.01 || sumCobFuera > 0.01) {
+    if (Math.abs(sumFactFuera) > 0.01 || sumCobFuera > 0.01) {
       const partes = [];
-      if (sumFactFuera > 0.01) partes.push(ctFmt(sumFactFuera) + ' sin IVA facturado');
+      if (Math.abs(sumFactFuera) > 0.01) partes.push((sumFactFuera < 0 ? '−' : '') + ctFmt(Math.abs(sumFactFuera)) + ' sin IVA facturado (neto)');
       if (sumCobFuera > 0.01) partes.push(ctFmt(sumCobFuera) + ' cobrado');
       const labelFuera = mesesFuera.size === 1 ? [...mesesFuera][0] : 'otros meses';
       items.push(
@@ -9044,6 +9172,7 @@ function ctRenderNotasAclaraciones(pedidos, filtMes) {
 function ctInicializarFiltroMes() {
   const meses = new Set();
   ctFacturas.forEach(f => {
+    if (ctEsCancelada(f)) return; // una factura cancelada ya no da facturación a su mes
     if (f.fecha_factura) {
       const d = new Date(f.fecha_factura);
       if (!isNaN(d)) meses.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
@@ -9087,11 +9216,11 @@ function openCTModal(folio) {
   const saldoCobro2  = ctSaldoEfectivo(o);
   // Anticipo y Finiquito por separado
   const factsAnticipo2 = ctFacturasDePedido(folio2).filter(f => f.tipo_factura === 'Anticipo');
-  const montoAnticipo2 = factsAnticipo2.reduce((s,f) => s+(parseFloat(f.monto_total)||0), 0);
-  const pctAnticipo2   = valorPedido > 0 ? Math.round((factsAnticipo2.reduce((s,f)=>s+(parseFloat(f.monto_sin_iva)||0),0)/valorPedido)*100) : 0;
+  const montoAnticipo2 = factsAnticipo2.reduce((s,f) => s+ctNetoFactura(f,'monto_total'), 0);
+  const pctAnticipo2   = valorPedido > 0 ? Math.round((factsAnticipo2.reduce((s,f)=>s+ctNetoFactura(f,'monto_sin_iva'),0)/valorPedido)*100) : 0;
   const anticStatLabel2 = montoAnticipo2 > 0 ? 'Recibido' : 'Pendiente';
   const factsFiniq2 = ctFacturasDePedido(folio2).filter(f => f.tipo_factura === 'Finiquito' || f.tipo_factura === 'Total');
-  const montoFiniq2 = factsFiniq2.reduce((s,f) => s+(parseFloat(f.monto_total)||0), 0);
+  const montoFiniq2 = factsFiniq2.reduce((s,f) => s+ctNetoFactura(f,'monto_total'), 0);
 
   const RED='#C0391B', GREEN='#34A853';
   const anticStatColor2b = montoAnticipo2 > 0 ? GREEN : RED;
@@ -9144,6 +9273,7 @@ function openCTModal(folio) {
   ctMTab('fact');
   document.getElementById('ctFormFact').classList.add('hidden');
   document.getElementById('ctFormAbono').classList.add('hidden');
+  _ctOcultarFormsCfdi();
   document.getElementById('ctModal').classList.remove('hidden');
 }
 
@@ -9171,25 +9301,64 @@ function ctMTab(tab) {
 function ctRenderFactList() {
   if (!ctOrderActivo) return;
   const folio = ctOrderActivo.folio||ctOrderActivo.id;
-  const facts = ctFacturasDePedido(folio);
+  // Historial completo: facturas vigentes y canceladas, cada una con sus
+  // notas de crédito debajo (oct 2026). Solo las vigentes cuentan en cifras.
+  const regs = ctRegistrosDePedido(folio).slice().sort((a,b) => new Date(a.fecha_factura||0) - new Date(b.fecha_factura||0));
+  const facturas = regs.filter(f => !ctEsNC(f));
+  const ncs = regs.filter(f => ctEsNC(f));
   const el = document.getElementById('ctFactList');
-  if (!facts.length) {
+  if (!regs.length) {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0">No hay facturas registradas para este pedido.</div>';
     return;
   }
-  el.innerHTML = facts.map(f => {
-    return '<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
-      '<div>' +
-      '<span style="font-weight:700;color:var(--navy);font-size:14px">FAC-'+f.num_factura+'</span>' +
+  const btn = (txt, fn, id, extra) => '<button data-id="'+id+'" onclick="'+fn+'(this.dataset.id)" style="background:none;border:1px solid '+(extra||'var(--border)')+';'+(extra?'color:'+extra+';':'')+'padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap">'+txt+'</button>';
+  const motivosSat = {'01':'01 · Con relación (sustituida)','02':'02 · Con errores sin relación','03':'03 · No se llevó a cabo la operación','04':'04 · Operación nominativa en factura global'};
+  const bannerCanc = f => ctEsCancelada(f)
+    ? '<div style="margin-top:8px;background:#ECEFF1;border-radius:6px;padding:6px 10px;font-size:11px;color:#455A64">🚫 <strong>Cancelada ante el SAT</strong> el '+ctFmtFecha(f.fecha_cancelacion)+' · Motivo '+(motivosSat[String(f.motivo_cancelacion)]||f.motivo_cancelacion||'—')+
+      (f.sustituida_por?' · Sustituida por <strong>'+f.sustituida_por+'</strong>':'')+(f.nota_cancelacion?' · '+f.nota_cancelacion:'')+(f.cancelado_por?' · <span style="color:var(--muted)">'+f.cancelado_por+'</span>':'')+'</div>'
+    : '';
+
+  const renderNC = n => {
+    const canc = ctEsCancelada(n);
+    return '<div style="margin:6px 0 0 18px;border-left:3px solid '+(canc?'#B0BEC5':'#C0391B')+';background:'+(canc?'#F5F5F5':'#FFF5F5')+';border-radius:0 6px 6px 0;padding:8px 12px'+(canc?';opacity:.75':'')+'">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+        '<div style="font-size:12px">'+(canc?'<s>':'')+'<strong style="color:#C0391B">'+ctLblCfdi(n)+'</strong>'+(canc?'</s>':'')+
+          ' <span style="color:var(--muted)">· '+ctFmtFecha(n.fecha_factura)+' · '+(n.motivo_nc||'Nota de crédito')+'</span>' +
+          ' <strong style="color:'+(canc?'var(--muted)':'#C0391B')+'">−'+ctFmt(n.monto_total)+'</strong> <span style="font-size:10px;color:var(--muted)">c/IVA (−'+ctFmt(n.monto_sin_iva)+' sin IVA)</span></div>' +
+        '<div style="display:flex;gap:6px">' +
+          (canc
+            ? (isDir()?btn('↩ Revertir','revertirCancelacionCfdi',n.id):'')
+            : btn('✏ Editar','editarNotaCredito',n.id)+btn('🚫 Cancelar SAT','openFormCancelacion',n.id,'#546E7A')) +
+          btn('🗑','eliminarFactura',n.id,'#C0391B') +
+        '</div></div>' +
+      (n.notas?'<div style="margin-top:4px;font-size:11px;color:var(--muted)">'+n.notas+'</div>':'') +
+      bannerCanc(n) +
+      '</div>';
+  };
+
+  let html = facturas.map(f => {
+    const canc = ctEsCancelada(f);
+    const misNC = ncs.filter(n => String(n.factura_relacionada) === String(f.id));
+    const ncVig = misNC.filter(n => !ctEsCancelada(n));
+    const netoLinea = ncVig.length
+      ? '<div style="margin-top:8px;font-size:12px;color:var(--navy)">Neto tras notas de crédito: <strong>'+ctFmt(ctNetoFactura(f,'monto_total'))+'</strong> c/IVA · '+ctFmt(ctNetoFactura(f,'monto_sin_iva'))+' sin IVA</div>'
+      : '';
+    return '<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px'+(canc?';background:#FAFAFA':'')+'">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">' +
+      '<div'+(canc?' style="opacity:.6"':'')+'>' +
+      (canc?'<s>':'')+'<span style="font-weight:700;color:var(--navy);font-size:14px">FAC-'+f.num_factura+'</span>'+(canc?'</s>':'') +
       '<span style="margin-left:8px;background:#F1F3F4;color:var(--muted);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'+f.tipo_factura+'</span>' +
+      (canc?'<span style="margin-left:6px;background:#ECEFF1;color:#546E7A;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🚫 Cancelada SAT</span>':'') +
       (f.pct_pedido?'<span style="margin-left:6px;font-size:12px;color:var(--muted)">'+f.pct_pedido+'% del pedido</span>':'') +
       (f.concepto&&f.concepto!=='General'?'<span style="margin-left:6px;background:'+(f.concepto==='Accesorios'?'var(--acc-bg)':f.concepto==='Flete'?'var(--fle-bg)':'#E8F0FE')+';color:'+(f.concepto==='Accesorios'?'var(--acc)':f.concepto==='Flete'?'var(--fle)':'#1a73e8')+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'+({General:'Pedido completo',Tanque:'Solo tanque',Accesorios:'Solo accesorios',Flete:'Solo flete'}[f.concepto]||f.concepto)+'</span>':'') +
       '</div>' +
-      '<div style="display:flex;gap:6px">' +
-      '<button data-id="'+f.id+'" onclick="editarFactura(this.dataset.id)" style="background:none;border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">✏ Editar</button>' +
-      '<button data-id="'+f.id+'" onclick="eliminarFactura(this.dataset.id)" style="background:none;border:1px solid #ffcdd2;color:#C0391B;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">🗑</button>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      (canc
+        ? (isDir()?btn('↩ Revertir','revertirCancelacionCfdi',f.id):'')
+        : btn('✏ Editar','editarFactura',f.id) + btn('➖ Nota de crédito','openFormNotaCredito',f.id,'#C0391B') + btn('🚫 Cancelar SAT','openFormCancelacion',f.id,'#546E7A')) +
+      btn('🗑','eliminarFactura',f.id,'#C0391B') +
       '</div></div>' +
+      '<div'+(canc?' style="opacity:.6"':'')+'>' +
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px;font-size:12px">' +
       '<div><span style="color:var(--muted)">Fecha emisión</span><br><strong>'+ctFmtFecha(f.fecha_factura)+'</strong></div>' +
       '<div><span style="color:var(--muted)">Sin IVA</span><br><strong>'+ctFmt(f.monto_sin_iva)+'</strong></div>' +
@@ -9200,9 +9369,18 @@ function ctRenderFactList() {
       '<div><span style="color:var(--muted)">Días crédito</span><br><strong>'+(f.dias_credito||'0')+' días</strong></div>' +
 
       '</div>' +
+      
       (f.notas?'<div style="margin-top:8px;font-size:12px;color:var(--muted)">'+f.notas+'</div>':'') +
+      '</div>' +
+      bannerCanc(f) + netoLinea +
+      misNC.map(renderNC).join('') +
       '</div>';
   }).join('');
+  // NC huérfanas (su factura ya no existe) — se muestran igual para no perderlas
+  const idsFact = new Set(facturas.map(f => String(f.id)));
+  const huerf = ncs.filter(n => !idsFact.has(String(n.factura_relacionada)));
+  if (huerf.length) html += '<div style="font-size:11px;color:#C0391B;margin:8px 0 2px">Notas de crédito sin factura relacionada:</div>' + huerf.map(renderNC).join('');
+  el.innerHTML = html;
 }
 
 // ── Render lista abonos ───────────────────────────
@@ -9259,6 +9437,18 @@ function ctRenderTimeline() {
     }
   });
 
+  // Notas de crédito y cancelaciones SAT (oct 2026)
+  ctRegistrosDePedido(folio).forEach(f => {
+    if (ctEsNC(f) && f.fecha_factura) {
+      events.push({fecha: new Date(f.fecha_factura), tipo:'nc',
+        texto: 'Nota de crédito — '+ctLblCfdi(f)+' · '+(f.motivo_nc||'')+' · −'+ctFmt(f.monto_total)+(ctEsCancelada(f)?' (después cancelada)':'')});
+    }
+    if (ctEsCancelada(f) && f.fecha_cancelacion) {
+      events.push({fecha: new Date(f.fecha_cancelacion), tipo:'cancelada',
+        texto: 'Cancelada ante el SAT — '+ctLblCfdi(f)+' · motivo '+(f.motivo_cancelacion||'—')+(f.sustituida_por?' · sustituida por '+f.sustituida_por:'')});
+    }
+  });
+
   // Abonos
   ctAbonosDePedido(folio).forEach(a => {
     if (a.fecha_abono) {
@@ -9271,10 +9461,12 @@ function ctRenderTimeline() {
 
   const colores = {
     pedido:'#1B2A4A', factura:'#1565C0', iva:'#2E7D32',
-    abono:'#34A853', vencimiento:'#E37400', vencido:'#C0391B'
+    abono:'#34A853', vencimiento:'#E37400', vencido:'#C0391B',
+    nc:'#C0391B', cancelada:'#546E7A'
   };
   const iconos = {
-    pedido:'📋', factura:'🧾', iva:'🏦', abono:'💰', vencimiento:'📅', vencido:'⚠️'
+    pedido:'📋', factura:'🧾', iva:'🏦', abono:'💰', vencimiento:'📅', vencido:'⚠️',
+    nc:'➖', cancelada:'🚫'
   };
 
   document.getElementById('ctTimeline').innerHTML = events.length
@@ -9317,6 +9509,7 @@ function openFormFactura() {
   document.getElementById('ctFDias').value = '0';
   document.getElementById('ctFVenc').value = '';
   document.getElementById('ctFNotas').value = '';
+  _ctOcultarFormsCfdi();
   document.getElementById('ctFormFact').classList.remove('hidden');
   document.getElementById('ctFormAbono').classList.add('hidden');
   const btn = document.querySelector('#ctFormFact button[onclick="guardarFactura()"]');
@@ -9349,6 +9542,7 @@ function editarFactura(id) {
   // emisión + días de crédito para que al guardar quede fijado.
   if (!document.getElementById('ctFVenc').value) ctCalcVenc();
   document.getElementById('ctFNotas').value = f.notas||'';
+  _ctOcultarFormsCfdi();
   document.getElementById('ctFormFact').classList.remove('hidden');
   document.getElementById('ctFormAbono').classList.add('hidden');
   const btn = document.querySelector('#ctFormFact button[onclick="guardarFactura()"]');
@@ -9438,13 +9632,18 @@ async function guardarFactura() {
     if (pct < 0 || pct > 100) { showAlert('El porcentaje del pedido debe estar entre 0 y 100.','⚠️'); return; }
     // Verificar que no exista ya esa factura en este pedido (excepto si es edición)
     const editId2 = document.getElementById('ctFEditId').value;
-    const factsDup = ctFacturasDePedido(folio).filter(f => f.num_factura === num && f.id !== editId2);
+    const factsDup = ctRegistrosDePedido(folio).filter(f => String(f.num_factura) === num && f.id !== editId2);
     if (factsDup.length > 0) { showAlert('Ya existe una factura con el número ' + num + ' en este pedido.','⚠️'); return; }
     const iva = parseFloat(document.getElementById('ctFIva').value)||0;
     const retWrap = document.getElementById('ctFRetWrap');
     const retIva = (retWrap && retWrap.style.display !== 'none') ? _r2(parseFloat(document.getElementById('ctFRet').value)||0) : 0;
     if (retIva < 0 || retIva > iva + 0.01) { showAlert('La retención no puede ser negativa ni mayor que el IVA de la factura.','⚠️'); return; }
     const editId = document.getElementById('ctFEditId').value;
+    // Una factura editada no puede quedar por debajo de sus notas de crédito.
+    if (editId) {
+      const ncSum = ctNotasDeFactura(editId).reduce((a,n) => a + (parseFloat(n.monto_total)||0), 0);
+      if (ncSum > 0 && _r2(monto + iva - retIva) < ncSum - 0.01) { showAlert('Esta factura tiene notas de crédito por ' + ctFmt(ncSum) + ' c/IVA; su total no puede quedar por debajo de eso.','⚠️'); return; }
+    }
     // Garantía: la fecha de vencimiento SIEMPRE se recalcula con la emisión y
     // los días de crédito actuales antes de guardar — nunca se guarda vacía
     // ni desfasada si se cambió la fecha de emisión.
@@ -9488,7 +9687,12 @@ async function guardarFactura() {
 }
 
 async function eliminarFactura(id) {
-  if (!confirm('¿Eliminar esta factura?')) return;
+  const _f = ctFacturas.find(x => x.id === id);
+  if (_f && !ctEsNC(_f) && ctFacturas.some(n => ctEsNC(n) && String(n.factura_relacionada) === String(id))) {
+    showAlert('Esta factura tiene notas de crédito ligadas. Elimínalas primero.','⚠️'); return;
+  }
+  if (_f && ctEsCancelada(_f) && !confirm('Esta factura está CANCELADA ante el SAT. Eliminarla borra su rastro del historial. Lo normal es dejarla registrada como cancelada. ¿Eliminar de todos modos?')) return;
+  if (!confirm(_f && ctEsNC(_f) ? '¿Eliminar esta nota de crédito?' : '¿Eliminar esta factura?')) return;
   const folio = ctOrderActivo ? (ctOrderActivo.folio||ctOrderActivo.id) : '';
   try {
     const res = await apiPost({action:'deleteFactura', id, folio, by: encodeURIComponent(CU.name+' ('+CU.area+')')});
@@ -9496,7 +9700,245 @@ async function eliminarFactura(id) {
     invalidarCacheContab();await loadContab(true);
     ctRenderFactList();
     renderContab();
-    showAlert('Factura eliminada.','✅');
+    showAlert((_f && ctEsNC(_f)) ? 'Nota de crédito eliminada.' : 'Factura eliminada.','✅');
+  } catch(e) { showAlert('Error de red.','❌'); }
+}
+
+// ── Notas de crédito y cancelaciones SAT (oct 2026) ──────────
+function _ctOcultarFormsCfdi() {
+  ['ctFormNC','ctFormCanc'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.add('hidden'); });
+}
+function _ctMostrarFormCfdi(id) {
+  document.getElementById('ctFormFact').classList.add('hidden');
+  document.getElementById('ctFormAbono').classList.add('hidden');
+  _ctOcultarFormsCfdi();
+  const e = document.getElementById(id);
+  e.classList.remove('hidden');
+  try { e.scrollIntoView({behavior:'smooth', block:'nearest'}); } catch(_) {}
+}
+const _r2nc = n => Math.round((parseFloat(n)||0) * 100) / 100;
+
+// Monto c/IVA que todavía se puede acreditar a una factura (su total menos
+// las NC vigentes, sin contar la NC que se está editando).
+function ctNCDisponible(fact, excluirNcId) {
+  const usadas = ctNotasDeFactura(fact.id).filter(n => n.id !== excluirNcId)
+    .reduce((s,n) => s + (parseFloat(n.monto_total)||0), 0);
+  return _r2nc((parseFloat(fact.monto_total)||0) - usadas);
+}
+
+function openFormNotaCredito(factId, ncEdit) {
+  const f = ctFacturas.find(x => x.id === factId);
+  if (!f || ctEsNC(f)) return;
+  if (ctEsCancelada(f)) { showAlert('No se puede emitir una nota de crédito sobre una factura cancelada.','⚠️'); return; }
+  const n = ncEdit || null;
+  document.getElementById('ctNCFactId').value = f.id;
+  document.getElementById('ctNCEditId').value = n ? n.id : '';
+  document.getElementById('ctFormNCTitle').textContent = (n ? 'Editar nota de crédito '+ctLblCfdi(n) : 'Nueva nota de crédito') + ' — sobre FAC-' + f.num_factura;
+  document.getElementById('ctNCHint').textContent = 'Factura: ' + ctFmt(f.monto_total) + ' c/IVA · disponible para acreditar: ' + ctFmt(ctNCDisponible(f, n ? n.id : '')) + ' c/IVA. La nota resta en el Facturado del mes en que la emites.';
+  document.getElementById('ctNCNum').value = n ? (n.num_factura||'') : '';
+  document.getElementById('ctNCFecha').value = n ? ctFechaISO(n.fecha_factura) : new Date().toISOString().split('T')[0];
+  document.getElementById('ctNCMotivo').value = n ? (n.motivo_nc || 'Otro') : 'Devolución / cancelación parcial';
+  document.getElementById('ctNCMonto').value = n ? (n.monto_sin_iva||'') : '';
+  document.getElementById('ctNCNotas').value = n ? (n.notas||'') : '';
+  const retFact = parseFloat(f.ret_iva)||0;
+  document.getElementById('ctNCRetWrap').style.display = (retFact > 0 || (n && (parseFloat(n.ret_iva)||0) > 0)) ? '' : 'none';
+  ctNCCalc();
+  if (n) { document.getElementById('ctNCRet').value = (parseFloat(n.ret_iva)||0) > 0 ? n.ret_iva : (document.getElementById('ctNCRet').value||''); ctNCCalcTotal(); }
+  const b = document.getElementById('ctNCBtnGuardar'); if (b) { b.disabled = false; b.textContent = 'Guardar nota de crédito'; }
+  _ctMostrarFormCfdi('ctFormNC');
+}
+function editarNotaCredito(ncId) {
+  const n = ctFacturas.find(x => x.id === ncId);
+  if (!n || !ctEsNC(n)) return;
+  openFormNotaCredito(n.factura_relacionada, n);
+}
+function ctNCCalc() {
+  const monto = parseFloat(document.getElementById('ctNCMonto').value)||0;
+  document.getElementById('ctNCIva').value = (monto * 0.16).toFixed(2);
+  const f = ctFacturas.find(x => x.id === document.getElementById('ctNCFactId').value);
+  const w = document.getElementById('ctNCRetWrap');
+  if (f && w.style.display !== 'none') {
+    const baseF = parseFloat(f.monto_sin_iva)||0, retF = parseFloat(f.ret_iva)||0;
+    document.getElementById('ctNCRet').value = (baseF > 0 && retF > 0) ? _r2nc(retF * Math.min(1, monto / baseF)).toFixed(2) : '0';
+  }
+  ctNCCalcTotal();
+}
+function ctNCCalcTotal() {
+  const monto = parseFloat(document.getElementById('ctNCMonto').value)||0;
+  const iva = parseFloat(document.getElementById('ctNCIva').value)||0;
+  const w = document.getElementById('ctNCRetWrap');
+  const ret = (w && w.style.display !== 'none') ? (parseFloat(document.getElementById('ctNCRet').value)||0) : 0;
+  document.getElementById('ctNCTotal').value = monto > 0 ? ctFmt(_r2nc(monto + iva - ret)) : '';
+}
+
+let _ctGuardandoNC = false;
+async function guardarNotaCredito() {
+  if (_ctGuardandoNC || !ctOrderActivo) return;
+  const folio = ctOrderActivo.folio || ctOrderActivo.id;
+  const f = ctFacturas.find(x => x.id === document.getElementById('ctNCFactId').value);
+  if (!f) { showAlert('No se encontró la factura relacionada.','⚠️'); return; }
+  if (ctEsCancelada(f)) { showAlert('La factura está cancelada; no admite notas de crédito.','⚠️'); return; }
+  const editId = document.getElementById('ctNCEditId').value;
+  const num = document.getElementById('ctNCNum').value.trim();
+  const fecha = document.getElementById('ctNCFecha').value;
+  const monto = _r2nc(document.getElementById('ctNCMonto').value);
+  const iva = _r2nc(monto * 0.16);
+  const w = document.getElementById('ctNCRetWrap');
+  const ret = (w && w.style.display !== 'none') ? _r2nc(document.getElementById('ctNCRet').value) : 0;
+  const total = _r2nc(monto + iva - ret);
+  if (!num) { showAlert('El folio de la nota de crédito es obligatorio.','⚠️'); return; }
+  if (!/^[a-zA-Z0-9\-]+$/.test(num)) { showAlert('El folio solo puede contener letras, números y guiones.','⚠️'); return; }
+  if (ctRegistrosDePedido(folio).some(x => String(x.num_factura) === num && x.id !== editId)) { showAlert('Ya existe un CFDI con el folio ' + num + ' en este pedido.','⚠️'); return; }
+  if (!fecha) { showAlert('La fecha de emisión es obligatoria.','⚠️'); return; }
+  const fFact = ctFechaISO(f.fecha_factura);
+  if (fFact && fecha < fFact) { showAlert('La nota de crédito no puede ser anterior a su factura (' + ctFmtFecha(f.fecha_factura) + ').','⚠️'); return; }
+  if (!(monto > 0)) { showAlert('El monto debe ser mayor a $0.','⚠️'); return; }
+  if (ret < 0 || ret > iva + 0.01) { showAlert('La retención no puede ser negativa ni mayor que el IVA.','⚠️'); return; }
+  const disp = ctNCDisponible(f, editId);
+  if (total > disp + 0.01) { showAlert('La nota (' + ctFmt(total) + ') excede lo disponible de FAC-' + f.num_factura + ' (' + ctFmt(disp) + ' c/IVA).','⚠️'); return; }
+  // ¿El cliente ya pagó esa parte? → quedaría saldo a favor del cliente
+  const fifo = ctFacturasConSaldoFIFO(folio).find(x => x.id === f.id);
+  const ncPrev = editId ? (parseFloat((ctFacturas.find(x => x.id === editId)||{}).monto_total)||0) : 0;
+  const pendiente = fifo ? (fifo._saldoFifo + ncPrev) : 0;
+  if (total > pendiente + 0.01 && !confirm('El cliente ya pagó parte de esta factura: con esta nota quedaría un SALDO A FAVOR del cliente de ' + ctFmt(total - pendiente) + ' (el Board lo muestra como saldo $0). ¿Registrar de todos modos?')) return;
+
+  _ctGuardandoNC = true;
+  const b = document.getElementById('ctNCBtnGuardar'); if (b) { b.disabled = true; b.textContent = 'Guardando...'; }
+  try {
+    const data = {
+      id: editId || '',
+      tipo: 'nota_credito',
+      folio_pedido: folio,
+      cliente: ctOrderActivo.client || '',
+      num_factura: num,
+      fecha_factura: fecha,
+      monto_sin_iva: monto,
+      iva: iva,
+      ret_iva: ret,
+      monto_total: total,
+      tipo_factura: 'Nota de crédito',
+      pct_pedido: '',
+      concepto: f.concepto || '',
+      dias_credito: 0,
+      fecha_vencimiento: '',
+      factura_relacionada: f.id,
+      motivo_nc: document.getElementById('ctNCMotivo').value,
+      notas: document.getElementById('ctNCNotas').value.trim(),
+      creado_por: CU.name || CU.area || ''
+    };
+    const res = await apiPost({action:'saveFactura', data: JSON.stringify(data), by: encodeURIComponent(CU.name+' ('+CU.area+')')});
+    if (!res.ok) { showAlert('Error al guardar: '+(res.error||''),'❌'); return; }
+    invalidarCacheContab(); await loadContab(true);
+    _ctOcultarFormsCfdi();
+    ctRenderFactList();
+    renderContab();
+    // Decisión de Alex: NO se toca el valor del pedido; solo se avisa.
+    const pf = ctPorFacturar(ctOrderActivo);
+    if (pf > 0.01) {
+      showAlert('Nota de crédito guardada. Ojo: el facturado neto quedó ' + ctFmt(pf) + ' (sin IVA) por debajo del valor del pedido, así que el pedido vuelve a mostrar "Por facturar". Si la nota corresponde a una reducción del pedido (pieza cancelada, descuento), ajusta el valor del pedido en Administración.','⚠️');
+    } else {
+      showAlert('Nota de crédito guardada.','✅');
+    }
+    await ctVerificarCierreAutomatico(folio);
+  } catch(e) { showAlert('Error de red.','❌'); }
+  finally {
+    _ctGuardandoNC = false;
+    const b2 = document.getElementById('ctNCBtnGuardar'); if (b2) { b2.disabled = false; b2.textContent = 'Guardar nota de crédito'; }
+  }
+}
+
+function _ctToggleSust() {
+  const w = document.getElementById('ctCancSustWrap');
+  if (w) w.style.display = document.getElementById('ctCancMotivo').value === '01' ? '' : 'none';
+}
+function openFormCancelacion(id) {
+  const f = ctFacturas.find(x => x.id === id);
+  if (!f || ctEsCancelada(f)) return;
+  if (!ctEsNC(f) && ctNotasDeFactura(f.id).length) {
+    showAlert('FAC-' + f.num_factura + ' tiene notas de crédito vigentes. Cancela (o elimina) primero esas notas.','⚠️'); return;
+  }
+  document.getElementById('ctCancId').value = f.id;
+  document.getElementById('ctFormCancTitle').textContent = 'Cancelar ante el SAT — ' + ctLblCfdi(f) + ' (' + ctFmt(f.monto_total) + ')';
+  document.getElementById('ctCancFecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('ctCancMotivo').value = '01';
+  document.getElementById('ctCancSust').value = '';
+  document.getElementById('ctCancNota').value = '';
+  _ctToggleSust();
+  const b = document.getElementById('ctCancBtnGuardar'); if (b) { b.disabled = false; b.textContent = 'Registrar cancelación'; }
+  _ctMostrarFormCfdi('ctFormCanc');
+}
+
+let _ctGuardandoCanc = false;
+async function guardarCancelacionCfdi() {
+  if (_ctGuardandoCanc || !ctOrderActivo) return;
+  const folio = ctOrderActivo.folio || ctOrderActivo.id;
+  const f = ctFacturas.find(x => x.id === document.getElementById('ctCancId').value);
+  if (!f) return;
+  const fecha = document.getElementById('ctCancFecha').value;
+  const motivo = document.getElementById('ctCancMotivo').value;
+  const sust = document.getElementById('ctCancSust').value.trim();
+  if (!fecha) { showAlert('La fecha de cancelación es obligatoria.','⚠️'); return; }
+  const fEm = ctFechaISO(f.fecha_factura);
+  if (fEm && fecha < fEm) { showAlert('La cancelación no puede ser anterior a la emisión.','⚠️'); return; }
+  if (motivo === '01' && !sust) { showAlert('Con motivo 01 indica el folio del CFDI que la sustituye.','⚠️'); return; }
+  if (!ctEsNC(f) && ctNotasDeFactura(f.id).length) { showAlert('Esta factura tiene notas de crédito vigentes. Cancélalas primero.','⚠️'); return; }
+  const etq = ctLblCfdi(f);
+  let msg = '¿Registrar ' + etq + ' como CANCELADA ante el SAT?\n\nDejará de contar en Facturado (de su mes original) y en Cartera.';
+  if (!ctEsNC(f) && ctTotalCobrado(folio) > 0.01) msg += '\n\nLos pagos del pedido se conservan. Si la factura sustituta aún no está capturada, aparecerán como anticipo sin factura.';
+  if (!confirm(msg)) return;
+  _ctGuardandoCanc = true;
+  const b = document.getElementById('ctCancBtnGuardar'); if (b) { b.disabled = true; b.textContent = 'Guardando...'; }
+  try {
+    const data = {
+      id: f.id,
+      tipo: f.tipo || 'factura',
+      folio_pedido: folio,
+      num_factura: f.num_factura,
+      monto_total: f.monto_total,
+      estatus_cfdi: 'cancelada',
+      fecha_cancelacion: fecha,
+      motivo_cancelacion: motivo,
+      sustituida_por: motivo === '01' ? sust : '',
+      nota_cancelacion: document.getElementById('ctCancNota').value.trim(),
+      cancelado_por: CU.name || CU.area || ''
+    };
+    const res = await apiPost({action:'saveFactura', data: JSON.stringify(data), by: encodeURIComponent(CU.name+' ('+CU.area+')')});
+    if (!res.ok) { showAlert('Error al guardar: '+(res.error||''),'❌'); return; }
+    invalidarCacheContab(); await loadContab(true);
+    _ctOcultarFormsCfdi();
+    ctRenderFactList();
+    renderContab();
+    const susTxt = (motivo === '01' && !ctRegistrosDePedido(folio).some(x => String(x.num_factura) === sust))
+      ? ' Falta capturar la factura sustituta ' + sust + ' con "+ Nueva factura".' : '';
+    showAlert(etq + ' registrada como cancelada ante el SAT.' + susTxt, susTxt ? '⚠️' : '✅');
+    await ctVerificarCierreAutomatico(folio);
+  } catch(e) { showAlert('Error de red.','❌'); }
+  finally {
+    _ctGuardandoCanc = false;
+    const b2 = document.getElementById('ctCancBtnGuardar'); if (b2) { b2.disabled = false; b2.textContent = 'Registrar cancelación'; }
+  }
+}
+
+// Solo Dirección — para corregir una cancelación registrada por error.
+async function revertirCancelacionCfdi(id) {
+  if (!isDir()) { showAlert('Solo Dirección puede revertir una cancelación.','⚠️'); return; }
+  const f = ctFacturas.find(x => x.id === id);
+  if (!f || !ctEsCancelada(f)) return;
+  if (ctEsNC(f)) {
+    const fr = ctFacturas.find(x => String(x.id) === String(f.factura_relacionada));
+    if (fr && ctEsCancelada(fr)) { showAlert('La factura de esta nota también está cancelada. Revierte primero la factura.','⚠️'); return; }
+  }
+  const etq = ctLblCfdi(f);
+  if (!confirm('¿Revertir la cancelación de ' + etq + '? Volverá a contar como vigente en Facturado y Cartera.')) return;
+  try {
+    const data = { id: f.id, tipo: f.tipo || 'factura', folio_pedido: f.folio_pedido, num_factura: f.num_factura, monto_total: f.monto_total,
+      estatus_cfdi: 'vigente', fecha_cancelacion: '', motivo_cancelacion: '', sustituida_por: '', nota_cancelacion: '', cancelado_por: '' };
+    const res = await apiPost({action:'saveFactura', data: JSON.stringify(data), by: encodeURIComponent(CU.name+' ('+CU.area+')')});
+    if (!res.ok) { showAlert('Error: '+(res.error||''),'❌'); return; }
+    invalidarCacheContab(); await loadContab(true);
+    ctRenderFactList();
+    renderContab();
+    showAlert('Cancelación revertida: ' + etq + ' vuelve a estar vigente.','✅');
   } catch(e) { showAlert('Error de red.','❌'); }
 }
 
@@ -9509,6 +9951,7 @@ function openFormAbono() {
   document.getElementById('ctAForma').value = 'Transferencia';
   document.getElementById('ctARef').value = '';
   document.getElementById('ctANotas').value = '';
+  _ctOcultarFormsCfdi();
   document.getElementById('ctFormAbono').classList.remove('hidden');
   document.getElementById('ctFormFact').classList.add('hidden');
   _ctGuardandoAbono = false;
@@ -9532,6 +9975,7 @@ function editarAbono(id) {
   document.getElementById('ctAForma').value = a.forma_pago||'Transferencia';
   document.getElementById('ctARef').value = a.referencia||'';
   document.getElementById('ctANotas').value = a.notas||'';
+  _ctOcultarFormsCfdi();
   document.getElementById('ctFormAbono').classList.remove('hidden');
   document.getElementById('ctFormFact').classList.add('hidden');
   const btnA1 = document.querySelector('#ctFormAbono button[onclick="guardarAbono()"]');
@@ -9906,7 +10350,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-17-1330';
+const APP_VERSION = '2026-10-17-1800';
 
 let _versionCheckTimer = null;
 
