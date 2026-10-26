@@ -1282,6 +1282,7 @@ textarea{resize:vertical;min-height:58px}
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap">
         <input type="checkbox" id="ctVerCerrados" onchange="renderContab()"> Ver pedidos cerrados y liquidados
       </label>
+      <button onclick="openCtClientes()" title="Catálogo de clientes (solo lectura)" style="margin-left:auto;background:#fff;border:1px solid var(--border);color:var(--navy);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">👥 Clientes</button>
     </div>
     <!-- Tabla -->
     <div class="card">
@@ -1321,6 +1322,88 @@ textarea{resize:vertical;min-height:58px}
 </div>
 
 <!-- MODAL CONTABILIDAD -->
+<!-- Catálogo de clientes — solo lectura para Contabilidad (oct 2026) -->
+<div id="ctCliModal" class="overlay hidden" onclick="if(event.target===this)closeCtClientes()">
+  <div class="modal" style="max-width:1150px;width:96vw;max-height:92vh;display:flex;flex-direction:column">
+    <div style="padding:20px 24px 12px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--navy)">👥 Clientes</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Mismo catálogo que Cotizaciones · lo que guardes aquí se ve allá. Los datos fiscales son opcionales y se pueden completar después.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="openCtCliEdit('')" style="background:var(--navy);color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">+ Nuevo cliente</button>
+          <button onclick="closeCtClientes()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1">×</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
+        <input id="ctCliSearch" placeholder="Buscar empresa, contacto, email, teléfono, ciudad..." oninput="renderCtClientes()" style="flex:1;min-width:240px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+        <select id="ctCliEstatus" onchange="renderCtClientes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+          <option value="">Todos los estatus</option>
+          <option value="Cliente activo">Cliente activo</option>
+          <option value="Prospecto">Prospecto</option>
+          <option value="Cliente inactivo">Cliente inactivo</option>
+          <option value="Suspendido">Suspendido</option>
+        </select>
+        <select id="ctCliFiscal" onchange="renderCtClientes()" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+          <option value="">Datos fiscales: todos</option>
+          <option value="error">⚠ Con errores</option>
+          <option value="incompleto">ⓘ Incompletos</option>
+          <option value="completo">✓ Completos</option>
+        </select>
+        <span id="ctCliCount" style="font-size:12px;color:var(--muted);white-space:nowrap"></span>
+      </div>
+    </div>
+    <div style="overflow:auto;flex:1">
+      <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:13px">
+        <thead><tr id="ctCliHead"></tr></thead>
+        <tbody id="ctCliBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Alta / edición de cliente desde Contabilidad (oct 2026) -->
+<div id="ctCliEditModal" class="overlay hidden" style="z-index:1200">
+  <div class="modal" style="max-width:720px;width:96vw;max-height:92vh;overflow-y:auto">
+    <div style="padding:20px 24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div id="ctCeTitle" style="font-size:16px;font-weight:700;color:var(--navy)">Nuevo cliente</div>
+        <button onclick="closeCtCliEdit()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1">×</button>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Datos de la empresa</div>
+      <div class="fg"><label>Empresa *</label><input id="ctCeEmpresa" type="text" placeholder="Nombre comercial"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+        <div class="fg"><label>Contacto</label><input id="ctCeContacto" type="text"></div>
+        <div class="fg"><label>Ciudad</label><input id="ctCeCiudad" type="text" placeholder="Monterrey, NL"></div>
+        <div class="fg"><label>Correo</label><input id="ctCeEmail" type="email" oninput="ctCeAvisos()"></div>
+        <div class="fg"><label>Teléfono</label><input id="ctCeTelefono" type="text"></div>
+        <div class="fg"><label>Estatus</label><select id="ctCeEstatus"><option>Prospecto</option><option>Cliente activo</option><option>Cliente inactivo</option><option>Suspendido</option></select></div>
+        <div class="fg"><label>Origen del lead</label><select id="ctCeOrigen"><option>Llamada entrante</option><option>Referido</option><option>Visita directa</option><option>Redes sociales</option><option>Google</option><option>Licitacion</option><option>Otro</option></select></div>
+      </div>
+      <div class="fg" style="margin-top:8px"><label>Notas</label><textarea id="ctCeNotas" rows="2" style="width:100%;box-sizing:border-box"></textarea></div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 8px">Datos fiscales (CFDI 4.0) — opcionales</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg"><label>RFC</label><input id="ctCeRfc" type="text" maxlength="13" style="text-transform:uppercase" placeholder="12 moral / 13 física" oninput="ctCeAvisos()"></div>
+        <div class="fg"><label>C.P. fiscal</label><input id="ctCeCp" type="text" maxlength="5" inputmode="numeric" placeholder="64000" oninput="ctCeAvisos()"></div>
+      </div>
+      <div class="fg" style="margin-top:8px"><label>Razón social (tal cual la constancia, sin régimen societario)</label><input id="ctCeRazon" type="text" oninput="ctCeAvisos()"></div>
+      <div class="fg" style="margin-top:8px"><label>Régimen fiscal</label><select id="ctCeRegimen" onchange="ctCeAvisos()"></select></div>
+      <div class="fg" style="margin-top:8px"><label>Uso de CFDI</label><select id="ctCeUso" onchange="ctCeAvisos()"></select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+        <div class="fg"><label>Método de pago</label><select id="ctCeMetodo" onchange="ctCeOnMetodo()"></select></div>
+        <div class="fg"><label>Forma de pago</label><select id="ctCeForma" onchange="ctCeAvisos()"></select></div>
+      </div>
+      <div id="ctCeAvisos" style="margin-top:12px"></div>
+      <input type="hidden" id="ctCeId">
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button onclick="closeCtCliEdit()" style="background:#F1F3F4;color:var(--text);border:none;padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer">Cancelar</button>
+        <button id="ctCeBtn" onclick="guardarCtCliente()" style="background:var(--navy);color:#fff;border:none;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Guardar cliente</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="ctModal" class="overlay hidden" onclick="if(event.target===this){}">
   <div class="modal" style="max-width:920px;max-height:92vh;overflow-y:auto">
     <div style="padding:20px 24px 0">
@@ -8896,6 +8979,27 @@ function ctDiscrepancias(o) {
     if (sinFact && facts.length) out.push({nivel:'error', corto:'"Sin factura" con facturas',
       detalle:'El pedido está marcado "Sin factura" pero tiene '+facts.map(lbl).join(', ')+' vigente(s). Quita la marca o cancela la factura.'});
   }
+  // ── Datos fiscales del cliente (oct 2026) — solo importan si el pedido
+  // todavía tiene algo por facturar y no está cancelado.
+  if (st !== 'cancelado' && ctPorFacturar(o) > 0.01) {
+    const cli = ctClienteDePedido(o);
+    if (!cli) {
+      out.push({nivel:'info', corto:'Cliente no está en el catálogo',
+        detalle:'"'+(o.client||'—')+'" no coincide con ningún cliente de 👥 Clientes, así que no hay datos fiscales para facturarle. Dalo de alta o corrige el nombre en el pedido.'});
+    } else {
+      const er = cliFiscalErrores(cli), fa = cliFiscalFaltantes(cli);
+      if (er.length) out.push({nivel:'error', corto:'Datos fiscales con error',
+        detalle:cli.empresa+': '+er.join('; ')+'. Corrígelo en 👥 Clientes antes de facturar.'});
+      if (fa.length) out.push({nivel:'info', corto:'Faltan datos fiscales ('+fa.length+')',
+        detalle:'A '+cli.empresa+' le falta: '+fa.join(', ')+'. Complétalos en 👥 Clientes antes de facturar.'});
+      const credito = /cr[eé]dito/i.test(String(o.condicion_pago || ''));
+      const met = String(cli.metodo_pago || '').toUpperCase();
+      if (credito && met === 'PUE') out.push({nivel:'error', corto:'PUE con pedido a crédito',
+        detalle:'El pedido es a crédito pero '+cli.empresa+' está como PUE. Una factura que se cobra después se emite PPD con forma 99 y luego se timbra su complemento de pago.'});
+      if (!credito && met === 'PPD') out.push({nivel:'info', corto:'PPD con pedido de contado',
+        detalle:'El pedido es de contado pero '+cli.empresa+' está como PPD. Si paga al momento de facturar, conviene emitir PUE con la forma de pago real (PPD obliga a timbrar complemento de pago).'});
+    }
+  }
   // Cancelación con motivo 01 cuya factura sustituta no está capturada
   regs.filter(f => ctEsCancelada(f) && String(f.motivo_cancelacion) === '01' && f.sustituida_por).forEach(f => {
     const existe = ctFacturas.some(x => String(x.num_factura) === String(f.sustituida_por) && !ctEsCancelada(x));
@@ -9262,6 +9366,240 @@ function ctInicializarFiltroMes() {
       const label = new Date(y, mo-1, 1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});
       return '<option value="'+m+'">'+label.charAt(0).toUpperCase()+label.slice(1)+'</option>';
     }).join('');
+}
+
+// ── Catálogos SAT y validación fiscal de clientes (oct 2026) ─────────────
+// MISMA COPIA en index.html y cotizaciones.html — si cambias una, cambia la
+// otra. Todos los campos fiscales son OPCIONALES (decisión de Alex): un
+// cliente se da de alta sin ellos y se completan después. Las validaciones
+// solo revisan lo que SÍ está capturado y nunca bloquean el guardado.
+const SAT_REGIMEN = [
+  ['601','General de Ley Personas Morales'],['603','Personas Morales con Fines no Lucrativos'],
+  ['605','Sueldos y Salarios e Ingresos Asimilados a Salarios'],['606','Arrendamiento'],
+  ['607','Régimen de Enajenación o Adquisición de Bienes'],['608','Demás ingresos'],
+  ['610','Residentes en el Extranjero sin Establecimiento Permanente en México'],
+  ['611','Ingresos por Dividendos (socios y accionistas)'],['612','Personas Físicas con Actividades Empresariales y Profesionales'],
+  ['614','Ingresos por intereses'],['615','Régimen de los ingresos por obtención de premios'],
+  ['616','Sin obligaciones fiscales'],['620','Sociedades Cooperativas de Producción que optan por diferir sus ingresos'],
+  ['621','Incorporación Fiscal'],['622','Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras'],
+  ['623','Opcional para Grupos de Sociedades'],['624','Coordinados'],
+  ['625','Actividades Empresariales con ingresos a través de Plataformas Tecnológicas'],
+  ['626','Régimen Simplificado de Confianza']
+];
+const SAT_USO_CFDI = [
+  ['G01','Adquisición de mercancías'],['G02','Devoluciones, descuentos o bonificaciones'],['G03','Gastos en general'],
+  ['I01','Construcciones'],['I02','Mobiliario y equipo de oficina por inversiones'],['I03','Equipo de transporte'],
+  ['I04','Equipo de cómputo y accesorios'],['I05','Dados, troqueles, moldes, matrices y herramental'],
+  ['I06','Comunicaciones telefónicas'],['I07','Comunicaciones satelitales'],['I08','Otra maquinaria y equipo'],
+  ['D01','Honorarios médicos, dentales y gastos hospitalarios'],['D02','Gastos médicos por incapacidad o discapacidad'],
+  ['D03','Gastos funerales'],['D04','Donativos'],['D05','Intereses reales por créditos hipotecarios (casa habitación)'],
+  ['D06','Aportaciones voluntarias al SAR'],['D07','Primas por seguros de gastos médicos'],
+  ['D08','Gastos de transportación escolar obligatoria'],['D09','Depósitos en cuentas para el ahorro / planes de pensiones'],
+  ['D10','Pagos por servicios educativos (colegiaturas)'],['S01','Sin efectos fiscales'],['CP01','Pagos'],['CN01','Nómina']
+];
+const SAT_FORMA_PAGO = [
+  ['01','Efectivo'],['02','Cheque nominativo'],['03','Transferencia electrónica de fondos'],['04','Tarjeta de crédito'],
+  ['05','Monedero electrónico'],['06','Dinero electrónico'],['08','Vales de despensa'],['12','Dación en pago'],
+  ['13','Pago por subrogación'],['14','Pago por consignación'],['15','Condonación'],['17','Compensación'],
+  ['23','Novación'],['24','Confusión'],['25','Remisión de deuda'],['26','Prescripción o caducidad'],
+  ['27','A satisfacción del acreedor'],['28','Tarjeta de débito'],['29','Tarjeta de servicios'],
+  ['30','Aplicación de anticipos'],['31','Intermediario pagos'],['99','Por definir']
+];
+const SAT_METODO_PAGO = [['PUE','Pago en una sola exhibición'],['PPD','Pago en parcialidades o diferido']];
+const CLI_FISCAL_CAMPOS = [['rfc','RFC'],['razon_social','Razón social'],['regimen_fiscal','Régimen fiscal'],
+  ['cp_fiscal','C.P. fiscal'],['uso_cfdi','Uso de CFDI'],['metodo_pago','Método de pago'],['forma_pago','Forma de pago']];
+const REG_SOLO_MORAL  = ['601','603','620','623','624'];
+const REG_SOLO_FISICA = ['605','606','608','611','612','614','615','621','625'];
+
+function satOpciones(lista, valor) {
+  const v = String(valor || '');
+  let html = '<option value="">— Sin capturar —</option>';
+  if (v && !lista.some(e => e[0] === v)) html += '<option value="'+v+'" selected>'+v+' (no está en catálogo)</option>';
+  return html + lista.map(e => '<option value="'+e[0]+'"'+(v===e[0]?' selected':'')+'>'+e[0]+' · '+e[1]+'</option>').join('');
+}
+function satDesc(lista, k) { const x = lista.find(e => e[0] === String(k || '')); return x ? x[1] : ''; }
+function cliFiscalFaltantes(c) {
+  return CLI_FISCAL_CAMPOS.filter(e => !String((c && c[e[0]]) || '').trim()).map(e => e[1]);
+}
+function cliFiscalErrores(c) {
+  const e = []; c = c || {};
+  const rfc = String(c.rfc || '').toUpperCase().replace(/\s+/g, '');
+  const reg = String(c.regimen_fiscal || '');
+  if (rfc) {
+    if (!/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc)) {
+      e.push('RFC "'+rfc+'" con formato inválido ('+rfc.length+' caracteres; persona moral = 12, física = 13)');
+    } else {
+      const generico = (rfc === 'XAXX010101000' || rfc === 'XEXX010101000');
+      const f = rfc.slice(-9, -3), mm = +f.slice(2,4), dd = +f.slice(4,6);
+      if (!generico && (mm < 1 || mm > 12 || dd < 1 || dd > 31)) e.push('RFC "'+rfc+'" con fecha inválida');
+      if (reg && rfc.length === 12 && REG_SOLO_FISICA.includes(reg)) e.push('Régimen '+reg+' es de persona física, pero el RFC es de persona moral (12)');
+      if (reg && rfc.length === 13 && !generico && REG_SOLO_MORAL.includes(reg)) e.push('Régimen '+reg+' es de persona moral, pero el RFC es de persona física (13)');
+    }
+  }
+  const cp = String(c.cp_fiscal || '').trim();
+  if (cp && !/^\d{5}$/.test(cp)) e.push('El C.P. fiscal debe tener 5 dígitos');
+  const met = String(c.metodo_pago || '').toUpperCase(), forma = String(c.forma_pago || '');
+  if (met === 'PPD' && forma && forma !== '99') e.push('Con método PPD la forma de pago debe ser 99 (Por definir)');
+  if (met === 'PUE' && forma === '99') e.push('Con método PUE la forma de pago no puede ser 99 (Por definir)');
+  const email = String(c.email || '').trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.push('Email con formato inválido');
+  return e;
+}
+// Bloque HTML de avisos para los formularios (no bloquea nada).
+function cliFiscalAvisosHtml(c) {
+  const err = cliFiscalErrores(c), falt = cliFiscalFaltantes(c);
+  if (!err.length && !falt.length) return '<div style="background:#E8F5E9;color:#2E7D32;border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600">✓ Datos fiscales completos</div>';
+  let h = '';
+  if (err.length) h += '<div style="background:#FFEBEE;color:#C0391B;border-radius:6px;padding:7px 10px;font-size:12px;margin-bottom:6px"><strong>⚠ Revisa:</strong><br>'+err.map(x => '• '+x).join('<br>')+'</div>';
+  if (falt.length) h += '<div style="background:#FFF8E1;color:#8D6E00;border-radius:6px;padding:7px 10px;font-size:12px">ⓘ Sin capturar (se puede guardar así y completar después): '+falt.join(', ')+'</div>';
+  return h;
+}
+
+// ── Catálogo de clientes en Contabilidad (oct 2026) ───────────────────
+// Contabilidad, Ventas y Dirección pueden dar de alta y editar clientes
+// (decisión de Alex). Desde aquí la contadora revisa y completa los datos
+// fiscales (uso de CFDI, método/forma de pago, régimen...). Es el MISMO
+// catálogo de Cotizaciones (hoja Clientes) — ya viene en el bootstrap.
+// Sin botón de eliminar.
+// Compara nombres sin acentos, signos, espacios ni sufijo societario
+// ("Busch Vacuum México, S.A. de C.V." = "BUSCH VACUUM MEXICO").
+function _ctNormNombre(v) {
+  let n = String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9ñ&]/g, '');
+  const suf = ['sapidecv','sabdecv','sadecv','sderldecv','srldecv','sderl','sapi','sab','sas','sa','sc'];
+  for (const x of suf) { if (n.length > x.length + 2 && n.endsWith(x)) { n = n.slice(0, -x.length); break; } }
+  return n;
+}
+// Cliente del catálogo que corresponde a un pedido (por nombre: los
+// pedidos guardan el nombre del cliente, no su id).
+function ctClienteDePedido(o) {
+  const n = _ctNormNombre(o && o.client);
+  if (!n || typeof allClientes === 'undefined') return null;
+  return allClientes.find(c => _ctNormNombre(c.empresa) === n) || null;
+}
+function openCtClientes() {
+  document.getElementById('ctCliSearch').value = '';
+  document.getElementById('ctCliEstatus').value = '';
+  document.getElementById('ctCliFiscal').value = '';
+  renderCtClientes();
+  document.getElementById('ctCliModal').classList.remove('hidden');
+  setTimeout(() => { try { document.getElementById('ctCliSearch').focus(); } catch(_) {} }, 50);
+}
+function closeCtClientes() { document.getElementById('ctCliModal').classList.add('hidden'); }
+function renderCtClientes() {
+  const th = (t, extra) => '<th style="position:sticky;top:0;z-index:1;background:#1B2A4A;color:#fff;padding:9px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap'+(extra||'')+'">'+t+'</th>';
+  document.getElementById('ctCliHead').innerHTML = th('Empresa') + th('RFC / Régimen') + th('Uso CFDI') + th('Método · Forma') + th('Fiscal') + th('Contacto') + th('Estatus') + th('', ';width:60px');
+  const q = (document.getElementById('ctCliSearch').value || '').toLowerCase().trim();
+  const fe = document.getElementById('ctCliEstatus').value;
+  const ff = document.getElementById('ctCliFiscal').value;
+  const todos = (typeof allClientes !== 'undefined' && Array.isArray(allClientes)) ? allClientes : [];
+  let list = todos.filter(c => !fe || c.estatus === fe);
+  if (ff) list = list.filter(c => {
+    const er = cliFiscalErrores(c).length, fa = cliFiscalFaltantes(c).length;
+    return ff === 'error' ? er > 0 : ff === 'incompleto' ? (fa > 0 && !er) : (!er && !fa);
+  });
+  if (q) list = list.filter(c => ['empresa','razon_social','rfc','contacto','email','telefono','ciudad','notas'].some(k => String(c[k]||'').toLowerCase().includes(q)));
+  list = list.slice().sort((a,b) => String(a.empresa||'').localeCompare(String(b.empresa||''), 'es', {sensitivity:'base'}));
+  const nErr = todos.filter(c => cliFiscalErrores(c).length).length;
+  const nInc = todos.filter(c => !cliFiscalErrores(c).length && cliFiscalFaltantes(c).length).length;
+  document.getElementById('ctCliCount').innerHTML = list.length + ' de ' + todos.length + ' clientes' +
+    (nErr ? ' · <span style="color:#C0391B;font-weight:700">'+nErr+' con error</span>' : '') +
+    (nInc ? ' · <span style="color:#8D6E00;font-weight:600">'+nInc+' incompletos</span>' : '');
+  const body = document.getElementById('ctCliBody');
+  if (!todos.length) { body.innerHTML = '<tr><td colspan="8" style="padding:28px;text-align:center;color:var(--muted)">No se pudo cargar el catálogo de clientes. Usa ↻ para recargar.</td></tr>'; return; }
+  if (!list.length) { body.innerHTML = '<tr><td colspan="8" style="padding:28px;text-align:center;color:var(--muted)">Sin resultados.</td></tr>'; return; }
+  const colEst = {'Cliente activo':['#E8F5E9','#2E7D32'],'Prospecto':['#E3F2FD','#1565C0'],'Cliente inactivo':['#F5F5F5','#616161'],'Suspendido':['#FFEBEE','#C0391B']};
+  const td = (h, extra) => '<td style="padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top'+(extra||'')+'">'+h+'</td>';
+  const sub = t => '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+t+'</div>';
+  body.innerHTML = list.map(c => {
+    const er = cliFiscalErrores(c), fa = cliFiscalFaltantes(c);
+    const ce = colEst[c.estatus] || ['#F5F5F5','#616161'];
+    const fiscal = er.length
+      ? '<span title="'+escHtml(er.join(' · '))+'" style="background:#FFEBEE;color:#C0391B;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;cursor:help;white-space:nowrap">⚠ '+er.length+' error'+(er.length>1?'es':'')+'</span>'
+      : fa.length
+        ? '<span title="Falta: '+escHtml(fa.join(', '))+'" style="background:#FFF8E1;color:#8D6E00;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:help;white-space:nowrap">ⓘ Faltan '+fa.length+'</span>'
+        : '<span style="background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">✓ Completo</span>';
+    const e = escHtml(c.email||''), t = escHtml(c.telefono||'');
+    return '<tr>' +
+      td('<strong style="color:var(--navy)">'+escHtml(c.empresa||'–')+'</strong>'+(c.razon_social?sub(escHtml(c.razon_social)):''), ';min-width:190px') +
+      td((c.rfc?'<span style="font-family:monospace">'+escHtml(c.rfc)+'</span>':'<span style="color:var(--muted)">–</span>')+(c.regimen_fiscal?sub(escHtml(c.regimen_fiscal+' · '+satDesc(SAT_REGIMEN,c.regimen_fiscal))):'') + (c.cp_fiscal?sub('C.P. '+escHtml(c.cp_fiscal)):''), ';min-width:150px') +
+      td(c.uso_cfdi ? '<strong>'+escHtml(c.uso_cfdi)+'</strong>'+sub(escHtml(satDesc(SAT_USO_CFDI,c.uso_cfdi))) : '<span style="color:var(--muted)">–</span>', ';min-width:130px') +
+      td((c.metodo_pago||c.forma_pago) ? '<strong>'+escHtml(c.metodo_pago||'–')+'</strong> · '+escHtml(c.forma_pago||'–')+(c.forma_pago?sub(escHtml(satDesc(SAT_FORMA_PAGO,c.forma_pago))):'') : '<span style="color:var(--muted)">–</span>', ';white-space:nowrap') +
+      td(fiscal) +
+      td(escHtml(c.contacto||'–')+(e?sub('<a href="mailto:'+e+'" style="color:#1565C0;text-decoration:none">'+e+'</a>'):'')+(t?sub('<a href="tel:'+t.replace(/[^0-9+]/g,'')+'" style="color:var(--muted);text-decoration:none">'+t+'</a>'):''), ';min-width:160px') +
+      td(c.estatus ? '<span style="background:'+ce[0]+';color:'+ce[1]+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">'+escHtml(c.estatus)+'</span>' : '–') +
+      td('<button data-id="'+escHtml(c.id)+'" onclick="openCtCliEdit(this.dataset.id)" style="background:none;border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">✏ Editar</button>') +
+      '</tr>';
+  }).join('');
+}
+
+function openCtCliEdit(id) {
+  const c = id ? (allClientes || []).find(x => String(x.id) === String(id)) : null;
+  const set = (k, v) => { document.getElementById(k).value = v || ''; };
+  document.getElementById('ctCeId').value = c ? c.id : '';
+  document.getElementById('ctCeTitle').textContent = c ? 'Editar: ' + (c.empresa || '') : 'Nuevo cliente';
+  set('ctCeEmpresa', c && c.empresa); set('ctCeContacto', c && c.contacto); set('ctCeCiudad', c && c.ciudad);
+  set('ctCeEmail', c && c.email); set('ctCeTelefono', c && c.telefono); set('ctCeNotas', c && c.notas);
+  document.getElementById('ctCeEstatus').value = (c && c.estatus) || 'Prospecto';
+  document.getElementById('ctCeOrigen').value = (c && c.origen) || 'Otro';
+  set('ctCeRfc', c && c.rfc); set('ctCeCp', c && c.cp_fiscal); set('ctCeRazon', c && c.razon_social);
+  document.getElementById('ctCeRegimen').innerHTML = satOpciones(SAT_REGIMEN, c && c.regimen_fiscal);
+  document.getElementById('ctCeUso').innerHTML     = satOpciones(SAT_USO_CFDI, c && c.uso_cfdi);
+  document.getElementById('ctCeMetodo').innerHTML  = satOpciones(SAT_METODO_PAGO, c && c.metodo_pago);
+  document.getElementById('ctCeForma').innerHTML   = satOpciones(SAT_FORMA_PAGO, c && c.forma_pago);
+  const b = document.getElementById('ctCeBtn'); b.disabled = false; b.textContent = 'Guardar cliente';
+  ctCeAvisos();
+  document.getElementById('ctCliEditModal').classList.remove('hidden');
+  setTimeout(() => { try { document.getElementById(c ? 'ctCeRfc' : 'ctCeEmpresa').focus(); } catch(_) {} }, 50);
+}
+function closeCtCliEdit() { document.getElementById('ctCliEditModal').classList.add('hidden'); }
+function ctCeLeer() {
+  const g = id => (document.getElementById(id).value || '').trim();
+  return {
+    empresa: g('ctCeEmpresa'), contacto: g('ctCeContacto'), ciudad: g('ctCeCiudad'), email: g('ctCeEmail'),
+    telefono: g('ctCeTelefono'), estatus: g('ctCeEstatus'), origen: g('ctCeOrigen'), notas: g('ctCeNotas'),
+    rfc: g('ctCeRfc').toUpperCase().replace(/\s+/g,''), razon_social: g('ctCeRazon'), regimen_fiscal: g('ctCeRegimen'),
+    cp_fiscal: g('ctCeCp'), uso_cfdi: g('ctCeUso'), metodo_pago: g('ctCeMetodo'), forma_pago: g('ctCeForma')
+  };
+}
+function ctCeAvisos() { document.getElementById('ctCeAvisos').innerHTML = cliFiscalAvisosHtml(ctCeLeer()); }
+function ctCeOnMetodo() {
+  const met = document.getElementById('ctCeMetodo').value, fp = document.getElementById('ctCeForma');
+  if (met === 'PPD') fp.value = '99';
+  else if (met === 'PUE' && fp.value === '99') fp.value = '';
+  ctCeAvisos();
+}
+let _ctGuardandoCli = false;
+async function guardarCtCliente() {
+  if (_ctGuardandoCli) return;
+  const id = document.getElementById('ctCeId').value;
+  const d = ctCeLeer();
+  if (!d.empresa) { showAlert('El nombre de la empresa es obligatorio.','⚠️'); return; }
+  const dup = (allClientes || []).find(x => String(x.id) !== String(id) && _ctNormNombre(x.empresa) === _ctNormNombre(d.empresa));
+  if (dup && !confirm('Ya existe un cliente llamado "' + dup.empresa + '". ¿Guardar de todos modos?')) return;
+  // Datos fiscales: solo se avisa, nunca se bloquea (decisión de Alex).
+  const err = cliFiscalErrores(d);
+  if (err.length && !confirm('Hay datos que no cuadran:\n\n• ' + err.join('\n• ') + '\n\n¿Guardar de todos modos? (se puede corregir después)')) return;
+  const cli = Object.assign({ id: id || '' }, d, { modificado_por: CU ? CU.area : '' });
+  if (!id) cli.creado = today();
+  _ctGuardandoCli = true;
+  const b = document.getElementById('ctCeBtn'); b.disabled = true; b.textContent = 'Guardando...';
+  try {
+    const r = await apiPost({ action: 'saveCliente', data: cli });
+    if (!r || !r.ok) { showAlert('Error al guardar: ' + ((r && r.error) || 'desconocido'), '❌'); return; }
+    if (id) {
+      const i = allClientes.findIndex(x => String(x.id) === String(id));
+      if (i >= 0) allClientes[i] = Object.assign({}, allClientes[i], cli);
+    } else {
+      cli.id = r.id || cli.id;
+      allClientes.push(cli);
+    }
+    invalidarCache(); // bootstrap en sessionStorage trae clientes
+    closeCtCliEdit();
+    renderCtClientes();
+    renderContab(); // las alertas fiscales de los pedidos dependen del catálogo
+    toast(id ? '✓ Cliente actualizado' : '✓ Cliente creado: ' + d.empresa);
+  } catch(e) { showAlert('Error de conexión al guardar el cliente.','❌'); }
+  finally { _ctGuardandoCli = false; b.disabled = false; b.textContent = 'Guardar cliente'; }
 }
 
 // ── Modal detalle ─────────────────────────────────
@@ -10430,7 +10768,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-17-2000';
+const APP_VERSION = '2026-10-26-1500';
 
 let _versionCheckTimer = null;
 
