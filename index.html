@@ -1666,6 +1666,7 @@ textarea{resize:vertical;min-height:58px}
         </select>
         <button class="rpt-btn primary" onclick="renderReporte()">Generar reporte</button>
         <button class="rpt-btn" onclick="abrirCarteraGeneral()" style="background:#A32D2D;color:#fff">📋 Cuentas por Cobrar</button>
+        <button class="rpt-btn" onclick="abrirPedidosAbiertos()" style="background:#185FA5;color:#fff">⏳ Pedidos abiertos</button>
         <div style="margin-left:auto;display:flex;gap:8px" id="rptExportBtns" style="display:none">
           <button class="rpt-btn green" onclick="exportarPDF()">⬇ PDF</button>
           <button class="rpt-btn amber" onclick="exportarExcel()">⬇ Excel</button>
@@ -1689,6 +1690,42 @@ textarea{resize:vertical;min-height:58px}
         </div>
         <div id="carteraTotales" style="margin:12px 0"></div>
         <div id="carteraBody"></div>
+      </div>
+
+      <!-- Pedidos abiertos por antigüedad — misma pantalla, igual que Cuentas por Cobrar -->
+      <div id="abiertosSection" class="hidden" style="margin-top:28px;padding-top:24px;border-top:2px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+          <div>
+            <h2 style="margin:0">⏳ Pedidos abiertos por antigüedad</h2>
+            <div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">
+              Pedidos que todavía no se entregan (A-, AC- y STK; <strong>no incluye fletes sueltos ni cancelados</strong>), del más antiguo al más nuevo. Fotografía de HOY: no depende del rango de fechas de arriba. <strong>Días abierto</strong> = desde la fecha de recepción del pedido. <strong>Atraso</strong> = días después de la fecha compromiso (si aún no vence, muestra cuántos faltan). El punto de color es el mismo semáforo de Administración.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap">
+            <button class="tbtn-white" onclick="descargarAbiertosPDF()">📄 PDF</button>
+            <button class="tbtn-white" onclick="descargarAbiertosExcel()">📊 Excel (editable)</button>
+            <button class="tbtn-white" onclick="document.getElementById('abiertosSection').classList.add('hidden')">✕ Ocultar</button>
+          </div>
+        </div>
+        <div class="rpt-ctrl" style="margin:12px 0">
+          <label>Tipo:</label>
+          <select id="abTipoSel" onchange="abSetFiltro('tipo',this.value)">
+            <option value="">Todos</option>
+            <option value="tanque">Tanques (A-)</option>
+            <option value="accesorios">Accesorios (AC-)</option>
+            <option value="stk">STK</option>
+          </select>
+          <label style="margin-left:4px">Estatus:</label>
+          <select id="abEstadoSel" onchange="abSetFiltro('estado',this.value)">
+            <option value="">Todos</option>
+            <option value="vencido">Vencidos</option>
+            <option value="sinfecha">Sin fecha compromiso</option>
+            <option value="atiempo">A tiempo</option>
+          </select>
+          <input id="abBuscar" type="text" placeholder="Buscar folio, cliente, modelo o notas..." oninput="abSetFiltro('q',this.value)" style="font-size:12px;padding:5px 10px;border:1px solid #DDE1EA;border-radius:7px;background:#fff;color:#1B2A4A;font-family:inherit;min-width:220px;flex:1">
+        </div>
+        <div id="abiertosTotales"></div>
+        <div id="abiertosBody"></div>
       </div>
     </div>
   </div>
@@ -5946,6 +5983,330 @@ function descargarCarteraPDF(){
   }
 
   doc.save('ALLTANSA_Cuentas_por_Cobrar_'+today()+'.pdf');
+  toast('PDF generado ✓');
+}
+
+// ===================================================================
+// REPORTE: PEDIDOS ABIERTOS POR ANTIGÜEDAD (nov 2026, decisión de Alex)
+// ===================================================================
+// Pedidos que todavía no se entregan, del más antiguo al más nuevo, con
+// modelo, notas y fecha compromiso. Fotografía de HOY (no depende del
+// rango de fechas del Reporte Ejecutivo).
+// Alcance (decisión de Alex): A-, AC- y STK. Los FLE- sueltos NO entran.
+// "Abierto":
+//  · STK: mientras no termine de entrar al almacén (gSt ≠ stk_done/closed).
+//  · A- / AC-: mientras el embarque no esté confirmado. Mismo criterio que
+//    "Por embarcar" de Admin, que a propósito ignora stages.cerrado (puede
+//    quedar desincronizado, ver algoPendiente). Un pedido marcado Cerrado
+//    sin embarque confirmado SÍ sale, con aviso, para que se corrija.
+// Semáforo = gSem() (fuente única, el mismo de Admin/Producción).
+let abFiltroTipo='', abFiltroEstado='', abBusqueda='';
+
+function abPedidoAbierto(o){
+  if(!o||gSt(o)==='cancelado')return false;
+  if(o.tipo==='flete')return false;
+  if(o.tipo==='stk'){const st=gSt(o);return st!=='stk_done'&&st!=='closed';}
+  return !(o.prod_stages&&o.prod_stages.embarque&&o.prod_stages.embarque.done);
+}
+
+// Fecha en que se levantó el pedido: "Recibido" → alta en el Board → mes del
+// folio (aprox., día 1) como último respaldo.
+function abFechaAlta(o){
+  const r=cleanDate(o.received);if(r)return{f:r,fuente:'Recibido'};
+  const c=cleanDate(o.createdAt);if(c)return{f:c,fuente:'Alta en Board'};
+  const yymm=folioYYMM(o.folio);
+  if(yymm)return{f:'20'+yymm.substring(0,2)+'-'+yymm.substring(2,4)+'-01',fuente:'Mes del folio (aprox.)'};
+  return{f:'',fuente:''};
+}
+
+function abTipo(o){
+  if(o.tipo==='stk')return{key:'stk',lbl:'STK'};
+  if(o.tipo==='accesorios')return{key:'accesorios',lbl:'Accesorios'};
+  return{key:'tanque',lbl:'Tanque'};
+}
+
+function abEtapa(o){
+  let e;
+  if(o.tipo==='accesorios')e='Compra de accesorios: '+(o.compras_accesorios||'Pendiente');
+  else if(o.tipo!=='stk'&&o.from_stock&&(parseInt(o.qty_produccion)||0)===0)e='Del almacén — por embarcar';
+  else if(!(o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done))e='Sin orden de producción';
+  else{
+    e=gEtapa(o).lbl;
+    if(e==='Terminado')e=o.tipo==='stk'?'Terminado — por entrar a almacén':'Terminado — por embarcar';
+  }
+  if(o.tipo!=='stk'&&gSt(o)==='closed')e='⚠ Marcado Cerrado sin embarque confirmado · '+e;
+  return e;
+}
+
+function calcPedidosAbiertos(){
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const filas=orders.filter(abPedidoAbierto).map(o=>{
+    const alta=abFechaAlta(o);
+    const dl=parseDeadline(o.deadline);
+    const atraso=dl?Math.round((hoy-dl)/86400000):null;
+    const sem=gSem(o);
+    const tp=abTipo(o);
+    const spec=[
+      o.capacidad_litros?(parseFloat(o.capacidad_litros)+' L'):'',
+      o.presion_psi?(parseFloat(o.presion_psi)+' PSI'):'',
+      o.material||'',o.fluido||'',o.acabado||''
+    ].filter(Boolean).join(' · ');
+    const acc=accItemsDe(o).map(a=>{
+      const q=parseFloat(a.cantidad)||0;
+      return ((q!==1?q+'× ':'')+String(a.descripcion||'').trim()+(a.notas?' ('+String(a.notas).trim()+')':'')).trim();
+    }).filter(Boolean).join('; ');
+    const nc=(o.calidad_no_conformidades||[]).find(n=>n&&!n.resuelto);
+    const ncTxt=nc?((nc.fecha_rechazo?fd(nc.fecha_rechazo)+' — ':'')+
+      ((PROD_STAGES.find(st=>st.key===nc.etapa_senalada)||{}).label||nc.etapa_senalada||'')+
+      (nc.motivo?': '+nc.motivo:'')+(nc.detalle?' — '+nc.detalle:'')).trim():'';
+    const ult=(Array.isArray(o.log)&&o.log.length)?o.log[o.log.length-1]:null;
+    const ultTxt=ult?((ult.ts?ult.ts+' — ':'')+(ult.msg||'')+(ult.by?' ('+ult.by+')':'')).trim():'';
+    return{
+      o, folio:o.folio||o.id, tipoKey:tp.key, tipo:tp.lbl+(o.tipo!=='stk'&&o.from_stock?' (almacén)':''),
+      cliente:o.tipo==='stk'?'Almacén interno':(o.client||''),
+      modelo:String(o.desc||o.stock_modelo_ref||'').trim(), spec, qty:parseInt(o.qty)||1,
+      alta:alta.f, altaFuente:alta.fuente, diasAbierto:alta.f?daysSince(alta.f):null,
+      compromiso:cleanDate(o.deadline), atraso, semCls:sem.cls, semLbl:sem.lbl,
+      etapa:abEtapa(o), notas:String(o.notes||'').trim(), accesorios:acc, nc:ncTxt, ultimo:ultTxt
+    };
+  });
+  filas.sort((a,b)=>{
+    const da=a.diasAbierto==null?-1:a.diasAbierto, db=b.diasAbierto==null?-1:b.diasAbierto;
+    if(db!==da)return db-da;
+    return String(a.folio).localeCompare(String(b.folio));
+  });
+  return filas;
+}
+
+function abEstadoKey(f){
+  if(f.atraso===null)return'sinfecha';
+  if(f.atraso>0)return'vencido';
+  return'atiempo'; // incluye "vence hoy"
+}
+
+function abAplicarFiltros(filas){
+  const q=(abBusqueda||'').toLowerCase().trim();
+  return filas.filter(f=>{
+    if(abFiltroTipo&&f.tipoKey!==abFiltroTipo)return false;
+    if(abFiltroEstado&&abEstadoKey(f)!==abFiltroEstado)return false;
+    if(!q)return true;
+    return [f.folio,f.cliente,f.modelo,f.spec,f.notas,f.accesorios,f.nc,f.etapa].join(' ').toLowerCase().includes(q);
+  });
+}
+
+function abFiltrosTxt(){
+  const t={tanque:'Tanques',accesorios:'Accesorios',stk:'STK'}[abFiltroTipo];
+  const e={vencido:'Vencidos',sinfecha:'Sin fecha compromiso',atiempo:'A tiempo'}[abFiltroEstado];
+  const p=[];if(t)p.push('Tipo: '+t);if(e)p.push('Estatus: '+e);if(abBusqueda.trim())p.push('Búsqueda: "'+abBusqueda.trim()+'"');
+  return p.length?p.join(' · '):'Sin filtros';
+}
+
+function abAtrasoTxt(a){
+  if(a===null)return'Sin fecha';
+  if(a>0)return a+' d tarde';
+  if(a===0)return'Vence hoy';
+  return'Faltan '+(-a)+' d';
+}
+
+async function abrirPedidosAbiertos(){
+  const sec=document.getElementById('abiertosSection');
+  sec.classList.remove('hidden');
+  document.getElementById('abiertosBody').innerHTML='<div class="empty">Cargando datos actualizados...</div>';
+  document.getElementById('abiertosTotales').innerHTML='';
+  sec.scrollIntoView({behavior:'smooth',block:'start'});
+  await loadAll(true);
+  renderPedidosAbiertos();
+}
+
+function abSetFiltro(campo,v){
+  if(campo==='tipo')abFiltroTipo=v;
+  else if(campo==='estado')abFiltroEstado=v;
+  else if(campo==='q')abBusqueda=v||'';
+  renderPedidosAbiertos();
+}
+
+function renderPedidosAbiertos(){
+  const todas=calcPedidosAbiertos();
+  const filas=abAplicarFiltros(todas);
+  const n=filas.length;
+  const venc=filas.filter(f=>f.atraso!==null&&f.atraso>0).length;
+  const sinF=filas.filter(f=>f.atraso===null).length;
+  const mas60=filas.filter(f=>f.diasAbierto!==null&&f.diasAbierto>60).length;
+  const conD=filas.filter(f=>f.diasAbierto!==null);
+  const prom=conD.length?Math.round(conD.reduce((s,f)=>s+f.diasAbierto,0)/conD.length):0;
+  document.getElementById('abiertosTotales').innerHTML=
+    '<div class="rpt-kpis">'+
+    '<div class="rpt-kpi navy"><p class="rpt-kpi-label">Pedidos abiertos</p><p class="rpt-kpi-val">'+n+'</p><p class="rpt-kpi-note">'+(n!==todas.length?'de '+todas.length+' (con filtros)':'A-, AC- y STK')+'</p></div>'+
+    '<div class="rpt-kpi red"><p class="rpt-kpi-label">Vencidos</p><p class="rpt-kpi-val red">'+venc+'</p><p class="rpt-kpi-note">pasó la fecha compromiso</p></div>'+
+    '<div class="rpt-kpi amber"><p class="rpt-kpi-label">Sin fecha compromiso</p><p class="rpt-kpi-val amber">'+sinF+'</p><p class="rpt-kpi-note">falta comprometerla</p></div>'+
+    '<div class="rpt-kpi amber"><p class="rpt-kpi-label">Más de 60 días</p><p class="rpt-kpi-val amber">'+mas60+'</p><p class="rpt-kpi-note">abiertos desde su recepción</p></div>'+
+    '<div class="rpt-kpi blue"><p class="rpt-kpi-label">Promedio abierto</p><p class="rpt-kpi-val blue">'+prom+' d</p><p class="rpt-kpi-note">días desde recepción</p></div>'+
+    '</div>';
+  if(!n){
+    document.getElementById('abiertosBody').innerHTML='<div class="rpt-empty">'+(todas.length?'Ningún pedido coincide con los filtros.':'No hay pedidos abiertos. 🎉')+'</div>';
+    return;
+  }
+  const th='padding:8px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:#1B2A4A;white-space:nowrap';
+  const td='padding:8px;border-bottom:1px solid #EEF0F4;vertical-align:top;font-size:11px;color:#1B2A4A';
+  let html='<div style="overflow-x:auto;background:#fff;border:1px solid #DDE1EA;border-radius:10px">'+
+    '<table style="width:100%;border-collapse:collapse;min-width:1100px"><thead><tr>'+
+    ['Folio','Cliente','Modelo','Cant.','Levantado','Compromiso','Atraso','Etapa actual','Notas'].map((h,i)=>'<th style="'+th+(i===3?';text-align:right':'')+'">'+h+'</th>').join('')+
+    '</tr></thead><tbody>';
+  filas.forEach((f,i)=>{
+    const bg=i%2?'#FAFBFD':'#fff';
+    const diasCol=f.diasAbierto===null?'#9E9E9E':(f.diasAbierto>60?'#A32D2D':(f.diasAbierto>30?'#854F0B':'#1B2A4A'));
+    const atrCol=f.atraso===null?'#854F0B':(f.atraso>=0?'#A32D2D':'#6B7A99');
+    const atrBg=f.atraso===null?'background:#FEF3CD;':'';
+    let notas='';
+    if(f.notas)notas+='<div style="white-space:pre-wrap">'+escHtml(f.notas)+'</div>';
+    if(f.accesorios)notas+='<div style="margin-top:4px;color:#6B7A99"><strong>🔧 Accesorios:</strong> '+escHtml(f.accesorios)+'</div>';
+    if(f.nc)notas+='<div style="margin-top:4px;color:#C0391B"><strong>❌ NC Calidad abierta:</strong> '+escHtml(f.nc)+'</div>';
+    if(f.ultimo)notas+='<div style="margin-top:4px;font-size:10px;color:#9E9E9E"><strong>Último movimiento:</strong> '+escHtml(f.ultimo)+'</div>';
+    if(!notas)notas='<span style="color:#BDC1C6">—</span>';
+    html+='<tr style="background:'+bg+'">'+
+      '<td style="'+td+';white-space:nowrap"><strong>'+escHtml(f.folio)+'</strong><div style="font-size:10px;color:#6B7A99">'+escHtml(f.tipo)+'</div></td>'+
+      '<td style="'+td+';min-width:120px">'+escHtml(f.cliente||'—')+'</td>'+
+      '<td style="'+td+';min-width:170px"><strong>'+escHtml(f.modelo||'—')+'</strong>'+(f.spec?'<div style="font-size:10px;color:#6B7A99;margin-top:2px">'+escHtml(f.spec)+'</div>':'')+'</td>'+
+      '<td style="'+td+';text-align:right">'+f.qty+'</td>'+
+      '<td style="'+td+';white-space:nowrap">'+(f.alta?fd(f.alta):'—')+'<div style="font-weight:700;color:'+diasCol+'">'+(f.diasAbierto===null?'—':f.diasAbierto+' d abierto')+'</div>'+(f.altaFuente&&f.altaFuente!=='Recibido'?'<div style="font-size:9px;color:#9E9E9E">'+escHtml(f.altaFuente)+'</div>':'')+'</td>'+
+      '<td style="'+td+';white-space:nowrap">'+(f.compromiso?fd(f.compromiso):'—')+'</td>'+
+      '<td style="'+td+';white-space:nowrap;'+atrBg+'"><span class="sem-wrap"><span class="sem '+f.semCls+'" title="'+escHtml(f.semLbl)+'"></span><span style="font-weight:700;color:'+atrCol+'">'+abAtrasoTxt(f.atraso)+'</span></span></td>'+
+      '<td style="'+td+';min-width:140px">'+escHtml(f.etapa)+'</td>'+
+      '<td style="'+td+';min-width:280px;max-width:420px">'+notas+'</td>'+
+      '</tr>';
+  });
+  html+='</tbody></table></div>';
+  document.getElementById('abiertosBody').innerHTML=html;
+}
+
+// Serial de fecha Excel (días desde 1899-12-30) calculado en UTC para que
+// no se recorra un día por zona horaria.
+function abSerialExcel(iso){
+  const p=String(iso).split('-');
+  return Math.round((Date.UTC(+p[0],+p[1]-1,+p[2])-Date.UTC(1899,11,30))/86400000);
+}
+
+// Excel pensado para EDITARSE (pedido de Alex): encabezado en la fila 1 sin
+// celdas combinadas, autofiltro, fechas como fechas reales y los días /
+// estatus como FÓRMULAS — si se cambia una fecha compromiso en el Excel,
+// el atraso y el estatus se recalculan solos. Columna final libre para
+// seguimiento. Los datos del Board NO se modifican desde el Excel.
+function descargarAbiertosExcel(){
+  if(typeof XLSX==='undefined'){showAlert('La librería de Excel no está disponible.','❌');return;}
+  const filas=abAplicarFiltros(calcPedidosAbiertos());
+  const head=['Folio','Tipo','Cliente','Modelo / descripción','Especificación','Cantidad',
+    'Fecha de levantamiento','Días abierto','Fecha compromiso','Días de atraso (+ tarde / - faltan)','Estatus entrega',
+    'Etapa actual','Notas del pedido','Accesorios (con notas)','NC Calidad abierta','Último movimiento','Seguimiento / comentarios'];
+  const ws={};
+  const E=XLSX.utils.encode_cell;
+  head.forEach((h,c)=>{ws[E({r:0,c})]={t:'s',v:h};});
+  const hoySerial=abSerialExcel(today());
+  filas.forEach((f,i)=>{
+    const r=i+1,R=String(r+1);
+    const set=(c,cell)=>{ws[E({r,c})]=cell;};
+    const s=(c,v)=>{if(v!==''&&v!=null)set(c,{t:'s',v:String(v)});};
+    s(0,f.folio);s(1,f.tipo);s(2,f.cliente);s(3,f.modelo);s(4,f.spec);
+    set(5,{t:'n',v:f.qty});
+    if(f.alta)set(6,{t:'n',v:abSerialExcel(f.alta),z:'dd/mm/yyyy'});
+    set(7,f.alta?{t:'n',v:hoySerial-abSerialExcel(f.alta),f:'IF(G'+R+'="","",TODAY()-G'+R+')'}:{t:'s',v:'',f:'IF(G'+R+'="","",TODAY()-G'+R+')'});
+    if(f.compromiso)set(8,{t:'n',v:abSerialExcel(f.compromiso),z:'dd/mm/yyyy'});
+    set(9,f.compromiso?{t:'n',v:f.atraso,f:'IF(I'+R+'="","",TODAY()-I'+R+')'}:{t:'s',v:'',f:'IF(I'+R+'="","",TODAY()-I'+R+')'});
+    const est=f.atraso===null?'Sin fecha':(f.atraso>0?'Vencido':(f.atraso===0?'Vence hoy':'A tiempo'));
+    set(10,{t:'s',v:est,f:'IF(I'+R+'="","Sin fecha",IF(TODAY()>I'+R+',"Vencido",IF(TODAY()=I'+R+',"Vence hoy","A tiempo")))'});
+    s(11,f.etapa);s(12,f.notas);s(13,f.accesorios);s(14,f.nc);s(15,f.ultimo);
+  });
+  const lastR=filas.length;
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR,c:head.length-1}});
+  ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR,c:head.length-1}})};
+  ws['!cols']=[12,12,26,34,30,9,14,11,14,14,13,28,60,40,40,50,40].map(w=>({wch:w}));
+  const info=XLSX.utils.aoa_to_sheet([
+    ['ALLTANSA S.A. de C.V. — Pedidos abiertos por antigüedad'],
+    [''],
+    ['Fecha de corte',fd(today())],
+    ['Pedidos en el reporte',filas.length],
+    ['Filtros aplicados',abFiltrosTxt()],
+    ['Alcance','Pedidos A-, AC- y STK que todavía no se entregan. No incluye fletes sueltos (FLE-) ni cancelados.'],
+    ['Orden','Del más antiguo al más nuevo (días desde la fecha de levantamiento).'],
+    ['Fecha de levantamiento','Fecha "Recibido" del pedido; si no tiene, la fecha de alta en el Board; si tampoco, el día 1 del mes del folio.'],
+    ['Días abierto / atraso / estatus','Son fórmulas con HOY(): se recalculan al abrir el archivo y si cambias una fecha. Atraso positivo = días tarde; negativo = días que faltan.'],
+    ['Agregar filas','Copia hacia abajo las fórmulas de las columnas H, J y K para los renglones nuevos.'],
+    ['Importante','Este archivo es una copia de trabajo. Lo que edites aquí NO cambia el Board.']
+  ]);
+  info['!cols']=[{wch:30},{wch:110}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Pedidos abiertos');
+  XLSX.utils.book_append_sheet(wb,info,'Info');
+  XLSX.writeFile(wb,'ALLTANSA_Pedidos_Abiertos_'+today()+'.xlsx');
+  toast('Excel generado ✓');
+}
+
+// jsPDF (helvetica) no dibuja emojis ni caracteres fuera de Latin-1: se
+// limpian solo para el PDF (en pantalla y Excel se conservan).
+function abPdfTxt(s){
+  return String(s==null?'':s).replace(/[^\x00-\xFF\u2013\u2014\u2018\u2019\u201C\u201D\u2022]/g,'').replace(/[ \t]{2,}/g,' ').trim();
+}
+
+function descargarAbiertosPDF(){
+  const {jsPDF}=window.jspdf||{};
+  if(!jsPDF){showAlert('jsPDF no está disponible.','❌');return;}
+  const filas=abAplicarFiltros(calcPedidosAbiertos());
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const W=297,M=10;let y=M;
+  doc.setFont('helvetica','bold');doc.setFontSize(15);doc.setTextColor(27,42,74);
+  doc.text('Pedidos abiertos por antigüedad — ALLTANSA S.A. de C.V.',M,y+6);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(107,122,153);
+  doc.text('Fotografía al '+fd(today())+' · A-, AC- y STK sin entregar (no incluye fletes sueltos) · del más antiguo al más nuevo · '+abPdfTxt(abFiltrosTxt()),M,y+11);
+  const venc=filas.filter(f=>f.atraso!==null&&f.atraso>0).length;
+  const sinF=filas.filter(f=>f.atraso===null).length;
+  const mas60=filas.filter(f=>f.diasAbierto!==null&&f.diasAbierto>60).length;
+  doc.setFont('helvetica','bold');doc.setTextColor(27,42,74);
+  doc.text(filas.length+' pedidos abiertos  ·  '+venc+' vencidos  ·  '+sinF+' sin fecha compromiso  ·  '+mas60+' con más de 60 días',M,y+16);
+  y+=19;
+  doc.setDrawColor(27,42,74);doc.setLineWidth(0.4);doc.line(M,y,W-M,y);y+=3;
+  const head=[['Folio','Cliente','Modelo','Cant.','Levantado','Días','Compromiso','Atraso','Etapa actual','Notas']];
+  const body=filas.map(f=>{
+    let notas=f.notas||'';
+    if(f.accesorios)notas+=(notas?'\n':'')+'Accesorios: '+f.accesorios;
+    if(f.nc)notas+=(notas?'\n':'')+'NC Calidad abierta: '+f.nc;
+    if(f.ultimo)notas+=(notas?'\n':'')+'Último mov.: '+f.ultimo;
+    return[
+      abPdfTxt(f.folio)+'\n'+abPdfTxt(f.tipo),
+      abPdfTxt(f.cliente||'—'),
+      abPdfTxt(f.modelo||'—')+(f.spec?'\n'+abPdfTxt(f.spec):''),
+      String(f.qty),
+      f.alta?fd(f.alta):'—',
+      f.diasAbierto===null?'—':String(f.diasAbierto),
+      f.compromiso?fd(f.compromiso):'—',
+      abAtrasoTxt(f.atraso),
+      abPdfTxt(f.etapa),
+      abPdfTxt(notas)||'—'
+    ];
+  });
+  doc.autoTable({
+    startY:y,head,body,
+    styles:{fontSize:7,cellPadding:1.8,font:'helvetica',textColor:[27,42,74],valign:'top',overflow:'linebreak'},
+    headStyles:{fillColor:[27,42,74],textColor:[255,255,255],fontStyle:'bold',fontSize:7},
+    alternateRowStyles:{fillColor:[248,249,252]},
+    columnStyles:{0:{cellWidth:22,fontStyle:'bold'},1:{cellWidth:30},2:{cellWidth:44},3:{cellWidth:10,halign:'right'},4:{cellWidth:17},5:{cellWidth:10,halign:'right',fontStyle:'bold'},6:{cellWidth:20},7:{cellWidth:18,fontStyle:'bold'},8:{cellWidth:28},9:{cellWidth:'auto'}},
+    margin:{left:M,right:M},
+    didParseCell:function(d){
+      if(d.section!=='body')return;
+      const f=filas[d.row.index];if(!f)return;
+      if(d.column.index===7){
+        if(f.atraso===null){d.cell.styles.textColor=[133,79,11];d.cell.styles.fillColor=[254,243,205];}
+        else if(f.atraso>=0)d.cell.styles.textColor=[163,45,45];
+        else d.cell.styles.textColor=[107,122,153];
+      }
+      if(d.column.index===5&&f.diasAbierto!==null&&f.diasAbierto>60)d.cell.styles.textColor=[163,45,45];
+    },
+    didDrawPage:function(){
+      const pY=doc.internal.pageSize.height-6;
+      doc.setTextColor(158,158,158);doc.setFontSize(7);doc.setFont('helvetica','normal');
+      doc.text('ALLTANSA S.A. de C.V. · Pedidos abiertos · Confidencial',M,pY);
+      doc.text('Pág. '+doc.getCurrentPageInfo().pageNumber,W-M,pY,{align:'right'});
+    }
+  });
+  doc.save('ALLTANSA_Pedidos_Abiertos_'+today()+'.pdf');
   toast('PDF generado ✓');
 }
 
@@ -10945,7 +11306,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-10-27-1200';
+const APP_VERSION = '2026-11-02-1230';
 
 let _versionCheckTimer = null;
 
