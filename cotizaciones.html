@@ -764,7 +764,7 @@
         <div class="table-wrap" style="border-radius:8px;border:1px solid var(--border)">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             <thead><tr style="background:#F0F2F7">
-              <th style="padding:6px 10px;text-align:left">Modelo</th>
+              <th style="padding:6px 10px;text-align:left">Partida (como sale en el PDF)</th>
               <th style="padding:6px 10px;text-align:center;width:60px">Cant.</th>
               <th style="padding:6px 10px;text-align:right;width:100px">Precio</th>
               <th style="padding:6px 10px;text-align:right;width:100px">Subtotal</th>
@@ -778,6 +778,7 @@
             </tr></tfoot>
           </table>
         </div>
+        <button type="button" class="tbtn-white" style="margin-top:8px;font-size:12px" onclick="agregarPartidaEspecialExpress()" title="Tanque que no está en la Lista de Precios: se redacta a mano y sale tal cual en el PDF">＋ Partida especial (no es de línea)</button>
 
         <div class="section-title" style="margin-top:14px">Accesorios, flete u otros cargos <span style="font-weight:400;color:var(--muted);font-size:12px">(opcional — se cotizan por separado del tanque)</span></div>
         <div class="table-wrap" style="border-radius:8px;border:1px solid var(--border)">
@@ -1976,9 +1977,16 @@ function renderPartidas(readOnly) {
     <tr data-idx="${i}">
       <td><input type="number" min="1" value="${p.cantidad||1}" ${readOnly?'disabled':''}
         onchange="updatePartida(${i},'cantidad',this.value)" style="width:48px"/></td>
-      <td><textarea placeholder="Descripcion" ${readOnly?'disabled':''}
+      <td>${partidaCatalogoModificada(p) ? `
+        <div style="font-size:11px;color:#C0391B;font-weight:700;margin-bottom:3px">Partida de catálogo modificada (${escHtml(p.modelo||'')}) — así sale en el PDF</div>
+        <textarea placeholder="Descripción en el PDF" ${readOnly?'disabled':''}
+          oninput="updatePartida(${i},'desc_pdf',this.value)"
+          style="width:100%;min-height:60px;resize:vertical;font-family:inherit;font-size:13px;padding:6px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box">${escHtml(pdfPartidaBase(p))}</textarea>
+        <input type="text" placeholder="Línea técnica (vacía = no se imprime)" ${readOnly?'disabled':''} value="${escHtml(pdfPartidaTecnica(p))}"
+          oninput="updatePartida(${i},'tec_pdf',this.value)"
+          style="width:100%;margin-top:4px;font-family:inherit;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box"/>` : `<textarea placeholder="Descripcion" ${readOnly?'disabled':''}
         oninput="updatePartida(${i},'descripcion',this.value)"
-        style="width:100%;min-height:100px;resize:vertical;font-family:inherit;font-size:13px;padding:6px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box">${escHtml(p.descripcion||'')}</textarea></td>
+        style="width:100%;min-height:100px;resize:vertical;font-family:inherit;font-size:13px;padding:6px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box">${escHtml(p.descripcion||'')}</textarea>`}</td>
       <td><input type="number" min="0" step="0.01" value="${p.precio_unit||0}" ${readOnly?'disabled':''}
         onchange="updatePartida(${i},'precio_unit',this.value)" style="width:95px"/></td>
       <td><input type="number" min="0" max="100" step="0.1" value="${m.discPct||0}" ${readOnly?'disabled':''}
@@ -2976,6 +2984,75 @@ function tipoBase(tipo) {
   return tipo;
 }
 
+// ═══ Texto de partida en el PDF — FUENTE ÚNICA (nov 2026) ═══════════════
+// Partida de catálogo (con modelo de Lista de Precios):
+//   base:    "TANQUE DE AIRE/DIESEL [modelo] PARA [capacidad]"
+//   técnica: "PESO: … PRESIÓN: … MEDIDAS: …" (de la Lista de Precios)
+// Partida capturada a mano (cotización directa o "Partida especial" de la
+// Express): la descripción tal cual se escribió, sin prefijo ni línea técnica.
+// Desde nov 2026 una partida de catálogo puede EDITARSE en la Express:
+//   p.desc_pdf = texto base editado · p.tec_pdf = línea técnica editada
+//   ('' = se quitó la línea técnica). Si no existen, se usa el default.
+// La partida conserva su modelo (sigue siendo de catálogo); el cambio vive
+// solo en ESTA cotización, nunca toca la Lista de Precios.
+const TIPO_LABEL_PDF = {
+  'Aire': 'AIRE',
+  'Diesel': 'DIESEL',
+  'Estacionarios': 'GAS LP ESTACIONARIO',
+  'Carburación': 'GAS LP CARBURACIÓN',
+  'Gasolina': 'GASOLINA'
+};
+function pdfPartidaBaseDefault(p) {
+  const label = TIPO_LABEL_PDF[tipoBase(p.tipo)];
+  if (label && p.modelo) {
+    const capacidadTxt = p.capacidad ? ' PARA ' + p.capacidad : '';
+    return `TANQUE DE ${label} ${(p.descripcion || '')}${capacidadTxt}`.toUpperCase();
+  }
+  return String(p.descripcion || p.tipo || '');
+}
+function pdfPartidaTecnicaDefault(p) {
+  const label = TIPO_LABEL_PDF[tipoBase(p.tipo)];
+  if (!(label && p.modelo)) return '';
+  // p.categoria trae la categoría EXACTA de la Lista de Precios (ej. "Aire —
+  // BUMA"), necesaria para encontrar el renglón correcto — p.tipo ya viene
+  // normalizado a su categoría base y no serviría para este lookup.
+  const item = buscarItemPrecioPorModelo(p.modelo, p.categoria || p.tipo);
+  if (!item) return '';
+  const tara = item['Tara (kg)'];
+  const dIn = item['D (in)'], hIn = item['H Total (in)'];
+  const pdis = item['P dis (PSI)'];
+  const partesExtra = [];
+  if (tara != null && tara !== '') partesExtra.push(`Peso: ${tara} kg`);
+  if (pdis != null && pdis !== '') partesExtra.push(`Presión: ${pdis} PSI`);
+  if (dIn != null && hIn != null && dIn !== '' && hIn !== '') partesExtra.push(`Medidas: ${hIn}" alto x ${dIn}" diám.`);
+  return partesExtra.join('   ').toUpperCase();
+}
+function pdfPartidaBase(p) {
+  return (p && p.desc_pdf != null && String(p.desc_pdf).trim() !== '') ? String(p.desc_pdf) : pdfPartidaBaseDefault(p);
+}
+function pdfPartidaTecnica(p) {
+  return (p && p.tec_pdf != null) ? String(p.tec_pdf) : pdfPartidaTecnicaDefault(p);
+}
+function partidaCatalogoModificada(p) {
+  return !!p && !p.especial && (p.desc_pdf != null || p.tec_pdf != null);
+}
+// Quita los overrides que quedaron iguales al default (o vacío en la base) —
+// así una partida que se abrió para editar pero no se cambió NO queda marcada
+// como modificada.
+function normalizarEdicionPartida(p) {
+  if (!p) return;
+  if (p.desc_pdf != null) {
+    const v = String(p.desc_pdf).trim();
+    if (!v || v.toUpperCase() === pdfPartidaBaseDefault(p).trim().toUpperCase()) delete p.desc_pdf;
+    else p.desc_pdf = v;
+  }
+  if (p.tec_pdf != null) {
+    const v = String(p.tec_pdf).trim();
+    if (v.toUpperCase() === pdfPartidaTecnicaDefault(p).trim().toUpperCase()) delete p.tec_pdf;
+    else p.tec_pdf = v;
+  }
+}
+
 function buscarItemPrecioPorModelo(modelo, categoria) {
   if (!modelo) return null;
   return listaPrecios.find(p => p.modelo === modelo && p.categoria === categoria) || null;
@@ -3270,42 +3347,13 @@ function generarPDFCotizacion(datos) {
   //  - Sin modelo (capturada a mano, cotización custom): la descripción tal cual se escribió,
   //    sin agregar "TANQUE DE...", solo con la capacidad si se llenó ese campo.
   //  Todo el texto del PDF sale en mayúsculas.
-  const TIPO_LABEL_PDF = {
-    'Aire': 'AIRE',
-    'Diesel': 'DIESEL',
-    'Estacionarios': 'GAS LP ESTACIONARIO',
-    'Carburación': 'GAS LP CARBURACIÓN',
-    'Gasolina': 'GASOLINA'
-  };
+  // Texto de cada partida: fuente única en pdfPartidaBase()/pdfPartidaTecnica()
+  // (definidas fuera de esta función) — las usa también la Express para
+  // mostrar y editar exactamente lo que va a salir en el PDF.
   const construirDescripcionPartida = (p, i) => {
-    const catBase = tipoBase(p.tipo);
-    const label = TIPO_LABEL_PDF[catBase];
-    let base;
-    if (label && p.modelo) {
-      const capacidadTxt = p.capacidad ? ' PARA ' + p.capacidad : '';
-      base = `TANQUE DE ${label} ${(p.descripcion || '')}${capacidadTxt}`;
-    } else {
-      // Cotización custom: la descripción tal cual se escribió, sin agregar nada más.
-      base = p.descripcion || p.tipo || '';
-    }
-    let renglonExtra = '';
-    if (label && p.modelo) {
-      // p.categoria trae la categoría EXACTA de la Lista de Precios (ej. "Aire —
-      // BUMA"), necesaria para encontrar el renglón correcto — p.tipo ya viene
-      // normalizado a su categoría base y no serviría para este lookup.
-      const item = buscarItemPrecioPorModelo(p.modelo, p.categoria || p.tipo);
-      if (item) {
-        const tara = item['Tara (kg)'];
-        const dIn = item['D (in)'], hIn = item['H Total (in)'];
-        const pdis = item['P dis (PSI)'];
-        const partesExtra = [];
-        if (tara != null && tara !== '') partesExtra.push(`Peso: ${tara} kg`);
-        if (pdis != null && pdis !== '') partesExtra.push(`Presión: ${pdis} PSI`);
-        if (dIn != null && hIn != null && dIn !== '' && hIn !== '') partesExtra.push(`Medidas: ${hIn}" alto x ${dIn}" diám.`);
-        if (partesExtra.length) renglonExtra = '\n' + partesExtra.join('   ');
-      }
-    }
-    return `${i+1}- ${base}${renglonExtra}`.toUpperCase();
+    const base = pdfPartidaBase(p);
+    const tec  = pdfPartidaTecnica(p);
+    return `${i+1}- ${base}${tec ? '\n' + tec : ''}`.toUpperCase();
   };
 
   // Alineación puesta directamente en cada celda del encabezado — jsPDF-autoTable
@@ -3529,6 +3577,7 @@ let expressResultado = null; // datos para el PDF, disponibles tras generar
 function abrirExpressModal() {
   currentPartidasExpress = [];
   currentServiciosExpress = [];
+  exEditando = new Set();
   expressResultado = null;
   const cats = [...new Set(listaPrecios.map(p => p.categoria))];
   if (!cats.includes(expressCat)) expressCat = cats[0] || 'Aire';
@@ -3633,7 +3682,58 @@ function agregarPartidaExpress(idx) {
 
 function quitarPartidaExpress(idx) {
   currentPartidasExpress.splice(idx, 1);
+  // los índices abiertos para editar se recorren uno hacia arriba
+  exEditando = new Set([...exEditando].filter(k => k !== idx).map(k => k > idx ? k - 1 : k));
   renderExpressPartidasList();
+}
+
+// Partidas de la Express (nov 2026):
+//  · De catálogo: muestran el texto EXACTO que saldrá en el PDF; "✏️ Editar"
+//    abre descripción + línea técnica para ajustarlas (p.desc_pdf / p.tec_pdf).
+//  · Especial: tanque que no es de línea; se redacta a mano (p.especial=true,
+//    sin modelo) y sale tal cual, igual que una partida de cotización directa.
+let exEditando = new Set(); // índices de partidas de catálogo abiertas para editar
+
+function agregarPartidaEspecialExpress() {
+  currentPartidasExpress.push({
+    tipo: 'Aire', cantidad: 1, capacidad: '', descripcion: '', precio_unit: 0,
+    modelo: '', categoria: '', orientacion: '', especial: true
+  });
+  renderExpressPartidasList();
+  // foco directo al texto de la partida nueva
+  setTimeout(() => {
+    const el = document.getElementById('exEspDesc' + (currentPartidasExpress.length - 1));
+    if (el) el.focus();
+  }, 0);
+}
+
+function editarPartidaExpress(idx) {
+  const p = currentPartidasExpress[idx]; if (!p || p.especial) return;
+  if (p.desc_pdf == null) p.desc_pdf = pdfPartidaBaseDefault(p);
+  if (p.tec_pdf == null)  p.tec_pdf  = pdfPartidaTecnicaDefault(p);
+  exEditando.add(idx);
+  renderExpressPartidasList();
+}
+
+function terminarEdicionPartidaExpress(idx) {
+  normalizarEdicionPartida(currentPartidasExpress[idx]);
+  exEditando.delete(idx);
+  renderExpressPartidasList();
+}
+
+function restaurarPartidaExpress(idx) {
+  const p = currentPartidasExpress[idx]; if (!p) return;
+  delete p.desc_pdf; delete p.tec_pdf;
+  exEditando.delete(idx);
+  renderExpressPartidasList();
+  showToast('Descripción original restaurada', 'success');
+}
+
+// Texto libre: se actualiza el dato SIN re-renderizar (re-renderizar reconstruye
+// el textarea y le quita el foco en cada tecla).
+function updatePartidaExpressTxt(idx, field, value) {
+  if (!currentPartidasExpress[idx]) return;
+  currentPartidasExpress[idx][field] = value;
 }
 
 function renderExpressPartidasList() {
@@ -3644,12 +3744,47 @@ function renderExpressPartidasList() {
     actualizarDefaultsNotasExpress();
     return;
   }
+  const inp = 'width:100%;box-sizing:border-box;padding:5px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:12px';
+  const lbl = 'display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:6px 0 2px';
+  const chip = (txt, bg, col) => `<span style="background:${bg};color:${col};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px">${txt}</span>`;
+  const lnk = 'background:none;border:none;color:var(--navy);font-size:11px;font-weight:600;cursor:pointer;padding:4px 0;margin-right:10px;text-decoration:underline';
   let total = 0;
   tbody.innerHTML = currentPartidasExpress.map((p, i) => {
     const subtotal = (p.cantidad || 1) * (p.precio_unit || 0);
     total += subtotal;
-    return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 10px">${escHtml(p.descripcion || p.tipo || '')}</td>
+    let celda;
+    if (p.especial) {
+      celda = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          ${chip('ESPECIAL','#FEF3CD','#854F0B').replace('margin-left:6px','margin-left:0')}
+          <select style="padding:3px;border:1px solid var(--border);border-radius:4px;font-size:11px" title="Categoría: define material y norma por default en las especificaciones técnicas"
+            onchange="updatePartidaExpressTxt(${i},'tipo',this.value)">
+            ${[['Aire','Aire'],['Diesel','Diésel'],['Otro','Otro']].map(([v,t]) => `<option value="${v}" ${p.tipo===v?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <textarea id="exEspDesc${i}" placeholder="Describe el tanque tal como debe salir en el PDF (capacidad, presión, material, medidas, extras…)"
+          oninput="updatePartidaExpressTxt(${i},'descripcion',this.value)" style="${inp};min-height:70px;resize:vertical">${escHtml(p.descripcion || '')}</textarea>`;
+    } else if (exEditando.has(i)) {
+      celda = `<div><strong style="color:var(--navy)">${escHtml(p.modelo || '')}</strong>${chip('EDITANDO','#E8F0FE','#1a73e8')}</div>
+        <label style="${lbl}">Descripción en el PDF</label>
+        <textarea oninput="updatePartidaExpressTxt(${i},'desc_pdf',this.value)" style="${inp};min-height:46px;resize:vertical">${escHtml(p.desc_pdf || '')}</textarea>
+        <label style="${lbl}">Línea técnica (peso / presión / medidas) — vacía = no se imprime</label>
+        <input type="text" value="${escHtml(p.tec_pdf || '')}" oninput="updatePartidaExpressTxt(${i},'tec_pdf',this.value)" style="${inp}"/>
+        <div style="margin-top:4px">
+          <button type="button" style="${lnk}" onclick="terminarEdicionPartidaExpress(${i})">✓ Listo</button>
+          <button type="button" style="${lnk}" onclick="restaurarPartidaExpress(${i})">↺ Restaurar original</button>
+        </div>`;
+    } else {
+      const mod = partidaCatalogoModificada(p);
+      const base = pdfPartidaBase(p), tec = pdfPartidaTecnica(p);
+      celda = `<div><strong style="color:var(--navy)">${escHtml(p.modelo || p.descripcion || p.tipo || '')}</strong>${mod ? chip('MODIFICADA','#FCE8E6','#C0391B') : ''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4">${escHtml(base)}${tec ? '<br>' + escHtml(tec) : ''}</div>
+        <div>
+          <button type="button" style="${lnk}" onclick="editarPartidaExpress(${i})">✏️ Editar descripción</button>
+          ${mod ? `<button type="button" style="${lnk}" onclick="restaurarPartidaExpress(${i})">↺ Restaurar original</button>` : ''}
+        </div>`;
+    }
+    return `<tr style="border-bottom:1px solid var(--border);vertical-align:top">
+      <td style="padding:6px 10px">${celda}</td>
       <td style="padding:6px 10px;text-align:center">
         <input type="number" min="1" value="${p.cantidad||1}" style="width:55px;text-align:center;padding:4px;border:1px solid var(--border);border-radius:4px"
           onchange="updatePartidaExpress(${i},'cantidad',this.value)"/>
@@ -3747,7 +3882,12 @@ async function generarCotizacionExpress() {
   const contactoInfo = document.getElementById('exContactoInfo')?.value?.trim() || '';
 
   if (!cliente)    { showToast('Selecciona un cliente', 'error'); return; }
-  if (!currentPartidasExpress.length) { showToast('Agrega al menos un modelo', 'error'); return; }
+  if (!currentPartidasExpress.length) { showToast('Agrega al menos una partida', 'error'); return; }
+  const espVacia = currentPartidasExpress.findIndex(p => p.especial && !String(p.descripcion || '').trim());
+  if (espVacia >= 0) { showToast(`La partida ${espVacia + 1} (especial) no tiene descripción`, 'error'); return; }
+  // Ediciones que quedaron abiertas sin dar "Listo": se toman tal cual están
+  currentPartidasExpress.forEach(p => { if (p.especial) p.descripcion = String(p.descripcion || '').trim(); else normalizarEdicionPartida(p); });
+  exEditando = new Set();
 
   const totalPartidasEx = currentPartidasExpress.reduce((s, p) => s + (p.cantidad || 1) * (p.precio_unit || 0), 0);
   const totalServiciosEx = currentServiciosExpress.reduce((s, x) => s + (x.cantidad || 1) * (x.precio_unit || 0), 0);
@@ -3922,7 +4062,9 @@ const REQUISICION_DEFAULTS_POR_CATEGORIA = {
 function obtenerInfoListaPrecios(cot) {
   let partidas = [];
   try { partidas = cot.partidas ? JSON.parse(cot.partidas) : []; } catch(e) {}
-  const conModelo = partidas.filter(p => p.modelo && REQUISICION_DEFAULTS_POR_CATEGORIA[tipoBase(p.tipo)]);
+  // Partidas especiales (sin modelo) no entran; tampoco una de catálogo con la
+  // línea técnica editada (su presión/medidas ya no son las de la Lista).
+  const conModelo = partidas.filter(p => p.modelo && p.tec_pdf == null && REQUISICION_DEFAULTS_POR_CATEGORIA[tipoBase(p.tipo)]);
   if (!conModelo.length) return null;
   // Si la cotización mezcla Aire con cualquier otra categoría (todas las demás
   // son horizontales), esa otra categoría domina la orientación. Si es solo
@@ -4147,7 +4289,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-10-26-1500';
+const APP_VERSION = '2026-11-02-1800';
 
 let _versionCheckTimer = null;
 
