@@ -1666,7 +1666,7 @@ textarea{resize:vertical;min-height:58px}
         </select>
         <button class="rpt-btn primary" onclick="renderReporte()">Generar reporte</button>
         <button class="rpt-btn" onclick="abrirCarteraGeneral()" style="background:#A32D2D;color:#fff">📋 Cuentas por Cobrar</button>
-        <button class="rpt-btn" onclick="abrirPedidosAbiertos()" style="background:#185FA5;color:#fff">⏳ Pedidos abiertos</button>
+        <button class="rpt-btn" onclick="abrirPedidosAbiertos()" style="background:#185FA5;color:#fff">⏳ Relación de producción</button>
         <div style="margin-left:auto;display:flex;gap:8px" id="rptExportBtns" style="display:none">
           <button class="rpt-btn green" onclick="exportarPDF()">⬇ PDF</button>
           <button class="rpt-btn amber" onclick="exportarExcel()">⬇ Excel</button>
@@ -1696,14 +1696,14 @@ textarea{resize:vertical;min-height:58px}
       <div id="abiertosSection" class="hidden" style="margin-top:28px;padding-top:24px;border-top:2px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:6px">
           <div>
-            <h2 style="margin:0">⏳ Pedidos abiertos por antigüedad</h2>
+            <h2 style="margin:0">⏳ Relación de producción — pedidos abiertos</h2>
             <div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">
-              Pedidos que todavía no se entregan (A-, AC- y STK; <strong>no incluye fletes sueltos ni cancelados</strong>), del más antiguo al más nuevo. Fotografía de HOY: no depende del rango de fechas de arriba. <strong>Días abierto</strong> = desde la fecha de recepción del pedido. <strong>Atraso</strong> = días después de la fecha compromiso (si aún no vence, muestra cuántos faltan). El punto de color es el mismo semáforo de Administración.
+              Pedidos que todavía no se entregan (A-, AC- y STK; <strong>no incluye fletes sueltos ni cancelados</strong>), del más antiguo al más nuevo según su fecha de recepción. Fotografía de HOY: no depende del rango de fechas de arriba. <strong>Días de atraso</strong> = días después de la fecha compromiso (si aún no vence, muestra cuántos faltan). El punto de color es el mismo semáforo de Administración. <strong>Seguimiento</strong> va en blanco para llenarse en la junta (a mano en el PDF o en el Excel).
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap">
             <button class="tbtn-white" onclick="descargarAbiertosPDF()">📄 PDF</button>
-            <button class="tbtn-white" onclick="descargarAbiertosExcel()">📊 Excel (editable)</button>
+            <button class="tbtn-white" onclick="descargarAbiertosExcel()">📊 Excel (editable, con formato)</button>
             <button class="tbtn-white" onclick="document.getElementById('abiertosSection').classList.add('hidden')">✕ Ocultar</button>
           </div>
         </div>
@@ -5987,19 +5987,22 @@ function descargarCarteraPDF(){
 }
 
 // ===================================================================
-// REPORTE: PEDIDOS ABIERTOS POR ANTIGÜEDAD (nov 2026, decisión de Alex)
+// RELACIÓN DE PRODUCCIÓN — PEDIDOS ABIERTOS POR ANTIGÜEDAD (nov 2026)
 // ===================================================================
-// Pedidos que todavía no se entregan, del más antiguo al más nuevo, con
-// modelo, notas y fecha compromiso. Fotografía de HOY (no depende del
-// rango de fechas del Reporte Ejecutivo).
+// Pedidos que todavía no se entregan, del más antiguo al más nuevo.
+// Fotografía de HOY (no depende del rango de fechas del Reporte Ejecutivo).
 // Alcance (decisión de Alex): A-, AC- y STK. Los FLE- sueltos NO entran.
 // "Abierto":
 //  · STK: mientras no termine de entrar al almacén (gSt ≠ stk_done/closed).
 //  · A- / AC-: mientras el embarque no esté confirmado. Mismo criterio que
 //    "Por embarcar" de Admin, que a propósito ignora stages.cerrado (puede
 //    quedar desincronizado, ver algoPendiente). Un pedido marcado Cerrado
-//    sin embarque confirmado SÍ sale, con aviso, para que se corrija.
-// Semáforo = gSem() (fuente única, el mismo de Admin/Producción).
+//    sin embarque confirmado SÍ sale, con aviso en pantalla.
+// Columnas (formato de la junta de producción de Alex, igual en pantalla,
+// PDF y Excel): Folio · Cliente · Modelo · CANT · Fecha compromiso · Días
+// de atraso · Notas del pedido (observaciones + kit de accesorios) ·
+// Seguimiento / comentarios en junta (SIEMPRE en blanco: se llena a mano).
+// Semáforo en pantalla = gSem() (fuente única, el mismo de Admin).
 let abFiltroTipo='', abFiltroEstado='', abBusqueda='';
 
 function abPedidoAbierto(o){
@@ -6009,8 +6012,8 @@ function abPedidoAbierto(o){
   return !(o.prod_stages&&o.prod_stages.embarque&&o.prod_stages.embarque.done);
 }
 
-// Fecha en que se levantó el pedido: "Recibido" → alta en el Board → mes del
-// folio (aprox., día 1) como último respaldo.
+// Fecha en que se levantó el pedido (para ordenar por antigüedad):
+// "Recibido" → alta en el Board → día 1 del mes del folio (aprox.).
 function abFechaAlta(o){
   const r=cleanDate(o.received);if(r)return{f:r,fuente:'Recibido'};
   const c=cleanDate(o.createdAt);if(c)return{f:c,fuente:'Alta en Board'};
@@ -6025,19 +6028,6 @@ function abTipo(o){
   return{key:'tanque',lbl:'Tanque'};
 }
 
-function abEtapa(o){
-  let e;
-  if(o.tipo==='accesorios')e='Compra de accesorios: '+(o.compras_accesorios||'Pendiente');
-  else if(o.tipo!=='stk'&&o.from_stock&&(parseInt(o.qty_produccion)||0)===0)e='Del almacén — por embarcar';
-  else if(!(o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done))e='Sin orden de producción';
-  else{
-    e=gEtapa(o).lbl;
-    if(e==='Terminado')e=o.tipo==='stk'?'Terminado — por entrar a almacén':'Terminado — por embarcar';
-  }
-  if(o.tipo!=='stk'&&gSt(o)==='closed')e='⚠ Marcado Cerrado sin embarque confirmado · '+e;
-  return e;
-}
-
 function calcPedidosAbiertos(){
   const hoy=new Date();hoy.setHours(0,0,0,0);
   const filas=orders.filter(abPedidoAbierto).map(o=>{
@@ -6046,28 +6036,20 @@ function calcPedidosAbiertos(){
     const atraso=dl?Math.round((hoy-dl)/86400000):null;
     const sem=gSem(o);
     const tp=abTipo(o);
-    const spec=[
-      o.capacidad_litros?(parseFloat(o.capacidad_litros)+' L'):'',
-      o.presion_psi?(parseFloat(o.presion_psi)+' PSI'):'',
-      o.material||'',o.fluido||'',o.acabado||''
-    ].filter(Boolean).join(' · ');
     const acc=accItemsDe(o).map(a=>{
       const q=parseFloat(a.cantidad)||0;
       return ((q!==1?q+'× ':'')+String(a.descripcion||'').trim()+(a.notas?' ('+String(a.notas).trim()+')':'')).trim();
     }).filter(Boolean).join('; ');
-    const nc=(o.calidad_no_conformidades||[]).find(n=>n&&!n.resuelto);
-    const ncTxt=nc?((nc.fecha_rechazo?fd(nc.fecha_rechazo)+' — ':'')+
-      ((PROD_STAGES.find(st=>st.key===nc.etapa_senalada)||{}).label||nc.etapa_senalada||'')+
-      (nc.motivo?': '+nc.motivo:'')+(nc.detalle?' — '+nc.detalle:'')).trim():'';
-    const ult=(Array.isArray(o.log)&&o.log.length)?o.log[o.log.length-1]:null;
-    const ultTxt=ult?((ult.ts?ult.ts+' — ':'')+(ult.msg||'')+(ult.by?' ('+ult.by+')':'')).trim():'';
+    const obs=String(o.notes||'').trim();
     return{
       o, folio:o.folio||o.id, tipoKey:tp.key, tipo:tp.lbl+(o.tipo!=='stk'&&o.from_stock?' (almacén)':''),
       cliente:o.tipo==='stk'?'Almacén interno':(o.client||''),
-      modelo:String(o.desc||o.stock_modelo_ref||'').trim(), spec, qty:parseInt(o.qty)||1,
-      alta:alta.f, altaFuente:alta.fuente, diasAbierto:alta.f?daysSince(alta.f):null,
+      modelo:String(o.desc||o.stock_modelo_ref||'').trim(), qty:parseInt(o.qty)||1,
+      alta:alta.f, diasAbierto:alta.f?daysSince(alta.f):null,
       compromiso:cleanDate(o.deadline), atraso, semCls:sem.cls, semLbl:sem.lbl,
-      etapa:abEtapa(o), notas:String(o.notes||'').trim(), accesorios:acc, nc:ncTxt, ultimo:ultTxt
+      // Notas del pedido = observaciones + kit, igual que la relación de la junta
+      notas:[obs,acc].filter(Boolean).join(' – '),
+      cerradoSinEmb:o.tipo!=='stk'&&gSt(o)==='closed'
     };
   });
   filas.sort((a,b)=>{
@@ -6090,7 +6072,7 @@ function abAplicarFiltros(filas){
     if(abFiltroTipo&&f.tipoKey!==abFiltroTipo)return false;
     if(abFiltroEstado&&abEstadoKey(f)!==abFiltroEstado)return false;
     if(!q)return true;
-    return [f.folio,f.cliente,f.modelo,f.spec,f.notas,f.accesorios,f.nc,f.etapa].join(' ').toLowerCase().includes(q);
+    return [f.folio,f.cliente,f.modelo,f.notas].join(' ').toLowerCase().includes(q);
   });
 }
 
@@ -6107,6 +6089,15 @@ function abAtrasoTxt(a){
   if(a===0)return'Vence hoy';
   return'Faltan '+(-a)+' d';
 }
+
+// "2 DE NOVIEMBRE 2026" — para el título, como la relación de la junta
+function abFechaLarga(iso){
+  const p=String(iso).split('-');
+  const meses=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  return parseInt(p[2])+' DE '+meses[parseInt(p[1])-1]+' '+p[0];
+}
+function abFechaCorta(iso){const p=String(iso).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'';}
+function abTitulo(){return'RELACIÓN DE PRODUCCIÓN AL '+abFechaLarga(today());}
 
 async function abrirPedidosAbiertos(){
   const sec=document.getElementById('abiertosSection');
@@ -6149,95 +6140,192 @@ function renderPedidosAbiertos(){
   const th='padding:8px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#fff;background:#1B2A4A;white-space:nowrap';
   const td='padding:8px;border-bottom:1px solid #EEF0F4;vertical-align:top;font-size:11px;color:#1B2A4A';
   let html='<div style="overflow-x:auto;background:#fff;border:1px solid #DDE1EA;border-radius:10px">'+
-    '<table style="width:100%;border-collapse:collapse;min-width:1100px"><thead><tr>'+
-    ['Folio','Cliente','Modelo','Cant.','Levantado','Compromiso','Atraso','Etapa actual','Notas'].map((h,i)=>'<th style="'+th+(i===3?';text-align:right':'')+'">'+h+'</th>').join('')+
+    '<table style="width:100%;border-collapse:collapse;min-width:1000px"><thead><tr>'+
+    ['Folio','Cliente','Modelo / descripción','Cant.','Fecha compromiso','Días de atraso','Notas del pedido','Seguimiento / comentarios en junta'].map((h,i)=>'<th style="'+th+(i===3?';text-align:right':'')+'">'+h+'</th>').join('')+
     '</tr></thead><tbody>';
   filas.forEach((f,i)=>{
     const bg=i%2?'#FAFBFD':'#fff';
-    const diasCol=f.diasAbierto===null?'#9E9E9E':(f.diasAbierto>60?'#A32D2D':(f.diasAbierto>30?'#854F0B':'#1B2A4A'));
-    const atrCol=f.atraso===null?'#854F0B':(f.atraso>=0?'#A32D2D':'#6B7A99');
+    const atrCol=f.atraso===null?'#854F0B':(f.atraso>0?'#A32D2D':'#6B7A99');
     const atrBg=f.atraso===null?'background:#FEF3CD;':'';
-    let notas='';
-    if(f.notas)notas+='<div style="white-space:pre-wrap">'+escHtml(f.notas)+'</div>';
-    if(f.accesorios)notas+='<div style="margin-top:4px;color:#6B7A99"><strong>🔧 Accesorios:</strong> '+escHtml(f.accesorios)+'</div>';
-    if(f.nc)notas+='<div style="margin-top:4px;color:#C0391B"><strong>❌ NC Calidad abierta:</strong> '+escHtml(f.nc)+'</div>';
-    if(f.ultimo)notas+='<div style="margin-top:4px;font-size:10px;color:#9E9E9E"><strong>Último movimiento:</strong> '+escHtml(f.ultimo)+'</div>';
-    if(!notas)notas='<span style="color:#BDC1C6">—</span>';
     html+='<tr style="background:'+bg+'">'+
-      '<td style="'+td+';white-space:nowrap"><strong>'+escHtml(f.folio)+'</strong><div style="font-size:10px;color:#6B7A99">'+escHtml(f.tipo)+'</div></td>'+
-      '<td style="'+td+';min-width:120px">'+escHtml(f.cliente||'—')+'</td>'+
-      '<td style="'+td+';min-width:170px"><strong>'+escHtml(f.modelo||'—')+'</strong>'+(f.spec?'<div style="font-size:10px;color:#6B7A99;margin-top:2px">'+escHtml(f.spec)+'</div>':'')+'</td>'+
+      '<td style="'+td+';white-space:nowrap"><strong>'+escHtml(f.folio)+'</strong><div style="font-size:10px;color:#6B7A99">'+escHtml(f.tipo)+'</div>'+
+        (f.cerradoSinEmb?'<div style="font-size:9px;color:#C0391B;white-space:normal;max-width:120px;margin-top:2px">⚠ Marcado Cerrado sin embarque confirmado</div>':'')+'</td>'+
+      '<td style="'+td+';min-width:130px">'+escHtml(f.cliente||'—')+'</td>'+
+      '<td style="'+td+';min-width:150px"><strong>'+escHtml(f.modelo||'—')+'</strong></td>'+
       '<td style="'+td+';text-align:right">'+f.qty+'</td>'+
-      '<td style="'+td+';white-space:nowrap">'+(f.alta?fd(f.alta):'—')+'<div style="font-weight:700;color:'+diasCol+'">'+(f.diasAbierto===null?'—':f.diasAbierto+' d abierto')+'</div>'+(f.altaFuente&&f.altaFuente!=='Recibido'?'<div style="font-size:9px;color:#9E9E9E">'+escHtml(f.altaFuente)+'</div>':'')+'</td>'+
       '<td style="'+td+';white-space:nowrap">'+(f.compromiso?fd(f.compromiso):'—')+'</td>'+
       '<td style="'+td+';white-space:nowrap;'+atrBg+'"><span class="sem-wrap"><span class="sem '+f.semCls+'" title="'+escHtml(f.semLbl)+'"></span><span style="font-weight:700;color:'+atrCol+'">'+abAtrasoTxt(f.atraso)+'</span></span></td>'+
-      '<td style="'+td+';min-width:140px">'+escHtml(f.etapa)+'</td>'+
-      '<td style="'+td+';min-width:280px;max-width:420px">'+notas+'</td>'+
+      '<td style="'+td+';min-width:280px;max-width:460px;white-space:pre-wrap">'+(f.notas?escHtml(f.notas):'<span style="color:#BDC1C6">—</span>')+'</td>'+
+      '<td style="'+td+';min-width:180px;border-left:1px dashed #DDE1EA"></td>'+
       '</tr>';
   });
   html+='</tbody></table></div>';
   document.getElementById('abiertosBody').innerHTML=html;
 }
 
-// Serial de fecha Excel (días desde 1899-12-30) calculado en UTC para que
-// no se recorra un día por zona horaria.
-function abSerialExcel(iso){
-  const p=String(iso).split('-');
-  return Math.round((Date.UTC(+p[0],+p[1]-1,+p[2])-Date.UTC(1899,11,30))/86400000);
+// Logo para PDF y Excel — el mismo logo.png del Board. Si no se puede leer,
+// el reporte sale igual, sin logo (nunca bloquea la descarga).
+let _abLogoCache=null;
+async function abCargarLogo(){
+  if(_abLogoCache!==null)return _abLogoCache;
+  try{
+    const r=await fetch('logo.png',{cache:'force-cache'});
+    if(!r.ok)throw new Error('logo '+r.status);
+    const blob=await r.blob();
+    const dataUrl=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(blob);});
+    const dims=await new Promise(res=>{const im=new Image();im.onload=()=>res({w:im.naturalWidth,h:im.naturalHeight});im.onerror=()=>res(null);im.src=dataUrl;});
+    _abLogoCache=(dims&&dims.w&&dims.h)?{dataUrl,w:dims.w,h:dims.h}:false;
+  }catch(e){_abLogoCache=false;}
+  return _abLogoCache;
 }
 
-// Excel pensado para EDITARSE (pedido de Alex): encabezado en la fila 1 sin
-// celdas combinadas, autofiltro, fechas como fechas reales y los días /
-// estatus como FÓRMULAS — si se cambia una fecha compromiso en el Excel,
-// el atraso y el estatus se recalculan solos. Columna final libre para
-// seguimiento. Los datos del Board NO se modifican desde el Excel.
-function descargarAbiertosExcel(){
-  if(typeof XLSX==='undefined'){showAlert('La librería de Excel no está disponible.','❌');return;}
-  const filas=abAplicarFiltros(calcPedidosAbiertos());
-  const head=['Folio','Tipo','Cliente','Modelo / descripción','Especificación','Cantidad',
-    'Fecha de levantamiento','Días abierto','Fecha compromiso','Días de atraso (+ tarde / - faltan)','Estatus entrega',
-    'Etapa actual','Notas del pedido','Accesorios (con notas)','NC Calidad abierta','Último movimiento','Seguimiento / comentarios'];
-  const ws={};
-  const E=XLSX.utils.encode_cell;
-  head.forEach((h,c)=>{ws[E({r:0,c})]={t:'s',v:h};});
-  const hoySerial=abSerialExcel(today());
-  filas.forEach((f,i)=>{
-    const r=i+1,R=String(r+1);
-    const set=(c,cell)=>{ws[E({r,c})]=cell;};
-    const s=(c,v)=>{if(v!==''&&v!=null)set(c,{t:'s',v:String(v)});};
-    s(0,f.folio);s(1,f.tipo);s(2,f.cliente);s(3,f.modelo);s(4,f.spec);
-    set(5,{t:'n',v:f.qty});
-    if(f.alta)set(6,{t:'n',v:abSerialExcel(f.alta),z:'dd/mm/yyyy'});
-    set(7,f.alta?{t:'n',v:hoySerial-abSerialExcel(f.alta),f:'IF(G'+R+'="","",TODAY()-G'+R+')'}:{t:'s',v:'',f:'IF(G'+R+'="","",TODAY()-G'+R+')'});
-    if(f.compromiso)set(8,{t:'n',v:abSerialExcel(f.compromiso),z:'dd/mm/yyyy'});
-    set(9,f.compromiso?{t:'n',v:f.atraso,f:'IF(I'+R+'="","",TODAY()-I'+R+')'}:{t:'s',v:'',f:'IF(I'+R+'="","",TODAY()-I'+R+')'});
-    const est=f.atraso===null?'Sin fecha':(f.atraso>0?'Vencido':(f.atraso===0?'Vence hoy':'A tiempo'));
-    set(10,{t:'s',v:est,f:'IF(I'+R+'="","Sin fecha",IF(TODAY()>I'+R+',"Vencido",IF(TODAY()=I'+R+',"Vence hoy","A tiempo")))'});
-    s(11,f.etapa);s(12,f.notas);s(13,f.accesorios);s(14,f.nc);s(15,f.ultimo);
+// ExcelJS se carga SOLO al exportar este reporte (SheetJS, que usa el resto
+// del Board, no escribe colores ni formato). Dos CDNs por si uno falla.
+let _abExcelJsPromise=null;
+function abCargarExcelJS(){
+  if(window.ExcelJS)return Promise.resolve(window.ExcelJS);
+  if(_abExcelJsPromise)return _abExcelJsPromise;
+  const urls=['https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js','https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'];
+  _abExcelJsPromise=new Promise((resolve,reject)=>{
+    let i=0;
+    const intentar=()=>{
+      if(i>=urls.length){_abExcelJsPromise=null;reject(new Error('No se pudo cargar la librería de Excel. Revisa tu conexión.'));return;}
+      const sc=document.createElement('script');sc.src=urls[i++];sc.async=true;
+      sc.onload=()=>{if(window.ExcelJS)resolve(window.ExcelJS);else intentar();};
+      sc.onerror=()=>{sc.remove();intentar();};
+      document.head.appendChild(sc);
+    };
+    intentar();
   });
-  const lastR=filas.length;
-  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR,c:head.length-1}});
-  ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR,c:head.length-1}})};
-  ws['!cols']=[12,12,26,34,30,9,14,11,14,14,13,28,60,40,40,50,40].map(w=>({wch:w}));
-  const info=XLSX.utils.aoa_to_sheet([
-    ['ALLTANSA S.A. de C.V. — Pedidos abiertos por antigüedad'],
-    [''],
-    ['Fecha de corte',fd(today())],
-    ['Pedidos en el reporte',filas.length],
-    ['Filtros aplicados',abFiltrosTxt()],
-    ['Alcance','Pedidos A-, AC- y STK que todavía no se entregan. No incluye fletes sueltos (FLE-) ni cancelados.'],
-    ['Orden','Del más antiguo al más nuevo (días desde la fecha de levantamiento).'],
-    ['Fecha de levantamiento','Fecha "Recibido" del pedido; si no tiene, la fecha de alta en el Board; si tampoco, el día 1 del mes del folio.'],
-    ['Días abierto / atraso / estatus','Son fórmulas con HOY(): se recalculan al abrir el archivo y si cambias una fecha. Atraso positivo = días tarde; negativo = días que faltan.'],
-    ['Agregar filas','Copia hacia abajo las fórmulas de las columnas H, J y K para los renglones nuevos.'],
-    ['Importante','Este archivo es una copia de trabajo. Lo que edites aquí NO cambia el Board.']
-  ]);
-  info['!cols']=[{wch:30},{wch:110}];
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Pedidos abiertos');
-  XLSX.utils.book_append_sheet(wb,info,'Info');
-  XLSX.writeFile(wb,'ALLTANSA_Pedidos_Abiertos_'+today()+'.xlsx');
-  toast('Excel generado ✓');
+  return _abExcelJsPromise;
+}
+
+// Arma el libro (separado de la descarga para poder probarlo).
+// Pensado para EDITARSE e IMPRIMIRSE en la junta:
+//  · Filas 1-2: logo + título · fila 3: banda azul marino con corte/filtros
+//  · Fila 5: encabezados (fijos al hacer scroll, autofiltro, se repiten al imprimir)
+//  · Días de atraso = FÓRMULA con HOY(); su color es formato condicional
+//    (rojo si va tarde, ámbar si no hay fecha) → se recalcula si editas la fecha.
+//  · Seguimiento: en blanco; al escribir se pinta rojo con letra blanca.
+//  · Formato condicional cubre +200 renglones extra para filas agregadas a mano.
+// Lo que se edite en el Excel NO cambia el Board.
+async function abConstruirLibroExcel(ExcelJS,filas,logo){
+  const NAVY='FF1B2A4A',RED='FFA32D2D',GRIS='FFF4F5F7',BORDE='FFDDE1EA';
+  const wb=new ExcelJS.Workbook();
+  wb.creator='ALLTANSA Board';wb.created=new Date();
+  const H=5,F0=H+1,last=H+filas.length,lastCF=Math.max(last,H)+200;
+  const ws=wb.addWorksheet('Relación de producción',{
+    views:[{state:'frozen',ySplit:H,showGridLines:false}],
+    pageSetup:{orientation:'landscape',paperSize:1,fitToPage:true,fitToWidth:1,fitToHeight:0,
+      margins:{left:0.3,right:0.3,top:0.4,bottom:0.5,header:0.2,footer:0.25}},
+    headerFooter:{oddFooter:'&L&8ALLTANSA S.A. de C.V. · Relación de producción&R&8Pág. &P de &N'}
+  });
+  ws.pageSetup.printTitlesRow=H+':'+H;
+  ws.columns=[{width:12},{width:30},{width:28},{width:7},{width:13},{width:10},{width:62},{width:42}];
+  // Título
+  ws.getRow(1).height=26;ws.getRow(2).height=26;
+  ws.mergeCells('C1:H2');
+  const t=ws.getCell('C1');t.value=abTitulo();
+  t.font={name:'Calibri',size:18,bold:true,color:{argb:NAVY}};
+  t.alignment={horizontal:'center',vertical:'middle'};
+  if(logo){
+    const id=wb.addImage({base64:logo.dataUrl,extension:'png'});
+    const hPx=58,wPx=Math.round(logo.w*hPx/logo.h);
+    ws.addImage(id,{tl:{col:0.15,row:0.1},ext:{width:wPx,height:hPx},editAs:'oneCell'});
+  }
+  // Banda azul marino
+  ws.mergeCells('A3:H3');ws.getRow(3).height=20;
+  const b=ws.getCell('A3');
+  b.value='Fecha de corte: '+abFechaCorta(today())+'   ·   '+filas.length+' pedidos abiertos (A-, AC- y STK; sin fletes)   ·   '+abFiltrosTxt()+'   ·   Días de atraso: + tarde / − faltan';
+  b.font={name:'Calibri',size:10,bold:true,color:{argb:'FFFFFFFF'}};
+  b.fill={type:'pattern',pattern:'solid',fgColor:{argb:NAVY}};
+  b.alignment={horizontal:'center',vertical:'middle'};
+  ws.getRow(4).height=6;
+  // Encabezados
+  const head=['Folio','Cliente','Modelo / descripción','CANT','Fecha compromiso','Días de atraso','Notas del pedido','Seguimiento / comentarios en junta'];
+  const hr=ws.getRow(H);hr.height=32;
+  head.forEach((h,i)=>{
+    const c=hr.getCell(i+1);c.value=h;
+    c.font={name:'Calibri',size:10,bold:true,color:{argb:'FFFFFFFF'}};
+    c.fill={type:'pattern',pattern:'solid',fgColor:{argb:NAVY}};
+    c.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    c.border={top:{style:'thin',color:{argb:NAVY}},bottom:{style:'thin',color:{argb:NAVY}},left:{style:'thin',color:{argb:'FF3A4D73'}},right:{style:'thin',color:{argb:'FF3A4D73'}}};
+  });
+  // Datos
+  const bd={top:{style:'thin',color:{argb:BORDE}},bottom:{style:'thin',color:{argb:BORDE}},left:{style:'thin',color:{argb:BORDE}},right:{style:'thin',color:{argb:BORDE}}};
+  filas.forEach((f,i)=>{
+    const r=F0+i,row=ws.getRow(r);
+    row.getCell(1).value=f.folio;
+    row.getCell(2).value=f.cliente||'';
+    row.getCell(3).value=f.modelo||'';
+    row.getCell(4).value=f.qty;
+    if(f.compromiso){const p=f.compromiso.split('-');row.getCell(5).value=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));}
+    row.getCell(6).value={formula:'IF(E'+r+'="","Sin fecha",TODAY()-E'+r+')',result:f.atraso===null?'Sin fecha':f.atraso};
+    row.getCell(7).value=f.notas||'';
+    for(let c=1;c<=8;c++){
+      const cell=row.getCell(c);
+      cell.font={name:'Calibri',size:10,bold:c===1,color:{argb:NAVY}};
+      cell.border=bd;
+      cell.alignment={vertical:'middle',horizontal:[3,4,5,6,7,8].includes(c)?'center':'left',wrapText:[2,3,7,8].includes(c)};
+      if(i%2)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:GRIS}};
+    }
+    row.getCell(5).numFmt='dd/mm/yyyy';
+    row.getCell(6).numFmt='0';
+    // Excel no siempre ajusta solo la altura de celdas con ajuste de texto:
+    // se estima por el texto más largo (ancho de columna ≈ caracteres por
+    // línea). Mínimo 22 pt para que quepa el comentario de la junta.
+    const lineas=[[2,f.cliente,30],[3,f.modelo,28],[7,f.notas,62]].reduce((mx,[c,txt,w])=>{
+      const n=String(txt||'').split('\n').reduce((s,l)=>s+Math.max(1,Math.ceil(l.length/(w*1.05))),0);
+      return Math.max(mx,n);
+    },1);
+    row.height=Math.max(22,lineas*13+6);
+  });
+  ws.autoFilter={from:{row:H,column:1},to:{row:Math.max(last,H),column:8}};
+  // Formato condicional (se reevalúa solo al editar)
+  ws.addConditionalFormatting({ref:'F'+F0+':F'+lastCF,rules:[
+    {type:'expression',priority:1,formulae:['AND(ISNUMBER(F'+F0+'),F'+F0+'>0)'],
+     style:{font:{bold:true,color:{argb:RED}},fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFCE8E6'}}}},
+    {type:'expression',priority:2,formulae:['F'+F0+'="Sin fecha"'],
+     style:{font:{bold:true,color:{argb:'FF854F0B'}},fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFEF3CD'}}}}
+  ]});
+  ws.addConditionalFormatting({ref:'H'+F0+':H'+lastCF,rules:[
+    {type:'expression',priority:3,formulae:['LEN(TRIM(H'+F0+'))>0'],
+     style:{font:{bold:true,color:{argb:'FFFFFFFF'}},fill:{type:'pattern',pattern:'solid',bgColor:{argb:RED}}}}
+  ]});
+  // Hoja de criterios
+  const info=wb.addWorksheet('Info');
+  info.columns=[{width:30},{width:110}];
+  [['ALLTANSA S.A. de C.V. — '+abTitulo()],[''],
+   ['Fecha de corte',abFechaCorta(today())],
+   ['Pedidos en el reporte',filas.length],
+   ['Filtros aplicados',abFiltrosTxt()],
+   ['Alcance','Pedidos A-, AC- y STK que todavía no se entregan. No incluye fletes sueltos (FLE-) ni cancelados.'],
+   ['Orden','Del más antiguo al más nuevo (fecha de recepción del pedido).'],
+   ['Notas del pedido','Observaciones capturadas en el pedido + kit de accesorios con sus notas.'],
+   ['Días de atraso','Fórmula con HOY(): se recalcula al abrir el archivo y si cambias la fecha compromiso. Positivo = días tarde; negativo = días que faltan. Rojo = tarde; ámbar = sin fecha.'],
+   ['Seguimiento','Columna para los comentarios de la junta. Al escribir, la celda se pinta roja con letra blanca.'],
+   ['Agregar renglones','Copia hacia abajo la fórmula de la columna F. Los colores ya cubren 200 renglones extra.'],
+   ['Importante','Este archivo es una copia de trabajo. Lo que edites aquí NO cambia el Board.']
+  ].forEach((r,i)=>{const row=info.addRow(r);row.getCell(1).font={bold:true,color:{argb:NAVY}};row.getCell(2).alignment={wrapText:true,vertical:'top'};if(i===0)row.getCell(1).font={bold:true,size:13,color:{argb:NAVY}};});
+  return wb;
+}
+
+async function descargarAbiertosExcel(){
+  const filas=abAplicarFiltros(calcPedidosAbiertos());
+  toast('Generando Excel...');
+  let ExcelJS;
+  try{ExcelJS=await abCargarExcelJS();}catch(e){showAlert(e.message,'❌');return;}
+  try{
+    const logo=await abCargarLogo();
+    const wb=await abConstruirLibroExcel(ExcelJS,filas,logo);
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='ALLTANSA_Relacion_Produccion_'+today()+'.xlsx';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    toast('Excel generado ✓');
+  }catch(e){showAlert('No se pudo generar el Excel: '+e.message,'❌');}
 }
 
 // jsPDF (helvetica) no dibuja emojis ni caracteres fuera de Latin-1: se
@@ -6246,67 +6334,54 @@ function abPdfTxt(s){
   return String(s==null?'':s).replace(/[^\x00-\xFF\u2013\u2014\u2018\u2019\u201C\u201D\u2022]/g,'').replace(/[ \t]{2,}/g,' ').trim();
 }
 
-function descargarAbiertosPDF(){
+async function descargarAbiertosPDF(){
   const {jsPDF}=window.jspdf||{};
   if(!jsPDF){showAlert('jsPDF no está disponible.','❌');return;}
   const filas=abAplicarFiltros(calcPedidosAbiertos());
-  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-  const W=297,M=10;let y=M;
-  doc.setFont('helvetica','bold');doc.setFontSize(15);doc.setTextColor(27,42,74);
-  doc.text('Pedidos abiertos por antigüedad — ALLTANSA S.A. de C.V.',M,y+6);
-  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(107,122,153);
-  doc.text('Fotografía al '+fd(today())+' · A-, AC- y STK sin entregar (no incluye fletes sueltos) · del más antiguo al más nuevo · '+abPdfTxt(abFiltrosTxt()),M,y+11);
-  const venc=filas.filter(f=>f.atraso!==null&&f.atraso>0).length;
-  const sinF=filas.filter(f=>f.atraso===null).length;
-  const mas60=filas.filter(f=>f.diasAbierto!==null&&f.diasAbierto>60).length;
-  doc.setFont('helvetica','bold');doc.setTextColor(27,42,74);
-  doc.text(filas.length+' pedidos abiertos  ·  '+venc+' vencidos  ·  '+sinF+' sin fecha compromiso  ·  '+mas60+' con más de 60 días',M,y+16);
-  y+=19;
-  doc.setDrawColor(27,42,74);doc.setLineWidth(0.4);doc.line(M,y,W-M,y);y+=3;
-  const head=[['Folio','Cliente','Modelo','Cant.','Levantado','Días','Compromiso','Atraso','Etapa actual','Notas']];
-  const body=filas.map(f=>{
-    let notas=f.notas||'';
-    if(f.accesorios)notas+=(notas?'\n':'')+'Accesorios: '+f.accesorios;
-    if(f.nc)notas+=(notas?'\n':'')+'NC Calidad abierta: '+f.nc;
-    if(f.ultimo)notas+=(notas?'\n':'')+'Último mov.: '+f.ultimo;
-    return[
-      abPdfTxt(f.folio)+'\n'+abPdfTxt(f.tipo),
-      abPdfTxt(f.cliente||'—'),
-      abPdfTxt(f.modelo||'—')+(f.spec?'\n'+abPdfTxt(f.spec):''),
-      String(f.qty),
-      f.alta?fd(f.alta):'—',
-      f.diasAbierto===null?'—':String(f.diasAbierto),
-      f.compromiso?fd(f.compromiso):'—',
-      abAtrasoTxt(f.atraso),
-      abPdfTxt(f.etapa),
-      abPdfTxt(notas)||'—'
-    ];
-  });
+  const logo=await abCargarLogo();
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
+  const W=doc.internal.pageSize.width,M=10;
+  // Encabezado: logo + título (igual que la relación de la junta)
+  if(logo){
+    const hL=14,wL=Math.min(45,logo.w*hL/logo.h);
+    try{doc.addImage(logo.dataUrl,'PNG',M,M-2,wL,wL*logo.h/logo.w);}catch(e){}
+  }
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(27,42,74);
+  doc.text(abTitulo(),W/2,M+7,{align:'center'});
+  // Banda azul marino
+  const yB=M+14;
+  doc.setFillColor(27,42,74);doc.rect(M,yB,W-M*2,6,'F');
+  doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(255,255,255);
+  doc.text(abPdfTxt('Fecha de corte: '+abFechaCorta(today())+'   ·   '+filas.length+' pedidos abiertos (A-, AC- y STK; sin fletes)   ·   '+abFiltrosTxt()+'   ·   Días de atraso: + tarde / - faltan'),W/2,yB+4.1,{align:'center'});
+  const head=[['Folio','Cliente','Modelo / descripción','CANT','Fecha compromiso','Días de atraso','Notas del pedido','Seguimiento / comentarios en junta']];
+  const body=filas.map(f=>[
+    abPdfTxt(f.folio),abPdfTxt(f.cliente||'—'),abPdfTxt(f.modelo||'—'),String(f.qty),
+    f.compromiso?abFechaCorta(f.compromiso):'—',
+    f.atraso===null?'Sin fecha':String(f.atraso),
+    abPdfTxt(f.notas),''
+  ]);
   doc.autoTable({
-    startY:y,head,body,
-    styles:{fontSize:7,cellPadding:1.8,font:'helvetica',textColor:[27,42,74],valign:'top',overflow:'linebreak'},
-    headStyles:{fillColor:[27,42,74],textColor:[255,255,255],fontStyle:'bold',fontSize:7},
-    alternateRowStyles:{fillColor:[248,249,252]},
-    columnStyles:{0:{cellWidth:22,fontStyle:'bold'},1:{cellWidth:30},2:{cellWidth:44},3:{cellWidth:10,halign:'right'},4:{cellWidth:17},5:{cellWidth:10,halign:'right',fontStyle:'bold'},6:{cellWidth:20},7:{cellWidth:18,fontStyle:'bold'},8:{cellWidth:28},9:{cellWidth:'auto'}},
-    margin:{left:M,right:M},
+    startY:yB+8,head,body,
+    styles:{fontSize:7,cellPadding:1.6,font:'helvetica',textColor:[27,42,74],valign:'middle',overflow:'linebreak',lineColor:[221,225,234],lineWidth:0.15,minCellHeight:8},
+    headStyles:{fillColor:[27,42,74],textColor:[255,255,255],fontStyle:'bold',fontSize:7.5,halign:'center'},
+    alternateRowStyles:{fillColor:[244,245,247]},
+    columnStyles:{0:{cellWidth:19,fontStyle:'bold'},1:{cellWidth:35},2:{cellWidth:36,halign:'center'},3:{cellWidth:11,halign:'center'},4:{cellWidth:19,halign:'center'},5:{cellWidth:14,halign:'center',fontStyle:'bold'},6:{cellWidth:'auto',halign:'center'},7:{cellWidth:52}},
+    margin:{left:M,right:M,bottom:12},
     didParseCell:function(d){
-      if(d.section!=='body')return;
+      if(d.section!=='body'||d.column.index!==5)return;
       const f=filas[d.row.index];if(!f)return;
-      if(d.column.index===7){
-        if(f.atraso===null){d.cell.styles.textColor=[133,79,11];d.cell.styles.fillColor=[254,243,205];}
-        else if(f.atraso>=0)d.cell.styles.textColor=[163,45,45];
-        else d.cell.styles.textColor=[107,122,153];
-      }
-      if(d.column.index===5&&f.diasAbierto!==null&&f.diasAbierto>60)d.cell.styles.textColor=[163,45,45];
+      if(f.atraso===null){d.cell.styles.textColor=[133,79,11];d.cell.styles.fillColor=[254,243,205];}
+      else if(f.atraso>0)d.cell.styles.textColor=[163,45,45];
+      else d.cell.styles.textColor=[107,122,153];
     },
     didDrawPage:function(){
       const pY=doc.internal.pageSize.height-6;
       doc.setTextColor(158,158,158);doc.setFontSize(7);doc.setFont('helvetica','normal');
-      doc.text('ALLTANSA S.A. de C.V. · Pedidos abiertos · Confidencial',M,pY);
+      doc.text('ALLTANSA S.A. de C.V. · Relación de producción · Confidencial',M,pY);
       doc.text('Pág. '+doc.getCurrentPageInfo().pageNumber,W-M,pY,{align:'right'});
     }
   });
-  doc.save('ALLTANSA_Pedidos_Abiertos_'+today()+'.pdf');
+  doc.save('ALLTANSA_Relacion_Produccion_'+today()+'.pdf');
   toast('PDF generado ✓');
 }
 
@@ -11306,7 +11381,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-11-02-1230';
+const APP_VERSION = '2026-11-02-1600';
 
 let _versionCheckTimer = null;
 
