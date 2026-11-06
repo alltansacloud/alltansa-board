@@ -805,11 +805,11 @@
         <div class="form-grid cols2">
           <div class="form-group">
             <label>Incluye</label>
-            <input type="text" id="exNotasIncluye" placeholder="MATERIALES, MANO DE OBRA Y FLETE"/>
+            <input type="text" id="exNotasIncluye" placeholder="TANQUE Y ACCESORIOS"/>
           </div>
           <div class="form-group">
             <label>No incluye</label>
-            <input type="text" id="exNotasNoIncluye" placeholder="INSTALACIÓN EN SITIO"/>
+            <input type="text" id="exNotasNoIncluye" placeholder="INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA"/>
           </div>
         </div>
         <label style="display:block;margin-top:10px;font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Notas comerciales</label>
@@ -1693,11 +1693,11 @@ function openModal(id) {
     <div class="form-grid">
       <div class="form-group">
         <label>Incluye</label>
-        <input type="text" id="notasPdfIncluye" placeholder="MATERIALES, MANO DE OBRA Y FLETE" ${dis}/>
+        <input type="text" id="notasPdfIncluye" placeholder="TANQUE Y ACCESORIOS" ${dis}/>
       </div>
       <div class="form-group">
         <label>No incluye</label>
-        <input type="text" id="notasPdfNoIncluye" placeholder="INSTALACIÓN EN SITIO" ${dis}/>
+        <input type="text" id="notasPdfNoIncluye" placeholder="INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA" ${dis}/>
       </div>
     </div>
 
@@ -2094,8 +2094,8 @@ function deleteServicioExtra(idx) {
 function initNotasPdf(readOnly) {
   const notas    = currentPdfNotas.notasComerciales || construirNotasComercialesDefault(currentPartidas, '');
   const tecnicas = currentPdfNotas.notasTecnicas || construirEspecificacionesTecnicasDefault(currentPartidas);
-  const incluye   = currentPdfNotas.incluye   || 'MATERIALES, MANO DE OBRA Y FLETE';
-  const noIncluye = currentPdfNotas.noIncluye || 'INSTALACIÓN EN SITIO';
+  const incluye   = currentPdfNotas.incluye   || 'TANQUE Y ACCESORIOS';
+  const noIncluye = currentPdfNotas.noIncluye || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
   const notasEsp  = currentPdfNotas.notasEsp  || construirNotasEspecialesDefault(currentPartidas).join('\n');
 
   const elEditor = document.getElementById('notasPdfEditor');
@@ -3191,8 +3191,8 @@ async function descargarCotizacionPDF() {
     .map(l => l.trim())
     .filter(Boolean)
     .map(l => l.replace(/^[A-Za-z]\)\s*/, '')); // por si quedó la letra puesta, se renumera solo al generar
-  const incluye   = document.getElementById('notasPdfIncluye').value.trim()    || 'MATERIALES, MANO DE OBRA Y FLETE';
-  const noIncluye = document.getElementById('notasPdfNoIncluye').value.trim()  || 'INSTALACIÓN EN SITIO';
+  const incluye   = document.getElementById('notasPdfIncluye').value.trim()    || 'TANQUE Y ACCESORIOS';
+  const noIncluye = document.getElementById('notasPdfNoIncluye').value.trim()  || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
   const notasTecnicas = document.getElementById('notasPdfTecnicas').value.split('\n').map(l => l.trim()).filter(Boolean);
   const notasEsp  = document.getElementById('notasPdfEspeciales').value.trim();
 
@@ -3237,12 +3237,12 @@ async function descargarCotizacionPDF() {
 
 function construirNotasComercialesDefault(partidas, condPago) {
   return [
-    'PRECIO: EN MXN MAS IVA.',
+    'PRECIO: EN MXN MÁS IVA.',
     `CONDICIONES DE PAGO: ${condPago || '70% ANTICIPO, RESTO CONTRA AVISO DE EMBARQUE'}.`,
-    'VIGENCIA DE LA COTIZACION: 15 DIAS (PRECIOS DE REFERENCIA, PUEDEN CAMBIAR).',
-    'TIEMPO DE ENTREGA:',
+    'VIGENCIA DE LA COTIZACIÓN: 15 DÍAS (PRECIOS DE REFERENCIA, PUEDEN CAMBIAR).',
+    'TIEMPO DE ENTREGA ESTIMADO:',
     'LUGAR DE ENTREGA: LAB NUESTRA PLANTA.',
-    'COMPRA MINIMA:'
+    'EL TIEMPO DE ENTREGA ESTÁ SUJETO A LA DISPONIBILIDAD DE LOS MATERIALES.'
   ];
 }
 
@@ -3262,13 +3262,11 @@ function construirEspecificacionesTecnicasDefault(partidas) {
     : 'VER ESPECIFICACIÓN POR MODELO';
   return [
     'PRESIÓN DE DISEÑO:',
-    'MEDIDAS GENERALES:',
     'TEMPERATURA DE OPERACIÓN: AMBIENTE.',
     'SUPERFICIE: SAND BLAST Y PINTURA.',
-    'PESO:',
-    'CONEXIONES:',
+    'CONEXIONES: COPLES.',
     `MATERIAL: ${materialTxt}.`,
-    'TIPO DE TAPAS:',
+    'TIPO DE TAPAS: SEMIELÍPTICAS.',
     'DOCUMENTACIÓN SEGÚN APLIQUE: MEMORIA DE CÁLCULO, CERTIFICADO ALLTANSA Y/O DOSSIER DE FABRICACIÓN.',
     `NORMAS DE FABRICACIÓN DE REFERENCIA: ${normaTxt}.`
   ];
@@ -3453,8 +3451,8 @@ function generarPDFCotizacion(datos) {
   // ── Contenido de las secciones inferiores ─────────────────────────
   // Se arma ANTES de dibujar nada, para poder medir cuánto ocupa cada
   // sección a distintos tamaños de letra antes de decidir cuál usar.
-  const incluyeTxt   = (datos.incluye   || 'MATERIALES, MANO DE OBRA Y FLETE').toUpperCase();
-  const noIncluyeTxt = (datos.noIncluye || 'INSTALACIÓN EN SITIO').toUpperCase();
+  const incluyeTxt   = (datos.incluye   || 'TANQUE Y ACCESORIOS').toUpperCase();
+  const noIncluyeTxt = (datos.noIncluye || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA').toUpperCase();
   const notasComerciales = datos.notasComerciales || construirNotasComercialesDefault(partidas, condPago);
   const especTecnicas = notasTecnicas || construirEspecificacionesTecnicasDefault(partidas);
   const notasEspecialesLineas = (notasEsp || '').split('\n').map(l => l.trim()).filter(Boolean);
@@ -3871,8 +3869,8 @@ function actualizarDefaultsNotasExpress() {
   const elN = document.getElementById('exNotasNoIncluye');
   if (elC && !elC.value.trim()) elC.value = construirNotasComercialesDefault(currentPartidasExpress, '').join('\n');
   if (elT && !elT.value.trim()) elT.value = construirEspecificacionesTecnicasDefault(currentPartidasExpress).join('\n');
-  if (elI && !elI.value.trim()) elI.value = 'MATERIALES, MANO DE OBRA Y FLETE';
-  if (elN && !elN.value.trim()) elN.value = 'INSTALACIÓN EN SITIO';
+  if (elI && !elI.value.trim()) elI.value = 'TANQUE Y ACCESORIOS';
+  if (elN && !elN.value.trim()) elN.value = 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
 }
 
 async function generarCotizacionExpress() {
@@ -3898,9 +3896,10 @@ async function generarCotizacionExpress() {
   // Notas del PDF — ya viven inline en este mismo formulario, no en un popup
   // aparte. Si el usuario nunca las tocó, se usan los defaults ya puestos por
   // actualizarDefaultsNotasExpress().
-  const notasIncluye   = document.getElementById('exNotasIncluye')?.value?.trim()    || 'MATERIALES, MANO DE OBRA Y FLETE';
-  const notasNoIncluye = document.getElementById('exNotasNoIncluye')?.value?.trim()  || 'INSTALACIÓN EN SITIO';
-  const notasComerciales = (document.getElementById('exNotasComerciales')?.value || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const notasIncluye   = document.getElementById('exNotasIncluye')?.value?.trim()    || 'TANQUE Y ACCESORIOS';
+  const notasNoIncluye = document.getElementById('exNotasNoIncluye')?.value?.trim()  || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
+  const notasComerciales = (document.getElementById('exNotasComerciales')?.value || '').split('\n').map(l => l.trim()).filter(Boolean)
+    .map(l => l.replace(/^[A-Za-z]\)\s*/, '')); // igual que el flujo completo: si quedó la letra puesta, se quita (el PDF renumera solo)
   const notasTecnicas    = (document.getElementById('exNotasTecnicas')?.value || '').split('\n').map(l => l.trim()).filter(Boolean);
   const notasEspeciales  = document.getElementById('exNotasEspeciales')?.value?.trim() || '';
 
@@ -4289,7 +4288,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-11-02-1800';
+const APP_VERSION = '2026-11-06-1300';
 
 let _versionCheckTimer = null;
 
