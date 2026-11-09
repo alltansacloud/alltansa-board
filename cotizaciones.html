@@ -3251,9 +3251,8 @@ function construirEspecificacionesTecnicasDefault(partidas) {
   // (Aire — BUMA / Aire — Cleveland cuentan como "Aire").
   const ordenCategorias = ['Diesel', 'Aire', 'Estacionarios', 'Carburación', 'Gasolina'];
   const categoriasPresentes = ordenCategorias.filter(c => (partidas || []).some(p => tipoBase(p.tipo) === c));
-  const materialTxt = categoriasPresentes.length
-    ? categoriasPresentes.map(c => `${c.toUpperCase()} — ACERO AL CARBÓN ${MATERIAL_POR_CATEGORIA[c] || 'VER ESPECIFICACIÓN'}`).join(' · ')
-    : 'VER ESPECIFICACIÓN POR MODELO';
+  // MATERIAL: fijo SA-36 para todas las categorías (incluido Diesel) por decisión de Dirección.
+  // Sigue siendo editable a mano en la cotización.
   // Gasolina no lleva norma de referencia — se excluye de esta línea a
   // propósito (no se le pone ni siquiera un placeholder genérico).
   const categoriasConNorma = categoriasPresentes.filter(c => NORMA_POR_CATEGORIA[c]);
@@ -3265,7 +3264,8 @@ function construirEspecificacionesTecnicasDefault(partidas) {
     'TEMPERATURA DE OPERACIÓN: AMBIENTE.',
     'SUPERFICIE: SAND BLAST Y PINTURA.',
     'CONEXIONES: COPLES.',
-    `MATERIAL: ${materialTxt}.`,
+    'ACCESORIOS:',
+    'MATERIAL: ACERO AL CARBÓN SA-36.',
     'TIPO DE TAPAS: SEMIELÍPTICAS.',
     'DOCUMENTACIÓN SEGÚN APLIQUE: MEMORIA DE CÁLCULO, CERTIFICADO ALLTANSA Y/O DOSSIER DE FABRICACIÓN.',
     `NORMAS DE FABRICACIÓN DE REFERENCIA: ${normaTxt}.`
@@ -4288,7 +4288,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-11-06-1300';
+const APP_VERSION = '2026-11-06-1400';
 
 let _versionCheckTimer = null;
 
