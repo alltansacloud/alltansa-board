@@ -3247,18 +3247,8 @@ function construirNotasComercialesDefault(partidas, condPago) {
 }
 
 function construirEspecificacionesTecnicasDefault(partidas) {
-  // Orden de referencia — las categorías presentes se detectan por su tipo BASE
-  // (Aire — BUMA / Aire — Cleveland cuentan como "Aire").
-  const ordenCategorias = ['Diesel', 'Aire', 'Estacionarios', 'Carburación', 'Gasolina'];
-  const categoriasPresentes = ordenCategorias.filter(c => (partidas || []).some(p => tipoBase(p.tipo) === c));
-  // MATERIAL: fijo SA-36 para todas las categorías (incluido Diesel) por decisión de Dirección.
-  // Sigue siendo editable a mano en la cotización.
-  // Gasolina no lleva norma de referencia — se excluye de esta línea a
-  // propósito (no se le pone ni siquiera un placeholder genérico).
-  const categoriasConNorma = categoriasPresentes.filter(c => NORMA_POR_CATEGORIA[c]);
-  const normaTxt = categoriasConNorma.length
-    ? categoriasConNorma.map(c => `${c.toUpperCase()} — ${NORMA_POR_CATEGORIA[c]}`).join(' · ')
-    : 'VER ESPECIFICACIÓN POR MODELO';
+  // MATERIAL y NORMA: fijos para todas las categorías (incluido Diesel) por decisión de Dirección.
+  // Ya no dependen de las partidas; siguen siendo editables a mano en la cotización.
   return [
     'PRESIÓN DE DISEÑO:',
     'TEMPERATURA DE OPERACIÓN: AMBIENTE.',
@@ -3268,7 +3258,7 @@ function construirEspecificacionesTecnicasDefault(partidas) {
     'MATERIAL: ACERO AL CARBÓN SA-36.',
     'TIPO DE TAPAS: SEMIELÍPTICAS.',
     'DOCUMENTACIÓN SEGÚN APLIQUE: MEMORIA DE CÁLCULO, CERTIFICADO ALLTANSA Y/O DOSSIER DE FABRICACIÓN.',
-    `NORMAS DE FABRICACIÓN DE REFERENCIA: ${normaTxt}.`
+    'NORMA DE REFERENCIA: ASME SECCIÓN VIII DIV. 1.'
   ];
 }
 
@@ -4288,7 +4278,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-11-06-1400';
+const APP_VERSION = '2026-11-06-1500';
 
 let _versionCheckTimer = null;
 
