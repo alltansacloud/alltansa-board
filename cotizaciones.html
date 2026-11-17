@@ -805,7 +805,7 @@
         <div class="form-grid cols2">
           <div class="form-group">
             <label>Incluye</label>
-            <input type="text" id="exNotasIncluye" placeholder="TANQUE Y ACCESORIOS"/>
+            <input type="text" id="exNotasIncluye" placeholder="TANQUE"/>
           </div>
           <div class="form-group">
             <label>No incluye</label>
@@ -1693,7 +1693,7 @@ function openModal(id) {
     <div class="form-grid">
       <div class="form-group">
         <label>Incluye</label>
-        <input type="text" id="notasPdfIncluye" placeholder="TANQUE Y ACCESORIOS" ${dis}/>
+        <input type="text" id="notasPdfIncluye" placeholder="TANQUE" ${dis}/>
       </div>
       <div class="form-group">
         <label>No incluye</label>
@@ -2094,7 +2094,7 @@ function deleteServicioExtra(idx) {
 function initNotasPdf(readOnly) {
   const notas    = currentPdfNotas.notasComerciales || construirNotasComercialesDefault(currentPartidas, '');
   const tecnicas = currentPdfNotas.notasTecnicas || construirEspecificacionesTecnicasDefault(currentPartidas);
-  const incluye   = currentPdfNotas.incluye   || 'TANQUE Y ACCESORIOS';
+  const incluye   = currentPdfNotas.incluye   || 'TANQUE';
   const noIncluye = currentPdfNotas.noIncluye || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
   const notasEsp  = currentPdfNotas.notasEsp  || construirNotasEspecialesDefault(currentPartidas).join('\n');
 
@@ -3191,7 +3191,7 @@ async function descargarCotizacionPDF() {
     .map(l => l.trim())
     .filter(Boolean)
     .map(l => l.replace(/^[A-Za-z]\)\s*/, '')); // por si quedó la letra puesta, se renumera solo al generar
-  const incluye   = document.getElementById('notasPdfIncluye').value.trim()    || 'TANQUE Y ACCESORIOS';
+  const incluye   = document.getElementById('notasPdfIncluye').value.trim()    || 'TANQUE';
   const noIncluye = document.getElementById('notasPdfNoIncluye').value.trim()  || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
   const notasTecnicas = document.getElementById('notasPdfTecnicas').value.split('\n').map(l => l.trim()).filter(Boolean);
   const notasEsp  = document.getElementById('notasPdfEspeciales').value.trim();
@@ -3441,7 +3441,7 @@ function generarPDFCotizacion(datos) {
   // ── Contenido de las secciones inferiores ─────────────────────────
   // Se arma ANTES de dibujar nada, para poder medir cuánto ocupa cada
   // sección a distintos tamaños de letra antes de decidir cuál usar.
-  const incluyeTxt   = (datos.incluye   || 'TANQUE Y ACCESORIOS').toUpperCase();
+  const incluyeTxt   = (datos.incluye   || 'TANQUE').toUpperCase();
   const noIncluyeTxt = (datos.noIncluye || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA').toUpperCase();
   const notasComerciales = datos.notasComerciales || construirNotasComercialesDefault(partidas, condPago);
   const especTecnicas = notasTecnicas || construirEspecificacionesTecnicasDefault(partidas);
@@ -3859,7 +3859,7 @@ function actualizarDefaultsNotasExpress() {
   const elN = document.getElementById('exNotasNoIncluye');
   if (elC && !elC.value.trim()) elC.value = construirNotasComercialesDefault(currentPartidasExpress, '').join('\n');
   if (elT && !elT.value.trim()) elT.value = construirEspecificacionesTecnicasDefault(currentPartidasExpress).join('\n');
-  if (elI && !elI.value.trim()) elI.value = 'TANQUE Y ACCESORIOS';
+  if (elI && !elI.value.trim()) elI.value = 'TANQUE';
   if (elN && !elN.value.trim()) elN.value = 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
 }
 
@@ -3886,7 +3886,7 @@ async function generarCotizacionExpress() {
   // Notas del PDF — ya viven inline en este mismo formulario, no en un popup
   // aparte. Si el usuario nunca las tocó, se usan los defaults ya puestos por
   // actualizarDefaultsNotasExpress().
-  const notasIncluye   = document.getElementById('exNotasIncluye')?.value?.trim()    || 'TANQUE Y ACCESORIOS';
+  const notasIncluye   = document.getElementById('exNotasIncluye')?.value?.trim()    || 'TANQUE';
   const notasNoIncluye = document.getElementById('exNotasNoIncluye')?.value?.trim()  || 'INSTALACIÓN EN SITIO NI MANIOBRAS DE DESCARGA';
   const notasComerciales = (document.getElementById('exNotasComerciales')?.value || '').split('\n').map(l => l.trim()).filter(Boolean)
     .map(l => l.replace(/^[A-Za-z]\)\s*/, '')); // igual que el flujo completo: si quedó la letra puesta, se quita (el PDF renumera solo)
@@ -4278,7 +4278,7 @@ function fillClienteFields(cl) {
 // justo después de publicar. Cada vez que se suba un cotizaciones.html
 // nuevo, hay que subir también un version.json con la llave "cotizaciones"
 // actualizada (sin tocar la de "index" si no cambió).
-const APP_VERSION = '2026-11-06-1500';
+const APP_VERSION = '2026-11-17-1300';
 
 let _versionCheckTimer = null;
 
