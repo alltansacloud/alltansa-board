@@ -9597,19 +9597,19 @@ function ctDiscrepancias(o) {
   if (st !== 'cancelado' && ctPorFacturar(o) > 0.01) {
     const cli = ctClienteDePedido(o);
     if (!cli) {
-      out.push({nivel:'info', corto:'Cliente no está en el catálogo',
+      out.push({nivel:'info', cat:'fiscal', corto:'Cliente no está en el catálogo',
         detalle:'"'+(o.client||'—')+'" no coincide con ningún cliente de 👥 Clientes, así que no hay datos fiscales para facturarle. Dalo de alta o corrige el nombre en el pedido.'});
     } else {
       const er = cliFiscalErrores(cli), fa = cliFiscalFaltantes(cli);
-      if (er.length) out.push({nivel:'error', corto:'Datos fiscales con error',
+      if (er.length) out.push({nivel:'error', cat:'fiscal', corto:'Datos fiscales con error',
         detalle:cli.empresa+': '+er.join('; ')+'. Corrígelo en 👥 Clientes antes de facturar.'});
-      if (fa.length) out.push({nivel:'info', corto:'Faltan datos fiscales ('+fa.length+')',
+      if (fa.length) out.push({nivel:'info', cat:'fiscal', corto:'Faltan datos fiscales ('+fa.length+')',
         detalle:'A '+cli.empresa+' le falta: '+fa.join(', ')+'. Complétalos en 👥 Clientes antes de facturar.'});
       const credito = /cr[eé]dito/i.test(String(o.condicion_pago || ''));
       const met = String(cli.metodo_pago || '').toUpperCase();
-      if (credito && met === 'PUE') out.push({nivel:'error', corto:'PUE con pedido a crédito',
+      if (credito && met === 'PUE') out.push({nivel:'error', cat:'fiscal', corto:'PUE con pedido a crédito',
         detalle:'El pedido es a crédito pero '+cli.empresa+' está como PUE. Una factura que se cobra después se emite PPD con forma 99 y luego se timbra su complemento de pago.'});
-      if (!credito && met === 'PPD') out.push({nivel:'info', corto:'PPD con pedido de contado',
+      if (!credito && met === 'PPD') out.push({nivel:'info', cat:'fiscal', corto:'PPD con pedido de contado',
         detalle:'El pedido es de contado pero '+cli.empresa+' está como PPD. Si paga al momento de facturar, conviene emitir PUE con la forma de pago real (PPD obliga a timbrar complemento de pago).'});
     }
   }
@@ -9620,6 +9620,16 @@ function ctDiscrepancias(o) {
       detalle:lbl(f)+' se canceló con motivo 01 (sustituida por '+f.sustituida_por+'), pero esa factura no está capturada en el Board.'});
   });
   return out;
+}
+// FIX (nov 2026, decisión de Alex): el filtro "Con discrepancias" y su
+// contador del pie son SOLO para discrepancias contables (números que no
+// cuadran: cobrado/facturado/partidas/cancelaciones). Las alertas con
+// cat:'fiscal' (datos fiscales del cliente por capturar o con error,
+// cliente fuera del catálogo, PUE/PPD) se siguen mostrando como chips en la
+// fila y en el banner del pedido, pero ya NO cuentan para el filtro; esos
+// pendientes se revisan en 👥 Clientes (filtro "Datos fiscales").
+function ctDiscrepanciasContables(o) {
+  return ctDiscrepancias(o).filter(x => x.cat !== 'fiscal');
 }
 function ctChipsDiscrepancia(o) {
   const d = ctDiscrepancias(o);
@@ -9638,7 +9648,7 @@ function ctBannerDiscrepancias(o) {
 
 function ctPasaFiltroEstatus(o, filtEst, filtMes) {
   if (!filtEst) return true;
-  if (filtEst === 'con_alerta') return ctDiscrepancias(o).length > 0;
+  if (filtEst === 'con_alerta') return ctDiscrepanciasContables(o).length > 0;
   if (filtEst === 'con_factura') {
     // Incluye notas de crédito: si en el mes hubo una NC, ese pedido movió el
     // Facturado del mes y debe aparecer para que el pie cuadre con la tarjeta.
@@ -9869,7 +9879,7 @@ function ctRenderTotalesFiltrados(pedidos, filtMes) {
   });
 
   const n = pedidos.length;
-  const nDisc = pedidos.filter(o => ctDiscrepancias(o).length).length;
+  const nDisc = pedidos.filter(o => ctDiscrepanciasContables(o).length).length;
   const etiqueta = 'TOTAL — ' + n + ' pedido' + (n===1?'':'s') + ' filtrado' + (n===1?'':'s') +
     (nDisc ? '<br><span style="font-size:10.5px;font-weight:700;color:#C0391B;cursor:pointer" title="Filtrar solo los pedidos con discrepancias" onclick="document.getElementById(\'ctFiltroEstatus\').value=\'con_alerta\';renderContab()">⚠ '+nDisc+' con discrepancias</span>' : '');
   const subFact    = filtMes
@@ -10131,13 +10141,15 @@ function renderCtClientes() {
       : fa.length
         ? '<span title="Falta: '+escHtml(fa.join(', '))+'" style="background:#FFF8E1;color:#8D6E00;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:help;white-space:nowrap">ⓘ Faltan '+fa.length+'</span>'
         : '<span style="background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">✓ Completo</span>';
+    // Campos fiscales que faltan, A LA VISTA (antes solo salían en el tooltip).
+    const faltanTxt = fa.length ? '<div style="font-size:11px;color:#8D6E00;margin-top:4px;line-height:1.35;white-space:normal">Falta: '+escHtml(fa.join(', '))+'</div>' : '';
     const e = escHtml(c.email||''), t = escHtml(c.telefono||'');
     return '<tr>' +
       td('<strong style="color:var(--navy)">'+escHtml(c.empresa||'–')+'</strong>'+(c.razon_social?sub(escHtml(c.razon_social)):''), ';min-width:190px') +
       td((c.rfc?'<span style="font-family:monospace">'+escHtml(c.rfc)+'</span>':'<span style="color:var(--muted)">–</span>')+(c.regimen_fiscal?sub(escHtml(c.regimen_fiscal+' · '+satDesc(SAT_REGIMEN,c.regimen_fiscal))):'') + (c.cp_fiscal?sub('C.P. '+escHtml(c.cp_fiscal)):''), ';min-width:150px') +
       td(c.uso_cfdi ? '<strong>'+escHtml(c.uso_cfdi)+'</strong>'+sub(escHtml(satDesc(SAT_USO_CFDI,c.uso_cfdi))) : '<span style="color:var(--muted)">–</span>', ';min-width:130px') +
       td((c.metodo_pago||c.forma_pago) ? '<strong>'+escHtml(c.metodo_pago||'–')+'</strong> · '+escHtml(c.forma_pago||'–')+(c.forma_pago?sub(escHtml(satDesc(SAT_FORMA_PAGO,c.forma_pago))):'') : '<span style="color:var(--muted)">–</span>', ';white-space:nowrap') +
-      td(fiscal) +
+      td(fiscal + faltanTxt, ';min-width:200px;max-width:280px') +
       td(escHtml(c.contacto||'–')+(e?sub('<a href="mailto:'+e+'" style="color:#1565C0;text-decoration:none">'+e+'</a>'):'')+(t?sub('<a href="tel:'+t.replace(/[^0-9+]/g,'')+'" style="color:var(--muted);text-decoration:none">'+t+'</a>'):''), ';min-width:160px') +
       td(c.estatus ? '<span style="background:'+ce[0]+';color:'+ce[1]+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">'+escHtml(c.estatus)+'</span>' : '–') +
       td('<button data-id="'+escHtml(c.id)+'" onclick="openCtCliEdit(this.dataset.id)" style="background:none;border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">✏ Editar</button>') +
@@ -11381,7 +11393,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-11-02-1600';
+const APP_VERSION = '2026-11-17-1200';
 
 let _versionCheckTimer = null;
 
