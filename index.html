@@ -3006,8 +3006,12 @@ function estasBadge(o){
     return'<span class="badge b-pend">⏳ '+emb.msg+'</span>';
   }
 
-  // En producción: calcular etapa aquí para tener prod_stages saneado (excluir from_stock)
-  if(!o.from_stock&&o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done){
+  // En producción: calcular etapa aquí para tener prod_stages saneado.
+  // Solo se excluye el from_stock 100% almacén (qty_produccion=0), que ya regresó arriba.
+  // Los pedidos MIXTOS (parte almacén + parte a producir) SÍ pasan por producción —
+  // antes se excluían con !o.from_stock y se quedaban en "Lista para producción" para
+  // siempre, sin botón de embarque y por lo tanto sin poder cerrarse (nov 2026).
+  if(!(o.from_stock&&(parseInt(o.qty_produccion)||0)===0)&&o.stages&&o.stages.orden_prod&&o.stages.orden_prod.done){
     const et=gEtapa(o); // calcular aquí, no antes
     // Producción terminada
     if(et.lbl==='Terminado'){
@@ -11393,7 +11397,7 @@ async function revertirSinFactura(oid) {
 // Cada vez que se suba un index.html nuevo, hay que subir también un
 // version.json con la llave "index" actualizada (sin tocar la de
 // "cotizaciones" si no cambió). (Ver instrucciones_activas.md — regla crítica.)
-const APP_VERSION = '2026-11-17-1200';
+const APP_VERSION = '2026-11-19-1200';
 
 let _versionCheckTimer = null;
 
